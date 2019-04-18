@@ -6,24 +6,9 @@ package com.android.tools.r8.ir.desugar;
 
 import com.android.tools.r8.dex.Constants;
 import com.android.tools.r8.errors.Unreachable;
-import com.android.tools.r8.graph.AppView;
-import com.android.tools.r8.graph.ClassAccessFlags;
-import com.android.tools.r8.graph.Code;
-import com.android.tools.r8.graph.DexAnnotationSet;
+import com.android.tools.r8.graph.*;
 import com.android.tools.r8.graph.DexApplication.Builder;
-import com.android.tools.r8.graph.DexClass;
-import com.android.tools.r8.graph.DexEncodedField;
-import com.android.tools.r8.graph.DexEncodedMethod;
-import com.android.tools.r8.graph.DexItemFactory;
-import com.android.tools.r8.graph.DexMethod;
-import com.android.tools.r8.graph.DexProgramClass;
 import com.android.tools.r8.graph.DexProgramClass.ChecksumSupplier;
-import com.android.tools.r8.graph.DexProto;
-import com.android.tools.r8.graph.DexString;
-import com.android.tools.r8.graph.DexType;
-import com.android.tools.r8.graph.DexTypeList;
-import com.android.tools.r8.graph.MethodAccessFlags;
-import com.android.tools.r8.graph.ParameterAnnotationsList;
 import com.android.tools.r8.ir.code.IRCode;
 import com.android.tools.r8.ir.code.Instruction;
 import com.android.tools.r8.ir.code.InstructionListIterator;
@@ -1260,6 +1245,7 @@ public final class BackportedMethodRewriter {
       if (generatedMethod != null) {
         return generatedMethod;
       }
+      AppInfo appInfo = appView.appInfo();
       DexItemFactory factory = appView.dexItemFactory();
       String unqualifiedName = method.holder.getName();
       // Avoid duplicate class names between core lib dex file and program dex files.
@@ -1267,6 +1253,7 @@ public final class BackportedMethodRewriter {
           appView.options().isDesugaredLibraryCompilation() ? "$corelib" : "";
       String descriptor =
           UTILITY_CLASS_DESCRIPTOR_PREFIX
+              + appInfo.getBucketId()
               + '$'
               + unqualifiedName
               + '$'

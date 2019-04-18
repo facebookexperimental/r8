@@ -57,7 +57,8 @@ public enum AndroidApiLevel {
   }
 
   public static AndroidApiLevel getDefault() {
-    return AndroidApiLevel.B;
+    // Setting to a sane min api level
+    return AndroidApiLevel.J;
   }
 
   public DexVersion getDexVersion() {

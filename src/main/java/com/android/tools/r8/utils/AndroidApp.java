@@ -97,6 +97,8 @@ public class AndroidApp {
     }
   }
 
+  private final String bucketId;
+
   @Override
   public String toString() {
     StringBuilder builder = new StringBuilder();
@@ -158,7 +160,8 @@ public class AndroidApp {
       ImmutableList<InternalArchiveClassFileProvider> archiveProvidersToClose,
       StringResource proguardMapOutputData,
       List<StringResource> mainDexListResources,
-      List<String> mainDexClasses) {
+      List<String> mainDexClasses,
+      String bucketId) {
     this.programResourceProviders = programResourceProviders;
     this.programResourcesMainDescriptor = programResourcesMainDescriptor;
     this.classpathResourceProviders = classpathResourceProviders;
@@ -167,6 +170,7 @@ public class AndroidApp {
     this.proguardMapOutputData = proguardMapOutputData;
     this.mainDexListResources = mainDexListResources;
     this.mainDexClasses = mainDexClasses;
+    this.bucketId = bucketId;
     assert verifyInternalProvidersInCloseSet(classpathResourceProviders, archiveProvidersToClose);
     assert verifyInternalProvidersInCloseSet(libraryResourceProviders, archiveProvidersToClose);
   }
@@ -348,7 +352,15 @@ public class AndroidApp {
         archiveProvidersToClose,
         proguardMapOutputData,
         ImmutableList.of(),
-        ImmutableList.of());
+        ImmutableList.of(),
+        bucketId);
+  }
+
+  /**
+   * Get unique bucket id.
+   */
+  public String getBucketId() {
+    return bucketId;
   }
 
   /**
@@ -589,6 +601,7 @@ public class AndroidApp {
     private List<StringResource> mainDexListResources = new ArrayList<>();
     private List<String> mainDexListClasses = new ArrayList<>();
     private boolean ignoreDexInArchive = false;
+    private String bucketId = "";
 
     // Proguard map data is output only data. This should never be used as input to a compilation.
     private StringResource proguardMapOutputData;
@@ -975,6 +988,14 @@ public class AndroidApp {
     }
 
     /**
+     * Set unique identifier of a bucket of Java classes that D8 will dex independently in parallel.
+     */
+    public Builder setBucketId(String value) {
+      this.bucketId = value;
+      return this;
+    }
+
+    /**
      * Build final AndroidApp.
      */
     public AndroidApp build() {
@@ -1020,7 +1041,8 @@ public class AndroidApp {
           ImmutableList.copyOf(archiveProvidersToClose),
           proguardMapOutputData,
           mainDexListResources,
-          mainDexListClasses);
+          mainDexListClasses,
+          bucketId);
     }
 
     public Builder addProgramFile(Path file) {

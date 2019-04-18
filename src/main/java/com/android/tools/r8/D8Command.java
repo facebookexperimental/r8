@@ -113,6 +113,12 @@ public final class D8Command extends BaseCompilerCommand {
       return super.addClasspathResourceProvider(provider);
     }
 
+    /**  Set unique identifier of a bucket of Java classes that D8 will dex independently in parallel. */
+    public Builder setBucketId(String value) {
+      guard(() -> getAppBuilder().setBucketId(value));
+      return self();
+    }
+
     /**
      * Indicate if compilation is to intermediate results, i.e., intended for later merging.
      *
@@ -229,6 +235,10 @@ public final class D8Command extends BaseCompilerCommand {
   private final StringConsumer desugaredLibraryKeepRuleConsumer;
   private final DesugaredLibraryConfiguration libraryConfiguration;
   private final DexItemFactory factory;
+
+  public DexItemFactory getDexItemFactory() {
+    return factory;
+  }
 
   public static Builder builder() {
     return new Builder();

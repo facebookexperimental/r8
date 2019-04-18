@@ -365,7 +365,7 @@ public class IRConverter {
   }
 
   private boolean enableTwrCloseResourceDesugaring() {
-    return enableTryWithResourcesDesugaring() && !options.canUseTwrCloseResourceMethod();
+    return false;
   }
 
   private boolean enableTryWithResourcesDesugaring() {

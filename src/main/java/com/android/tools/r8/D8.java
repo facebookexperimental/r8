@@ -155,7 +155,7 @@ public final class D8 {
       DexApplication app = new ApplicationReader(inputApp, options, timing).read(executor);
       PrefixRewritingMapper rewritePrefix =
           options.desugaredLibraryConfiguration.createPrefixRewritingMapper(options.itemFactory);
-      AppInfo appInfo = new AppInfo(app);
+      AppInfo appInfo = new AppInfo(app, inputApp.getBucketId());
 
       final CfgPrinter printer = options.printCfg ? new CfgPrinter() : null;
 
