@@ -75,10 +75,11 @@ public final class Java8MethodRewriter {
       if (generator == null) {
         continue;
       }
+      AppInfo appInfo = appView.appInfo();
       iterator.replaceCurrentInstruction(
-            new InvokeStatic(generator.generateMethod(factory),
+            new InvokeStatic(generator.generateMethod(factory, appInfo.getBucketId()),
                 invoke.outValue(), invoke.inValues()));
-      methodGenerators.putIfAbsent(generator.generateMethod(factory), generator);
+      methodGenerators.putIfAbsent(generator.generateMethod(factory, appInfo.getBucketId()), generator);
       holders.add(code.method.method.holder);
     }
   }
@@ -120,7 +121,7 @@ public final class Java8MethodRewriter {
         ClassAccessFlags.fromSharedAccessFlags(Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC);
 
     for (MethodGenerator generator : methodGenerators.values()) {
-      DexMethod method = generator.generateMethod(factory);
+      DexMethod method = generator.generateMethod(factory, appInfo.getBucketId());
       TemplateMethodCode code = generator.generateTemplateMethod(options, method);
       DexEncodedMethod dexEncodedMethod= new DexEncodedMethod(method,
           flags, DexAnnotationSet.empty(), ParameterAnnotationsList.empty(), code);
@@ -627,14 +628,14 @@ public final class Java8MethodRewriter {
         this.proto = proto;
       }
 
-      public DexMethod generateMethod(DexItemFactory factory) {
+        public DexMethod generateMethod(DexItemFactory factory, String bucketId) {
         if (dexMethod != null) {
           return dexMethod;
         }
         String unqualifiedName =
             DescriptorUtils.getUnqualifiedClassNameFromDescriptor(clazz.toString());
         String postFix = "$" + unqualifiedName + "$" + method + "$" + proto.shorty.toString();
-        DexType clazz = factory.createType(UTILITY_CLASS_DESCRIPTOR_PREFIX + postFix + ";");
+        DexType clazz = factory.createType(UTILITY_CLASS_DESCRIPTOR_PREFIX + bucketId + postFix + ";");
         dexMethod = factory.createMethod(clazz, proto, method);
         return dexMethod;
       }

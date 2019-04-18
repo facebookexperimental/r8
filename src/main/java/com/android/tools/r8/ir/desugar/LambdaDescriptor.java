@@ -68,7 +68,7 @@ public final class LambdaDescriptor {
     assert mainInterface != null;
     assert captures != null;
 
-    this.uniqueId = callSite.getHash();
+    this.uniqueId = callSite.getHash() + appInfo.getBucketId();
     this.name = name;
     this.erasedProto = erasedProto;
     this.enforcedProto = enforcedProto;

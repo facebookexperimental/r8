@@ -101,6 +101,12 @@ public final class D8Command extends BaseCompilerCommand {
       return super.addClasspathResourceProvider(provider);
     }
 
+    /**  Set unique identifier of a bucket of Java classes that D8 will dex independently in parallel. */
+    public Builder setBucketId(String value) {
+      guard(() -> getAppBuilder().setBucketId(value));
+      return self();
+    }
+
     /**
      * Indicate if compilation is to intermediate results, i.e., intended for later merging.
      *
@@ -172,6 +178,11 @@ public final class D8Command extends BaseCompilerCommand {
   static final String USAGE_MESSAGE = D8CommandParser.USAGE_MESSAGE;
 
   private boolean intermediate = false;
+  private DexItemFactory dexItemFactory;
+
+  public DexItemFactory getDexItemFactory() {
+    return dexItemFactory;
+  }
 
   public static Builder builder() {
     return new Builder();
@@ -241,7 +252,8 @@ public final class D8Command extends BaseCompilerCommand {
 
   @Override
   InternalOptions getInternalOptions() {
-    InternalOptions internal = new InternalOptions(new DexItemFactory(), getReporter());
+    dexItemFactory = new DexItemFactory();
+    InternalOptions internal = new InternalOptions(dexItemFactory, getReporter());
     assert !internal.debug;
     internal.debug = getMode() == CompilationMode.DEBUG;
     internal.programConsumer = getProgramConsumer();

@@ -40,6 +40,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -1302,5 +1303,18 @@ public class DexItemFactory {
 
   synchronized public void forAllTypes(Consumer<DexType> f) {
     new ArrayList<>(types.values()).forEach(f);
+  }
+
+  // Facebook addition: compute the resources referenced by this dex file.
+  // Does not apply to any merging, just the input class.
+  public Collection<String> computeReferencedResources() {
+    Set<String> resourceNames = new HashSet<>();
+    for (DexField item: fields.values()) {
+      DexType clazz = item.holder;
+      if (clazz.toDescriptorString().contains("/R$")) {
+        resourceNames.add(clazz.getPackageDescriptor().replaceAll("/", ".") + "." + item.name.toString());
+      }
+    }
+    return resourceNames;
   }
 }

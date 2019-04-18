@@ -26,20 +26,27 @@ public class AppInfo implements DexDefinitionSupplier {
   // class being optimized.
   private final ConcurrentHashMap<DexType, DexProgramClass> synthesizedClasses =
       new ConcurrentHashMap<>();
+  private final String bucketId;
 
   // Set when a new AppInfo replaces a previous one. All public methods should verify that the
   // current instance is not obsolete, to ensure that we almost use the most recent AppInfo.
   private boolean obsolete;
 
-  public AppInfo(DexApplication application) {
+  public AppInfo(DexApplication application, String bucketId) {
     this.app = application;
     this.dexItemFactory = app.dexItemFactory;
+    this.bucketId = bucketId;
+  }
+
+  public AppInfo(DexApplication application) {
+      this(application, "");
   }
 
   protected AppInfo(AppInfo previous) {
     assert !previous.isObsolete();
     this.app = previous.app;
     this.dexItemFactory = app.dexItemFactory;
+    this.bucketId = previous.bucketId;
     this.definitions.putAll(previous.definitions);
     copyMetadataFromPrevious(previous);
   }
@@ -165,6 +172,13 @@ public class AppInfo implements DexDefinitionSupplier {
     typeDefinitions = computeDefinitions(type);
     Map<Descriptor<?,?>, KeyedDexItem<?>> existing = definitions.putIfAbsent(type, typeDefinitions);
     return existing != null ? existing : typeDefinitions;
+  }
+
+  /**
+   * Get unique bucket id.
+   */
+  public String getBucketId() {
+    return bucketId;
   }
 
   /**

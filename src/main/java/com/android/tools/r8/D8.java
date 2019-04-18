@@ -166,7 +166,7 @@ public final class D8 {
       options.disableGlobalOptimizations();
 
       DexApplication app = new ApplicationReader(inputApp, options, timing).read(executor);
-      AppInfo appInfo = new AppInfo(app);
+      AppInfo appInfo = new AppInfo(app, inputApp.getBucketId());
       app = optimize(app, appInfo, options, timing, executor);
 
       // Close any internal archive providers now the application is fully processed.
