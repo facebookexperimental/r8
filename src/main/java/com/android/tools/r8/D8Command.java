@@ -15,6 +15,7 @@ import com.android.tools.r8.utils.StringDiagnostic;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.function.BiPredicate;
+import java.util.function.Consumer;
 
 /**
  * Immutable command structure for an invocation of the {@link D8} compiler.
@@ -31,6 +32,7 @@ import java.util.function.BiPredicate;
  */
 @Keep
 public final class D8Command extends BaseCompilerCommand {
+  private Consumer<InternalOptions> internalOptionsModifier;
 
   private static class ClasspathInputOrigin extends InputFileOrigin {
 
@@ -67,6 +69,7 @@ public final class D8Command extends BaseCompilerCommand {
     private boolean intermediate = false;
     private DesugarGraphConsumer desugarGraphConsumer = null;
     private StringConsumer desugaredLibraryKeepRuleConsumer = null;
+    private Consumer<InternalOptions> internalOptionsModifier;
 
     private Builder() {
       this(new DefaultD8DiagnosticsHandler());
@@ -116,6 +119,11 @@ public final class D8Command extends BaseCompilerCommand {
     /**  Set unique identifier of a bucket of Java classes that D8 will dex independently in parallel. */
     public Builder setBucketId(String value) {
       guard(() -> getAppBuilder().setBucketId(value));
+      return self();
+    }
+
+    public Builder setInternalOptionsModifier(Consumer<InternalOptions> f) {
+      this.internalOptionsModifier = f;
       return self();
     }
 
@@ -224,7 +232,8 @@ public final class D8Command extends BaseCompilerCommand {
           getDesugarGraphConsumer(),
           desugaredLibraryKeepRuleConsumer,
           libraryConfiguration,
-          factory);
+          factory,
+          internalOptionsModifier);
     }
   }
 
@@ -295,7 +304,8 @@ public final class D8Command extends BaseCompilerCommand {
       DesugarGraphConsumer desugarGraphConsumer,
       StringConsumer desugaredLibraryKeepRuleConsumer,
       DesugaredLibraryConfiguration libraryConfiguration,
-      DexItemFactory factory) {
+      DexItemFactory factory,
+      Consumer<InternalOptions> internalOptionsModifier) {
     super(
         inputApp,
         mode,
@@ -312,6 +322,7 @@ public final class D8Command extends BaseCompilerCommand {
     this.desugaredLibraryKeepRuleConsumer = desugaredLibraryKeepRuleConsumer;
     this.libraryConfiguration = libraryConfiguration;
     this.factory = factory;
+    this.internalOptionsModifier = internalOptionsModifier;
   }
 
   private D8Command(boolean printHelp, boolean printVersion) {
@@ -367,6 +378,9 @@ public final class D8Command extends BaseCompilerCommand {
     internal.desugaredLibraryConfiguration = libraryConfiguration;
     internal.desugaredLibraryKeepRuleConsumer = desugaredLibraryKeepRuleConsumer;
 
+    if (internalOptionsModifier != null) {
+      internalOptionsModifier.accept(internal);
+    }
     return internal;
   }
 }
