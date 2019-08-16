@@ -13,6 +13,7 @@ import com.android.tools.r8.utils.Reporter;
 import com.android.tools.r8.utils.StringDiagnostic;
 import java.nio.file.Path;
 import java.util.Collection;
+import java.util.function.Consumer;
 
 /**
  * Immutable command structure for an invocation of the {@link D8} compiler.
@@ -29,6 +30,7 @@ import java.util.Collection;
  */
 @Keep
 public final class D8Command extends BaseCompilerCommand {
+  private Consumer<InternalOptions> internalOptionsModifier;
 
   private static class ClasspathInputOrigin extends InputFileOrigin {
 
@@ -63,6 +65,7 @@ public final class D8Command extends BaseCompilerCommand {
   public static class Builder extends BaseCompilerCommand.Builder<D8Command, Builder> {
 
     private boolean intermediate = false;
+    private Consumer<InternalOptions> internalOptionsModifier;
 
     private Builder() {
       this(new DefaultD8DiagnosticsHandler());
@@ -104,6 +107,11 @@ public final class D8Command extends BaseCompilerCommand {
     /**  Set unique identifier of a bucket of Java classes that D8 will dex independently in parallel. */
     public Builder setBucketId(String value) {
       guard(() -> getAppBuilder().setBucketId(value));
+      return self();
+    }
+
+    public Builder setInternalOptionsModifier(Consumer<InternalOptions> f) {
+      this.internalOptionsModifier = f;
       return self();
     }
 
@@ -171,7 +179,8 @@ public final class D8Command extends BaseCompilerCommand {
           getReporter(),
           !getDisableDesugaring(),
           intermediate,
-          isOptimizeMultidexForLinearAlloc());
+          isOptimizeMultidexForLinearAlloc(),
+          internalOptionsModifier);
     }
   }
 
@@ -233,7 +242,8 @@ public final class D8Command extends BaseCompilerCommand {
       Reporter diagnosticsHandler,
       boolean enableDesugaring,
       boolean intermediate,
-      boolean optimizeMultidexForLinearAlloc) {
+      boolean optimizeMultidexForLinearAlloc,
+      Consumer<InternalOptions> internalOptionsModifier) {
     super(
         inputApp,
         mode,
@@ -244,6 +254,7 @@ public final class D8Command extends BaseCompilerCommand {
         enableDesugaring,
         optimizeMultidexForLinearAlloc);
     this.intermediate = intermediate;
+    this.internalOptionsModifier = internalOptionsModifier;
   }
 
   private D8Command(boolean printHelp, boolean printVersion) {
@@ -281,6 +292,9 @@ public final class D8Command extends BaseCompilerCommand {
 
     internal.enableDesugaring = getEnableDesugaring();
     internal.enableInheritanceClassInDexDistributor = isOptimizeMultidexForLinearAlloc();
+    if (internalOptionsModifier != null) {
+      internalOptionsModifier.accept(internal);
+    }
     return internal;
   }
 }
