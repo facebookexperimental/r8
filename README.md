@@ -9,3 +9,6 @@ repository is not the source of truth**.
 We will only consider PRs and issues related to D8/R8's integration with Buck
 and Redex in this repo. All other PRs and issues should be sent to
 https://r8.googlesource.com/r8
+
+# License
+See https://github.com/facebookexperimental/r8/blob/buck/LICENSE
