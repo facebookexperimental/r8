@@ -213,6 +213,8 @@ public class DexItemFactory {
       createString("Ljava/lang/reflect/InvocationHandler;");
   public final DexString proxyDescriptor = createString("Ljava/lang/reflect/Proxy;");
   public final DexString serviceLoaderDescriptor = createString("Ljava/util/ServiceLoader;");
+  public final DexString serviceLoaderConfigurationErrorDescriptor =
+      createString("Ljava/util/ServiceConfigurationError;");
   public final DexString listDescriptor = createString("Ljava/util/List;");
   public final DexString comparatorDescriptor = createString("Ljava/util/Comparator;");
   public final DexString callableDescriptor = createString("Ljava/util/concurrent/Callable;");
@@ -301,6 +303,8 @@ public class DexItemFactory {
   public final DexType invocationHandlerType = createType(invocationHandlerDescriptor);
   public final DexType proxyType = createType(proxyDescriptor);
   public final DexType serviceLoaderType = createType(serviceLoaderDescriptor);
+  public final DexType serviceLoaderConfigurationErrorType =
+      createType(serviceLoaderConfigurationErrorDescriptor);
   public final DexType listType = createType(listDescriptor);
   public final DexType comparatorType = createType(comparatorDescriptor);
   public final DexType callableType = createType(callableDescriptor);
@@ -574,6 +578,7 @@ public class DexItemFactory {
   public class ThrowableMethods {
 
     public final DexMethod addSuppressed;
+    public final DexMethod getMessage;
     public final DexMethod getSuppressed;
     public final DexMethod initCause;
 
@@ -584,6 +589,12 @@ public class DexItemFactory {
           createString("getSuppressed"), throwableArrayDescriptor, DexString.EMPTY_ARRAY);
       initCause = createMethod(throwableDescriptor, createString("initCause"), throwableDescriptor,
           new DexString[] { throwableDescriptor });
+      getMessage =
+          createMethod(
+              throwableDescriptor,
+              createString("getMessage"),
+              stringDescriptor,
+              DexString.EMPTY_ARRAY);
     }
   }
 
