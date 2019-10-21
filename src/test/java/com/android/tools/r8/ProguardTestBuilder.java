@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.function.Consumer;
@@ -193,6 +194,28 @@ public class ProguardTestBuilder
   }
 
   @Override
+  public ProguardTestBuilder addLibraryClasses(Class<?>... classes) {
+    addLibraryClasses(Arrays.asList(classes));
+    return self();
+  }
+
+  @Override
+  public ProguardTestBuilder addLibraryClasses(Collection<Class<?>> classes) {
+    List<Path> pathsForClasses = new ArrayList<>(classes.size());
+    for (Class<?> clazz : classes) {
+      pathsForClasses.add(ToolHelper.getClassFileForTestClass(clazz));
+    }
+    try {
+      Path out = getState().getNewTempFolder().resolve("out.jar");
+      TestBase.writeClassFilesToJar(out, pathsForClasses);
+      libraryjars.add(out);
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+    return self();
+  }
+
+  @Override
   public ProguardTestBuilder addClasspathClasses(Collection<Class<?>> classes) {
     throw new Unimplemented("No support for adding classpath data directly");
   }
@@ -209,7 +232,10 @@ public class ProguardTestBuilder
 
   @Override
   public ProguardTestBuilder setMinApi(AndroidApiLevel minApiLevel) {
-    throw new Unimplemented("No support for setting min api");
+    if (backend == Backend.DEX) {
+      throw new Unimplemented("No support for setting min api");
+    }
+    return self();
   }
 
   @Override
