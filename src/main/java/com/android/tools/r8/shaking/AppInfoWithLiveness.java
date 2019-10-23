@@ -537,6 +537,9 @@ public class AppInfoWithLiveness extends AppInfoWithSubtyping {
     if (liveTypes.contains(type)) {
       return true;
     }
+    if (prunedTypes.contains(type)) {
+      return false;
+    }
     DexClass clazz = definitionFor(type);
     return clazz == null || !clazz.isProgramClass();
   }
