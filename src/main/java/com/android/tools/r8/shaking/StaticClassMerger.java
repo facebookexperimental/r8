@@ -157,6 +157,8 @@ public class StaticClassMerger {
     private final HashMultiset<Wrapper<DexField>> fieldBuckets = HashMultiset.create();
     private final HashMultiset<Wrapper<DexMethod>> methodBuckets = HashMultiset.create();
 
+    private boolean hasSynchronizedMethods = false;
+
     public Representative(DexProgramClass clazz) {
       this.clazz = clazz;
       include(clazz);
@@ -168,10 +170,14 @@ public class StaticClassMerger {
         Wrapper<DexField> wrapper = fieldEquivalence.wrap(field.field);
         fieldBuckets.add(wrapper);
       }
+      boolean classHasSynchronizedMethods = false;
       for (DexEncodedMethod method : clazz.methods()) {
+        assert !hasSynchronizedMethods || !method.accessFlags.isSynchronized();
+        classHasSynchronizedMethods |= method.accessFlags.isSynchronized();
         Wrapper<DexMethod> wrapper = methodEquivalence.wrap(method.method);
         methodBuckets.add(wrapper);
       }
+      hasSynchronizedMethods |= classHasSynchronizedMethods;
     }
 
     // Returns true if this representative should no longer be used. The current heuristic is to
@@ -317,83 +323,47 @@ public class StaticClassMerger {
     assert satisfiesMergeCriteria(clazz) == group;
     assert group != MergeGroup.DONT_MERGE;
 
-    String pkg = clazz.type.getPackageDescriptor();
-    return mayMergeAcrossPackageBoundaries(clazz)
-        ? mergeGlobally(clazz, pkg, group)
-        : mergeInsidePackage(clazz, pkg, group);
+    return merge(
+        clazz,
+        mayMergeAcrossPackageBoundaries(clazz)
+            ? group.globalKey()
+            : group.key(clazz.type.getPackageDescriptor()));
   }
 
-  private boolean mergeGlobally(DexProgramClass clazz, String pkg, MergeGroup group) {
-    Representative globalRepresentative = representatives.get(group.globalKey());
-    if (globalRepresentative == null) {
-      if (isValidRepresentative(clazz)) {
-        // Make the current class the global representative.
-        setRepresentative(group.globalKey(), getOrCreateRepresentative(group.key(pkg), clazz));
-      } else {
-        clearRepresentative(group.globalKey());
-      }
-
-      // Do not attempt to merge this class inside its own package, because that could lead to
-      // an increase in the global representative, which is not desirable.
-      return false;
-    } else {
-      // Check if we can merge the current class into the current global representative.
-      globalRepresentative.include(clazz);
-
-      if (globalRepresentative.isFull()) {
-        if (isValidRepresentative(clazz)) {
-          // Make the current class the global representative instead.
-          setRepresentative(group.globalKey(), getOrCreateRepresentative(group.key(pkg), clazz));
-        } else {
-          clearRepresentative(group.globalKey());
-        }
-
-        // Do not attempt to merge this class inside its own package, because that could lead to
-        // an increase in the global representative, which is not desirable.
+  private boolean merge(DexProgramClass clazz, MergeGroup.Key key) {
+    Representative representative = representatives.get(key);
+    if (representative != null) {
+      if (representative.hasSynchronizedMethods && clazz.hasStaticSynchronizedMethods()) {
+        // We are not allowed to merge synchronized classes with synchronized methods.
         return false;
-      } else {
-        // Merge this class into the global representative.
-        moveMembersFromSourceToTarget(clazz, globalRepresentative.clazz);
-        return true;
       }
-    }
-  }
-
-  private boolean mergeInsidePackage(DexProgramClass clazz, String pkg, MergeGroup group) {
-    MergeGroup.Key key = group.key(pkg);
-    Representative packageRepresentative = representatives.get(key);
-    if (packageRepresentative != null) {
+      if (appView.appInfo().constClassReferences.contains(clazz.type)) {
+        // Since the type is const-class referenced (and the static merger does not create a lense
+        // to map the merged type) the class will likely remain and there is no gain from merging.
+        return false;
+      }
+      // Check if current candidate is a better choice depending on visibility. For package private
+      // or protected, the key is parameterized by the package name already, so we just have to
+      // check accessibility-flags. For global this is no-op.
       if (isValidRepresentative(clazz)
-          && clazz.accessFlags.isMoreVisibleThan(
-              packageRepresentative.clazz.accessFlags,
-              clazz.type.getPackageName(),
-              packageRepresentative.clazz.type.getPackageName())) {
-        // Use `clazz` as a representative for this package instead.
+          && !representative.clazz.accessFlags.isAtLeastAsVisibleAs(clazz.accessFlags)) {
+        assert clazz.type.getPackageDescriptor().equals(key.packageOrGlobal);
+        assert representative.clazz.type.getPackageDescriptor().equals(key.packageOrGlobal);
         Representative newRepresentative = getOrCreateRepresentative(key, clazz);
-        newRepresentative.include(packageRepresentative.clazz);
-
+        newRepresentative.include(representative.clazz);
         if (!newRepresentative.isFull()) {
-          setRepresentative(group.key(pkg), newRepresentative);
-          moveMembersFromSourceToTarget(packageRepresentative.clazz, clazz);
+          setRepresentative(key, newRepresentative);
+          moveMembersFromSourceToTarget(representative.clazz, clazz);
           return true;
         }
-
-        // We are not allowed to merge members into a class that is less visible.
-        return false;
-      }
-
-      // Merge current class into the representative of this package if it has room.
-      packageRepresentative.include(clazz);
-
-      // If there is room, then merge, otherwise fall-through to update the representative of this
-      // package.
-      if (!packageRepresentative.isFull()) {
-        moveMembersFromSourceToTarget(clazz, packageRepresentative.clazz);
-        return true;
+      } else {
+        representative.include(clazz);
+        if (!representative.isFull()) {
+          moveMembersFromSourceToTarget(clazz, representative.clazz);
+          return true;
+        }
       }
     }
-
-    // We were unable to use the current representative for this package (if any).
     if (isValidRepresentative(clazz)) {
       setRepresentative(key, getOrCreateRepresentative(key, clazz));
     }
