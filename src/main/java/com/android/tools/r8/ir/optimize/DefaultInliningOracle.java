@@ -269,21 +269,26 @@ public final class DefaultInliningOracle implements InliningOracle, InliningStra
       return false;
     }
 
-    if (!inliner.mainDexClasses.isEmpty()) {
-      // Don't inline code with references beyond root main dex classes into a root main dex class.
-      // If we do this it can increase the size of the main dex dependent classes.
-      if (inliner.mainDexClasses.getRoots().contains(method.method.holder)
-          && MainDexDirectReferenceTracer.hasReferencesOutsideFromCode(
-          appView.appInfo(), candidate, inliner.mainDexClasses.getRoots())) {
-        if (info != null) {
-          info.exclude(invoke, "target has references beyond main dex");
-        }
-        return false;
+    // Don't inline code with references beyond root main dex classes into a root main dex class.
+    // If we do this it can increase the size of the main dex dependent classes.
+    if (reason != Reason.FORCE
+        && inlineeRefersToClassesNotInMainDex(method.method.holder, candidate)) {
+      if (info != null) {
+        info.exclude(invoke, "target has references beyond main dex");
       }
-      // Allow inlining into the classes in the main dex dependent set without restrictions.
+      return false;
     }
-
+    assert reason != Reason.FORCE
+        || !inlineeRefersToClassesNotInMainDex(method.method.holder, candidate);
     return true;
+  }
+
+  private boolean inlineeRefersToClassesNotInMainDex(DexType holder, DexEncodedMethod target) {
+    if (inliner.mainDexClasses.isEmpty() || !inliner.mainDexClasses.getRoots().contains(holder)) {
+      return false;
+    }
+    return MainDexDirectReferenceTracer.hasReferencesOutsideFromCode(
+        appView.appInfo(), target, inliner.mainDexClasses.getRoots());
   }
 
   private boolean satisfiesRequirementsForSimpleInlining(
