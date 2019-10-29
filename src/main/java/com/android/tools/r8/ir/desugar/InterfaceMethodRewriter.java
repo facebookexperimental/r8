@@ -732,6 +732,7 @@ public final class InterfaceMethodRewriter {
         emulationMethods.toArray(DexEncodedMethod.EMPTY_ARRAY),
         DexEncodedMethod.EMPTY_ARRAY,
         factory.getSkipNameValidationForTesting(),
+        DexProgramClass::checksumFromType,
         Collections.singletonList(theInterface));
   }
 

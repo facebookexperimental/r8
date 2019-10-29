@@ -164,7 +164,8 @@ public abstract class NestBasedAccessDesugaring {
         DexEncodedField.EMPTY_ARRAY,
         DexEncodedMethod.EMPTY_ARRAY,
         DexEncodedMethod.EMPTY_ARRAY,
-        appView.dexItemFactory().getSkipNameValidationForTesting());
+        appView.dexItemFactory().getSkipNameValidationForTesting(),
+        DexProgramClass::checksumFromType);
   }
 
   void synthetizeNestConstructor(DexApplication.Builder<?> builder) {
