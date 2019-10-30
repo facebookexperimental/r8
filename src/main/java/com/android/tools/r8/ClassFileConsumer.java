@@ -3,14 +3,11 @@
 // BSD-style license that can be found in the LICENSE file.
 package com.android.tools.r8;
 
-import static com.android.tools.r8.utils.FileUtils.CLASS_EXTENSION;
-
 import com.android.tools.r8.utils.ArchiveBuilder;
 import com.android.tools.r8.utils.DescriptorUtils;
 import com.android.tools.r8.utils.DirectoryBuilder;
 import com.android.tools.r8.utils.OutputBuilder;
 import com.android.tools.r8.utils.ZipUtils;
-import com.google.common.io.ByteStreams;
 import com.google.common.io.Closer;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -19,7 +16,6 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.List;
 import java.util.Set;
-import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 /**
@@ -122,7 +118,7 @@ public interface ClassFileConsumer extends ProgramConsumer {
     @Override
     public void accept(ByteDataView data, String descriptor, DiagnosticsHandler handler) {
       super.accept(data, descriptor, handler);
-      outputBuilder.addFile(getClassFileName(descriptor), data, handler);
+      outputBuilder.addFile(DescriptorUtils.getClassFileName(descriptor), data, handler);
     }
 
     @Override
@@ -146,11 +142,6 @@ public interface ClassFileConsumer extends ProgramConsumer {
       return outputBuilder.getPath();
     }
 
-    private static String getClassFileName(String classDescriptor) {
-      assert classDescriptor != null && DescriptorUtils.isClassDescriptor(classDescriptor);
-      return DescriptorUtils.getClassBinaryNameFromDescriptor(classDescriptor) + CLASS_EXTENSION;
-    }
-
     public static void writeResources(
         Path archive, List<ProgramResource> resources, Set<DataEntryResource> dataResources)
         throws IOException, ResourceException {
@@ -158,21 +149,11 @@ public interface ClassFileConsumer extends ProgramConsumer {
           new OpenOption[] {StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING};
       try (Closer closer = Closer.create()) {
         try (ZipOutputStream out = new ZipOutputStream(Files.newOutputStream(archive, options))) {
-          for (ProgramResource resource : resources) {
-            assert resource.getClassDescriptors().size() == 1;
-            String className = resource.getClassDescriptors().iterator().next();
-            String entryName = getClassFileName(className);
-            byte[] bytes = ByteStreams.toByteArray(closer.register(resource.getByteStream()));
-            ZipUtils.writeToZipStream(out, entryName, bytes, ZipEntry.DEFLATED);
-          }
-          for (DataEntryResource dataResource : dataResources) {
-            String entryName = dataResource.getName();
-            byte[] bytes = ByteStreams.toByteArray(closer.register(dataResource.getByteStream()));
-            ZipUtils.writeToZipStream(out, entryName, bytes, ZipEntry.DEFLATED);
-          }
+          ZipUtils.writeResourcesToZip(resources, dataResources, closer, out);
         }
       }
     }
+
   }
 
   /** Directory consumer to write program resources to a directory. */
@@ -208,7 +189,7 @@ public interface ClassFileConsumer extends ProgramConsumer {
     @Override
     public void accept(ByteDataView data, String descriptor, DiagnosticsHandler handler) {
       super.accept(data, descriptor, handler);
-      outputBuilder.addFile(ArchiveConsumer.getClassFileName(descriptor), data, handler);
+      outputBuilder.addFile(DescriptorUtils.getClassFileName(descriptor), data, handler);
     }
 
     @Override
