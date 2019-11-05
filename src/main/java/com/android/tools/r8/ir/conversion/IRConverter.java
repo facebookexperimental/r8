@@ -796,8 +796,12 @@ public class IRConverter {
     return builder.build();
   }
 
-  private void waveStart() {
+  private void waveStart(Collection<DexEncodedMethod> wave) {
     onWaveDoneActions = Collections.synchronizedList(new ArrayList<>());
+
+    if (lambdaRewriter != null) {
+      wave.forEach(method -> lambdaRewriter.synthesizeLambdaClassesFor(method, lensCodeRewriter));
+    }
   }
 
   private void waveDone() {

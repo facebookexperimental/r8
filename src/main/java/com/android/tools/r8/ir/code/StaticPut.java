@@ -120,7 +120,8 @@ public class StaticPut extends FieldInstruction {
         return false;
       }
 
-      return appInfoWithLiveness.isFieldRead(encodedField);
+      return appInfoWithLiveness.isFieldRead(encodedField)
+          || isStoringObjectWithFinalizer(appInfoWithLiveness);
     }
 
     // In D8, we always have to assume that the field can be read, and thus have side effects.
