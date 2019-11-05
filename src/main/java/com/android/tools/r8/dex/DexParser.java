@@ -715,7 +715,7 @@ public class DexParser {
       AnnotationsDirectory annotationsDirectory = annotationsDirectoryAt(annotationsOffsets[i]);
 
       Long checksum = null;
-      if (checksums != null && classDataOffsets[i] != 0) {
+      if (checksums != null) {
         String desc = type.descriptor.toASCIIString();
         checksum = checksums.getOrDefault(desc, null);
         if (!options.dexClassChecksumFilter.test(desc, checksum)) {
@@ -950,7 +950,7 @@ public class DexParser {
     ClassesChecksum parsedChecksums = new ClassesChecksum();
     for (int i = stringIDs.length - 1; i >= 0; i--) {
       DexString value = indexedItems.getString(i);
-      if (ClassesChecksum.preceedChecksumMarker(value)) {
+      if (ClassesChecksum.definitelyPrecedesChecksumMarker(value)) {
         break;
       }
       parsedChecksums.tryParseAndAppend(value);

@@ -111,32 +111,46 @@ public class DexString extends IndexedDexItem implements PresortedComparable<Dex
     return result;
   }
 
-  // Inspired from /dex/src/main/java/com/android/dex/Mutf8.java
   private String decode() throws UTFDataFormatException {
+    char[] out = new char[size];
+    int decodedLength = decodePrefix(out);
+    return new String(out, 0, decodedLength);
+  }
+
+  // Inspired from /dex/src/main/java/com/android/dex/Mutf8.java
+  public int decodePrefix(char[] out) throws UTFDataFormatException {
     int s = 0;
     int p = 0;
-    char[] out = new char[size];
+    int prefixLength = out.length;
     while (true) {
       char a = (char) (content[p++] & 0xff);
       if (a == 0) {
-        return new String(out, 0, s);
+        return s;
       }
       out[s] = a;
       if (a < '\u0080') {
-        s++;
+        if (++s == prefixLength) {
+          return s;
+        }
       } else if ((a & 0xe0) == 0xc0) {
         int b = content[p++] & 0xff;
         if ((b & 0xC0) != 0x80) {
           throw new UTFDataFormatException("bad second byte");
         }
-        out[s++] = (char) (((a & 0x1F) << 6) | (b & 0x3F));
+        out[s] = (char) (((a & 0x1F) << 6) | (b & 0x3F));
+        if (++s == prefixLength) {
+          return s;
+        }
       } else if ((a & 0xf0) == 0xe0) {
         int b = content[p++] & 0xff;
         int c = content[p++] & 0xff;
         if (((b & 0xC0) != 0x80) || ((c & 0xC0) != 0x80)) {
           throw new UTFDataFormatException("bad second or third byte");
         }
-        out[s++] = (char) (((a & 0x0F) << 12) | ((b & 0x3F) << 6) | (c & 0x3F));
+        out[s] = (char) (((a & 0x0F) << 12) | ((b & 0x3F) << 6) | (c & 0x3F));
+        if (++s == prefixLength) {
+          return s;
+        }
       } else {
         throw new UTFDataFormatException("bad byte");
       }
