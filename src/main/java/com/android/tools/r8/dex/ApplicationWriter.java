@@ -244,7 +244,7 @@ public class ApplicationWriter {
       application.dexItemFactory.sort(namingLens);
       assert markers == null
           || markers.isEmpty()
-          || application.dexItemFactory.extractMarker() != null;
+          || application.dexItemFactory.extractMarkers() != null;
 
       SortAnnotations sortAnnotations = new SortAnnotations();
       application.classes().forEach((clazz) -> clazz.addDependencies(sortAnnotations));
