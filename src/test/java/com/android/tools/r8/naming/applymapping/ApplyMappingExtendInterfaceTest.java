@@ -33,7 +33,7 @@ public class ApplyMappingExtendInterfaceTest extends TestBase {
 
   @Test
   public void testRuntime() throws ExecutionException, CompilationFailedException, IOException {
-    testForRuntime(parameters)
+    testForRuntime(parameters.getRuntime(), parameters.getApiLevel())
         .addProgramClasses(TestI.class, TestA.class, Main.class, LibI.class, Runner.class)
         .run(parameters.getRuntime(), Main.class)
         .assertSuccessWithOutputLines("injectTestA", "injectObject");
@@ -54,8 +54,9 @@ public class ApplyMappingExtendInterfaceTest extends TestBase {
         .addClasspathClasses(LibI.class, Runner.class)
         .addKeepAllClassesRule()
         .addApplyMapping(libCompileResult.getProguardMap())
-        .addRunClasspathFiles(libCompileResult.writeToZip())
         .setMinApi(parameters.getApiLevel())
+        .compile()
+        .addRunClasspathFiles(libCompileResult.writeToZip())
         .run(parameters.getRuntime(), Main.class)
         .assertSuccessWithOutputLines("injectTestA", "injectObject");
   }
