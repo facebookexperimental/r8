@@ -238,6 +238,10 @@ public class DexProgramClass extends DexClass implements Supplier<DexProgramClas
     return this;
   }
 
+  public static DexProgramClass asProgramClassOrNull(DexClass clazz) {
+    return clazz != null ? clazz.asProgramClass() : null;
+  }
+
   @Override
   public boolean isNotProgramClass() {
     return false;

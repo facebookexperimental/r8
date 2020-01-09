@@ -3,6 +3,7 @@
 // BSD-style license that can be found in the LICENSE file.
 package com.android.tools.r8.graph;
 
+import static com.android.tools.r8.graph.DexProgramClass.asProgramClassOrNull;
 import static com.android.tools.r8.ir.desugar.InterfaceMethodRewriter.COMPANION_CLASS_NAME_SUFFIX;
 import static com.android.tools.r8.ir.desugar.InterfaceMethodRewriter.DISPATCH_CLASS_NAME_SUFFIX;
 import static com.android.tools.r8.ir.desugar.InterfaceMethodRewriter.EMULATE_LIBRARY_CLASS_NAME_SUFFIX;
@@ -71,10 +72,16 @@ public class DexType extends DexReference implements PresortedComparable<DexType
 
   public boolean isAlwaysNull(AppView<AppInfoWithLiveness> appView) {
     if (isClassType()) {
-      DexClass clazz = appView.definitionFor(this);
-      return clazz != null
-          && clazz.isProgramClass()
-          && !appView.appInfo().isInstantiatedDirectlyOrIndirectly(this);
+      DexProgramClass clazz = asProgramClassOrNull(appView.definitionFor(this));
+      if (clazz == null) {
+        return false;
+      }
+      if (appView.options().enableUninstantiatedTypeOptimizationForInterfaces) {
+        return !appView.appInfo().isInstantiatedDirectlyOrIndirectly(clazz.type);
+      } else {
+        return !clazz.isInterface()
+            && !appView.appInfo().isInstantiatedDirectlyOrIndirectly(clazz.type);
+      }
     }
     return false;
   }

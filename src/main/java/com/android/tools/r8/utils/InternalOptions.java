@@ -240,6 +240,8 @@ public class InternalOptions {
   public boolean enableValuePropagation = true;
   public boolean enableFieldTypePropagation = true;
   public boolean enableUninstantiatedTypeOptimization = true;
+  // Currently disabled, see b/146957343.
+  public boolean enableUninstantiatedTypeOptimizationForInterfaces = false;
   // TODO(b/138917494): Disable until we have numbers on potential performance penalties.
   public boolean enableRedundantConstNumberOptimization = false;
 
