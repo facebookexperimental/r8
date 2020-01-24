@@ -50,6 +50,7 @@ import com.android.tools.r8.ir.optimize.info.DefaultCallSiteOptimizationInfo;
 import com.android.tools.r8.ir.optimize.info.DefaultMethodOptimizationInfo;
 import com.android.tools.r8.ir.optimize.info.MethodOptimizationInfo;
 import com.android.tools.r8.ir.optimize.info.MutableCallSiteOptimizationInfo;
+import com.android.tools.r8.ir.optimize.info.OptimizationFeedback;
 import com.android.tools.r8.ir.optimize.info.UpdatableMethodOptimizationInfo;
 import com.android.tools.r8.ir.regalloc.RegisterAllocator;
 import com.android.tools.r8.ir.synthetic.CfEmulateInterfaceSyntheticSourceCodeProvider;
@@ -1158,13 +1159,16 @@ public class DexEncodedMethod extends KeyedDexItem<DexMethod> implements Resolut
 
   public void copyMetadata(DexEncodedMethod from) {
     checkIfObsolete();
-    // Record that the current method uses identifier name string if the inlinee did so.
-    if (from.getOptimizationInfo().useIdentifierNameString()) {
-      getMutableOptimizationInfo().markUseIdentifierNameString();
-    }
     if (from.classFileVersion > classFileVersion) {
       upgradeClassFileVersion(from.getClassFileVersion());
     }
+  }
+
+  public void copyMetadata(DexEncodedMethod from, OptimizationFeedback feedback) {
+    if (from.getOptimizationInfo().useIdentifierNameString()) {
+      feedback.markUseIdentifierNameString(this);
+    }
+    copyMetadata(from);
   }
 
   private static Builder builder(DexEncodedMethod from) {

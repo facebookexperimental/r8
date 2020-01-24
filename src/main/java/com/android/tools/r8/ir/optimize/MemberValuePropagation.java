@@ -170,9 +170,6 @@ public class MemberValuePropagation {
                 code.origin));
         return null;
       }
-      if (replacement.isDexItemBasedConstString()) {
-        code.method.getMutableOptimizationInfo().markUseIdentifierNameString();
-      }
       return replacement;
     }
 
@@ -386,9 +383,6 @@ public class MemberValuePropagation {
     if (replacement != null) {
       affectedValues.addAll(current.outValue().affectedValues());
       iterator.replaceCurrentInstruction(replacement);
-      if (replacement.isDexItemBasedConstString()) {
-        code.method.getMutableOptimizationInfo().markUseIdentifierNameString();
-      }
       feedback.markFieldAsPropagated(target);
       return;
     }
