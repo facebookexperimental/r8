@@ -36,7 +36,7 @@ public class VerticalClassMergerInvokeSpecialInConstructorTest extends TestBase 
 
   @Test
   public void testRuntime() throws IOException, CompilationFailedException, ExecutionException {
-    testForRuntime(parameters)
+    testForRuntime(parameters.getRuntime(), parameters.getApiLevel())
         .addInnerClasses(VerticalClassMergerInvokeSpecialInConstructorTest.class)
         .run(parameters.getRuntime(), Main.class)
         .assertSuccessWithOutputLines(EXPECTED);
@@ -48,7 +48,7 @@ public class VerticalClassMergerInvokeSpecialInConstructorTest extends TestBase 
         .addInnerClasses(VerticalClassMergerInvokeSpecialInConstructorTest.class)
         .addKeepMainRule(Main.class)
         .addKeepClassRules(A.class)
-        .enableNeverClassInliningAnnotations()
+        .enableClassInliningAnnotations()
         .setMinApi(parameters.getApiLevel())
         .run(parameters.getRuntime(), Main.class)
         .assertSuccessWithOutputLines(EXPECTED);
