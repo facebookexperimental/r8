@@ -23,7 +23,6 @@ import com.android.tools.r8.graph.DexValue.DexItemBasedValueString;
 import com.android.tools.r8.graph.DexValue.DexValueString;
 import com.android.tools.r8.shaking.AppInfoWithLiveness;
 import com.android.tools.r8.shaking.ProguardClassFilter;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -139,21 +138,20 @@ class IdentifierMinifier {
   }
 
   private void replaceDexItemBasedConstStringInMethod(DexEncodedMethod encodedMethod) {
-    if (!encodedMethod.getOptimizationInfo().useIdentifierNameString()) {
-      assert (encodedMethod.getCode().isDexCode()
-              && Arrays.stream(encodedMethod.getCode().asDexCode().instructions)
-                  .noneMatch(Instruction::isDexItemBasedConstString))
-          || (encodedMethod.getCode().isCfCode()
-              && encodedMethod.getCode().asCfCode().instructions.stream()
-                  .noneMatch(CfInstruction::isDexItemBasedConstString));
-      // This return statement is commented out on the 1.6 branch. The change merged to fix
-      // b/147718617 (version 1.6.62) revealed that there could be other places where the
-      // identifier name string marker is not propagated. Due to changes to desugaring on the 2.1
-      // version line coverage of the propagation of this flag is unknown. Conservatively looking
-      // at all code for identifier name string instructions is safer.
-      //
-      // return;
-    }
+    // This bailout is commented out on the 1.6 branch. The change merged to fix
+    // b/147718617 (version 1.6.62) revealed that there could be other places where the
+    // identifier name string marker is not propagated. Due to changes to desugaring on the 2.1
+    // version line coverage of the propagation of this flag is unknown. Conservatively looking
+    // at all code for identifier name string instructions is safer.
+    // if (!encodedMethod.getOptimizationInfo().useIdentifierNameString()) {
+    //   assert (encodedMethod.getCode().isDexCode()
+    //           && Arrays.stream(encodedMethod.getCode().asDexCode().instructions)
+    //               .noneMatch(Instruction::isDexItemBasedConstString))
+    //       || (encodedMethod.getCode().isCfCode()
+    //           && encodedMethod.getCode().asCfCode().instructions.stream()
+    //               .noneMatch(CfInstruction::isDexItemBasedConstString));
+    //   return;
+    // }
     Code code = encodedMethod.getCode();
     assert code != null;
     if (code.isDexCode()) {
