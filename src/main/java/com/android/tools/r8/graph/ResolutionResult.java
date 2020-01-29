@@ -83,10 +83,7 @@ public interface ResolutionResult {
       //   }
       //
       DexEncodedMethod singleTarget = asSingleTarget();
-      if (singleTarget.getCode() != null
-          && appInfo.hasAnyInstantiatedLambdas(singleTarget.method.holder)) {
-        result.add(singleTarget);
-      }
+      addIfDefaultMethodWithLambdaInstantiations(appInfo, singleTarget, result);
     }
 
     DexEncodedMethod encodedMethod = asResultOfResolve();
@@ -98,10 +95,8 @@ public interface ResolutionResult {
           }
         };
     // Default methods are looked up when looking at a specific subtype that does not override
-    // them.
-    // Otherwise, we would look up default methods that are actually never used. However, we have
-    // to
-    // add bridge methods, otherwise we can remove a bridge that will be used.
+    // them. Otherwise, we would look up default methods that are actually never used. However, we
+    // have to add bridge methods, otherwise we can remove a bridge that will be used.
     Consumer<DexEncodedMethod> addIfNotAbstractAndBridge =
         m -> {
           if (!m.accessFlags.isAbstract() && m.accessFlags.isBridge()) {
@@ -114,6 +109,9 @@ public interface ResolutionResult {
       DexClass clazz = appInfo.definitionFor(type);
       if (clazz.isInterface()) {
         ResolutionResult targetMethods = appInfo.resolveMethodOnInterface(clazz, method);
+        if (targetMethods.hasSingleTarget()) {
+          addIfDefaultMethodWithLambdaInstantiations(appInfo, targetMethods.asSingleTarget(), result);
+        }
         targetMethods.forEachTarget(addIfNotAbstractAndBridge);
       } else {
         ResolutionResult targetMethods = appInfo.resolveMethodOnClass(clazz, method);
@@ -121,6 +119,18 @@ public interface ResolutionResult {
       }
     }
     return result;
+  }
+
+  default void addIfDefaultMethodWithLambdaInstantiations(
+      AppInfoWithSubtyping appInfo, DexEncodedMethod method, Set<DexEncodedMethod> result) {
+    if (method == null) {
+      return;
+    }
+    if (method.hasCode()) {
+      if (appInfo.hasAnyInstantiatedLambdas(method.method.holder)) {
+        result.add(method);
+      }
+    }
   }
 
   class MultiResult implements ResolutionResult {

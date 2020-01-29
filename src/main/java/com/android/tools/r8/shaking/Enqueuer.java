@@ -1929,6 +1929,7 @@ public class Enqueuer {
       return;
     }
 
+    // TODO(mkroghj): Remove pinnedItems check here.
     if (instantiatedTypes.contains(clazz)
         || instantiatedInterfaceTypes.contains(clazz)
         || pinnedItems.contains(clazz.type)) {
@@ -1944,8 +1945,8 @@ public class Enqueuer {
         if (currentClass == null || currentClass.lookupVirtualMethod(possibleTarget) != null) {
           continue;
         }
-        // TODO(zerny): Why does not not confer with lambdas and pinned too?
-        if (instantiatedTypes.contains(currentClass)) {
+        if (instantiatedTypes.contains(currentClass)
+            || instantiatedInterfaceTypes.contains(currentClass)) {
           markVirtualMethodAsLive(clazz, encodedPossibleTarget, reason);
           break;
         }
