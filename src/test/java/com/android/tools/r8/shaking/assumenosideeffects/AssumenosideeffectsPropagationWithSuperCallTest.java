@@ -15,13 +15,14 @@ import org.junit.runners.Parameterized;
 @RunWith(Parameterized.class)
 public class AssumenosideeffectsPropagationWithSuperCallTest extends TestBase {
   private static final Class<?> MAIN = DelegatesUser.class;
-  private static final String JVM_OUTPUT = StringUtils.lines(
-      "[Base] message1",
-      "The end"
-  );
-  private static final String OUTPUT_WITHOUT_MESSAGES = StringUtils.lines(
-      "The end"
-  );
+  private static final String EXPECTED_OUTPUT =
+      StringUtils.lines("[Base] message1", "[Base] message2", "The end");
+
+  // With horizontal class merging enabled the method body for debug is cleared, because the
+  // forwarded call to the class specific implementation has no side effects. The call to the
+  // function from main persists.
+  private static final String EXPECTED_OUTPUT_WITH_HORIZONTAL_CLASS_MERGING =
+      StringUtils.lines("[Base] message2", "The end");
 
   enum TestConfig {
     SPECIFIC_RULES,
@@ -46,11 +47,13 @@ public class AssumenosideeffectsPropagationWithSuperCallTest extends TestBase {
       }
     }
 
-    public String expectedOutput() {
+    public String expectedOutput(TestParameters parameters) {
       switch (this) {
         case SPECIFIC_RULES:
         case NON_SPECIFIC_RULES_WITH_EXTENDS:
-          return JVM_OUTPUT;
+          return parameters.isCfRuntime()
+              ? EXPECTED_OUTPUT
+              : EXPECTED_OUTPUT_WITH_HORIZONTAL_CLASS_MERGING;
         default:
           throw new Unreachable();
       }
@@ -62,7 +65,8 @@ public class AssumenosideeffectsPropagationWithSuperCallTest extends TestBase {
 
   @Parameterized.Parameters(name = "{0} {1}")
   public static Collection<Object[]> data() {
-    return buildParameters(getTestParameters().withAllRuntimes().build(), TestConfig.values());
+    return buildParameters(
+        getTestParameters().withAllRuntimesAndApiLevels().build(), TestConfig.values());
   }
 
   public AssumenosideeffectsPropagationWithSuperCallTest(
@@ -73,15 +77,14 @@ public class AssumenosideeffectsPropagationWithSuperCallTest extends TestBase {
 
   @Test
   public void testR8() throws Exception {
-    expectThrowsWithHorizontalClassMerging();
     testForR8(parameters.getBackend())
         .addInnerClasses(AssumenosideeffectsPropagationWithSuperCallTest.class)
         .addKeepMainRule(MAIN)
         .addKeepRules(config.getKeepRules())
         .noMinification()
-        .setMinApi(parameters.getRuntime())
+        .setMinApi(parameters.getApiLevel())
         .run(parameters.getRuntime(), MAIN)
-        .assertSuccessWithOutput(config.expectedOutput());
+        .assertSuccessWithOutput(config.expectedOutput(parameters));
   }
 
   static class BaseClass {
@@ -113,6 +116,10 @@ public class AssumenosideeffectsPropagationWithSuperCallTest extends TestBase {
     public static void main(String... args) {
       BaseClass instance = createBase();
       instance.debug("message1");
+      if (System.currentTimeMillis() > 0) {
+        instance = new BaseClass();
+      }
+      instance.debug("message2");
       System.out.println("The end");
     }
   }

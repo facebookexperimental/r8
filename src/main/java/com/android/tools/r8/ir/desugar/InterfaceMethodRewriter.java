@@ -48,6 +48,7 @@ import com.android.tools.r8.shaking.MainDexClasses;
 import com.android.tools.r8.utils.DescriptorUtils;
 import com.android.tools.r8.utils.InternalOptions;
 import com.android.tools.r8.utils.IterableUtils;
+import com.android.tools.r8.utils.ObjectUtils;
 import com.android.tools.r8.utils.Pair;
 import com.android.tools.r8.utils.StringDiagnostic;
 import com.android.tools.r8.utils.collections.SortedProgramMethodSet;
@@ -1004,18 +1005,19 @@ public final class InterfaceMethodRewriter {
     GenericSignature.ClassSignature classSignature = clazz.getClassSignature();
     for (int i = 0; i < clazz.interfaces.size(); i++) {
       DexType itf = clazz.interfaces.values[i];
-      assert emulatedInterfaces.containsKey(itf);
-      List<GenericSignature.FieldTypeSignature> typeArguments;
-      if (classSignature == null) {
-        typeArguments = Collections.emptyList();
-      } else {
-        GenericSignature.ClassTypeSignature classTypeSignature =
-            classSignature.superInterfaceSignatures().get(i);
-        assert itf == classTypeSignature.type();
-        typeArguments = classTypeSignature.typeArguments();
+      if (emulatedInterfaces.containsKey(itf)) {
+        List<GenericSignature.FieldTypeSignature> typeArguments;
+        if (classSignature == null) {
+          typeArguments = Collections.emptyList();
+        } else {
+          GenericSignature.ClassTypeSignature classTypeSignature =
+              classSignature.superInterfaceSignatures().get(i);
+          assert itf == classTypeSignature.type();
+          typeArguments = classTypeSignature.typeArguments();
+        }
+        newInterfaces.add(
+            new GenericSignature.ClassTypeSignature(emulatedInterfaces.get(itf), typeArguments));
       }
-      newInterfaces.add(
-          new GenericSignature.ClassTypeSignature(emulatedInterfaces.get(itf), typeArguments));
     }
     clazz.replaceInterfaces(newInterfaces);
   }
@@ -1118,6 +1120,10 @@ public final class InterfaceMethodRewriter {
         || missing.isD8R8SynthesizedClassType()
         || isCompanionClassType(missing)
         || emulatedInterfaces.containsValue(missing)
+        || ObjectUtils.getBooleanOrElse(
+            options.getProguardConfiguration(),
+            configuration -> configuration.getDontWarnPatterns().matches(missing),
+            false)
         || options.desugaredLibraryConfiguration.getCustomConversions().containsValue(missing);
   }
 

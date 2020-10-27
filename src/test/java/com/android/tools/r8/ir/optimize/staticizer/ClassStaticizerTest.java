@@ -180,7 +180,6 @@ public class ClassStaticizerTest extends TestBase {
             "STATIC: String SimpleWithSideEffects.bar(String)",
             "STATIC: String SimpleWithSideEffects.foo()",
             "STATIC: String TrivialTestClass.next()",
-            "SimpleWithSideEffects SimpleWithSideEffects.INSTANCE",
             "SimpleWithSideEffects SimpleWithSideEffects.INSTANCE"),
         references(clazz, "testSimpleWithSideEffects", "void"));
 
@@ -268,7 +267,6 @@ public class ClassStaticizerTest extends TestBase {
 
   @Test
   public void testMoveToHost() throws Exception {
-    expectThrowsWithHorizontalClassMerging();
     Class<?> main = MoveToHostTestClass.class;
     Class<?>[] classes = {
         NeverInline.class,
@@ -287,6 +285,7 @@ public class ClassStaticizerTest extends TestBase {
         testForR8(parameters.getBackend())
             .addProgramClasses(classes)
             .enableInliningAnnotations()
+            .enableNoHorizontalClassMergingAnnotations()
             .enableMemberValuePropagationAnnotations()
             .addKeepMainRule(main)
             .allowAccessModification()
@@ -315,7 +314,6 @@ public class ClassStaticizerTest extends TestBase {
             "STATIC: String movetohost.HostOkSideEffects.bar(String)",
             "STATIC: String movetohost.HostOkSideEffects.foo()",
             "STATIC: String movetohost.MoveToHostTestClass.next()",
-            "movetohost.HostOkSideEffects movetohost.HostOkSideEffects.INSTANCE",
             "movetohost.HostOkSideEffects movetohost.HostOkSideEffects.INSTANCE"),
         references(clazz, "testOkSideEffects", "void"));
 

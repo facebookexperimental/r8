@@ -12,6 +12,7 @@ import com.android.tools.r8.ir.conversion.LensCodeRewriterUtils;
 import com.android.tools.r8.ir.desugar.InterfaceProcessor.InterfaceProcessorNestedGraphLens;
 import com.android.tools.r8.shaking.KeepInfoCollection;
 import com.android.tools.r8.utils.Action;
+import com.android.tools.r8.utils.IterableUtils;
 import com.android.tools.r8.utils.SetUtils;
 import com.android.tools.r8.utils.collections.ProgramMethodSet;
 import com.google.common.collect.BiMap;
@@ -273,6 +274,8 @@ public abstract class GraphLens {
 
   public abstract DexType getOriginalType(DexType type);
 
+  public abstract Iterable<DexType> getOriginalTypes(DexType type);
+
   public abstract DexField getOriginalFieldSignature(DexField field);
 
   public abstract DexMethod getOriginalMethodSignature(DexMethod method);
@@ -499,15 +502,16 @@ public abstract class GraphLens {
     return result;
   }
 
-  public DexReference rewriteReference(DexReference reference) {
+  @SuppressWarnings("unchecked")
+  public <T extends DexReference> T rewriteReference(T reference) {
     if (reference.isDexField()) {
-      return getRenamedFieldSignature(reference.asDexField());
+      return (T) getRenamedFieldSignature(reference.asDexField());
     }
     if (reference.isDexMethod()) {
-      return getRenamedMethodSignature(reference.asDexMethod());
+      return (T) getRenamedMethodSignature(reference.asDexMethod());
     }
     assert reference.isDexType();
-    return lookupType(reference.asDexType());
+    return (T) lookupType(reference.asDexType());
   }
 
   public Set<DexReference> rewriteReferences(Set<DexReference> references) {
@@ -518,8 +522,8 @@ public abstract class GraphLens {
     return result;
   }
 
-  public <T> ImmutableMap<DexReference, T> rewriteReferenceKeys(Map<DexReference, T> map) {
-    ImmutableMap.Builder<DexReference, T> builder = ImmutableMap.builder();
+  public <R extends DexReference, T> ImmutableMap<R, T> rewriteReferenceKeys(Map<R, T> map) {
+    ImmutableMap.Builder<R, T> builder = ImmutableMap.builder();
     map.forEach((reference, value) -> builder.put(rewriteReference(reference), value));
     return builder.build();
   }
@@ -761,6 +765,11 @@ public abstract class GraphLens {
     }
 
     @Override
+    public Iterable<DexType> getOriginalTypes(DexType type) {
+      return IterableUtils.singleton(type);
+    }
+
+    @Override
     public DexField getOriginalFieldSignature(DexField field) {
       return field;
     }
@@ -842,6 +851,11 @@ public abstract class GraphLens {
     @Override
     public DexType getOriginalType(DexType type) {
       return getPrevious().getOriginalType(type);
+    }
+
+    @Override
+    public Iterable<DexType> getOriginalTypes(DexType type) {
+      return getPrevious().getOriginalTypes(type);
     }
 
     @Override
@@ -965,9 +979,22 @@ public abstract class GraphLens {
       return new Builder();
     }
 
+    protected DexType internalGetOriginalType(DexType previous) {
+      return previous;
+    }
+
+    protected Iterable<DexType> internalGetOriginalTypes(DexType previous) {
+      return IterableUtils.singleton(internalGetOriginalType(previous));
+    }
+
     @Override
     public DexType getOriginalType(DexType type) {
-      return getPrevious().getOriginalType(type);
+      return getPrevious().getOriginalType(internalGetOriginalType(type));
+    }
+
+    @Override
+    public Iterable<DexType> getOriginalTypes(DexType type) {
+      return IterableUtils.flatMap(internalGetOriginalTypes(type), getPrevious()::getOriginalTypes);
     }
 
     @Override

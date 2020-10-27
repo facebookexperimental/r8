@@ -223,14 +223,24 @@ public class MethodCollection {
     backing.replaceMethods(replacement);
   }
 
+  public void replaceDirectMethods(Function<DexEncodedMethod, DexEncodedMethod> replacement) {
+    resetDirectMethodCaches();
+    backing.replaceDirectMethods(replacement);
+  }
+
   public void replaceVirtualMethods(Function<DexEncodedMethod, DexEncodedMethod> replacement) {
     resetVirtualMethodCaches();
     backing.replaceVirtualMethods(replacement);
   }
 
-  public void replaceDirectMethods(Function<DexEncodedMethod, DexEncodedMethod> replacement) {
+  public void replaceAllDirectMethods(Function<DexEncodedMethod, DexEncodedMethod> replacement) {
     resetDirectMethodCaches();
-    backing.replaceDirectMethods(replacement);
+    backing.replaceAllDirectMethods(replacement);
+  }
+
+  public void replaceAllVirtualMethods(Function<DexEncodedMethod, DexEncodedMethod> replacement) {
+    resetVirtualMethodCaches();
+    backing.replaceAllVirtualMethods(replacement);
   }
 
   /**
@@ -250,6 +260,11 @@ public class MethodCollection {
     assert verifyCorrectnessOfMethodHolders(methods);
     resetDirectMethodCaches();
     backing.addDirectMethods(methods);
+  }
+
+  public void clearDirectMethods() {
+    resetDirectMethodCaches();
+    backing.clearDirectMethods();
   }
 
   public DexEncodedMethod removeMethod(DexMethod method) {
@@ -281,6 +296,11 @@ public class MethodCollection {
     assert verifyCorrectnessOfMethodHolders(methods);
     resetVirtualMethodCaches();
     backing.addVirtualMethods(methods);
+  }
+
+  public void clearVirtualMethods() {
+    resetVirtualMethodCaches();
+    backing.clearVirtualMethods();
   }
 
   public void setVirtualMethods(DexEncodedMethod[] methods) {

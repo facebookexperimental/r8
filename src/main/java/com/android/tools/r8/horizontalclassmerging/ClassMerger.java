@@ -28,8 +28,9 @@ import it.unimi.dsi.fastutil.objects.Reference2IntOpenHashMap;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.IdentityHashMap;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -41,7 +42,7 @@ public class ClassMerger {
   public static final String CLASS_ID_FIELD_NAME = "$r8$classId";
 
   private final DexProgramClass target;
-  private final Collection<DexProgramClass> toMergeGroup;
+  private final List<DexProgramClass> toMergeGroup;
   private final DexItemFactory dexItemFactory;
   private final HorizontalClassMergerGraphLens.Builder lensBuilder;
   private final HorizontallyMergedClasses.Builder mergedClassesBuilder;
@@ -58,7 +59,7 @@ public class ClassMerger {
       HorizontallyMergedClasses.Builder mergedClassesBuilder,
       FieldAccessInfoCollectionModifier.Builder fieldAccessChangesBuilder,
       DexProgramClass target,
-      Collection<DexProgramClass> toMergeGroup,
+      List<DexProgramClass> toMergeGroup,
       DexField classIdField,
       Collection<VirtualMethodMerger> virtualMethodMergers,
       Collection<ConstructorMerger> constructorMergers) {
@@ -174,9 +175,9 @@ public class ClassMerger {
 
   public static class Builder {
     private final DexProgramClass target;
-    private final Collection<DexProgramClass> toMergeGroup = new ArrayList<>();
+    private final List<DexProgramClass> toMergeGroup = new ArrayList<>();
     private final Map<DexProto, ConstructorMerger.Builder> constructorMergerBuilders =
-        new IdentityHashMap<>();
+        new LinkedHashMap<>();
     private final Map<Wrapper<DexMethod>, VirtualMethodMerger.Builder> virtualMethodMergerBuilders =
         new LinkedHashMap<>();
 
@@ -191,7 +192,7 @@ public class ClassMerger {
       return this;
     }
 
-    public Builder addClassesToMerge(Collection<DexProgramClass> toMerge) {
+    public Builder addClassesToMerge(List<DexProgramClass> toMerge) {
       toMerge.forEach(this::mergeClass);
       return this;
     }
@@ -237,17 +238,25 @@ public class ClassMerger {
       DexField classIdField =
           dexItemFactory.createField(target.type, dexItemFactory.intType, CLASS_ID_FIELD_NAME);
 
-      Collection<VirtualMethodMerger> virtualMethodMergers =
+      List<VirtualMethodMerger> virtualMethodMergers =
           new ArrayList<>(virtualMethodMergerBuilders.size());
       for (VirtualMethodMerger.Builder builder : virtualMethodMergerBuilders.values()) {
         virtualMethodMergers.add(builder.build(appView, target, classIdField));
       }
+      // Try and merge the functions with the most arguments first, to avoid using synthetic
+      // arguments if possible.
+      virtualMethodMergers.sort(Comparator.comparing(VirtualMethodMerger::getArity).reversed());
 
-      Collection<ConstructorMerger> constructorMergers =
+      List<ConstructorMerger> constructorMergers =
           new ArrayList<>(constructorMergerBuilders.size());
       for (ConstructorMerger.Builder builder : constructorMergerBuilders.values()) {
         constructorMergers.add(builder.build(appView, target, classIdField));
       }
+
+      // Try and merge the functions with the most arguments first, to avoid using synthetic
+      // arguments if possible.
+      virtualMethodMergers.sort(Comparator.comparing(VirtualMethodMerger::getArity).reversed());
+      constructorMergers.sort(Comparator.comparing(ConstructorMerger::getArity).reversed());
 
       return new ClassMerger(
           appView,

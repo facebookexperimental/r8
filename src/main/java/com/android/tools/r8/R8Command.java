@@ -861,11 +861,16 @@ public final class R8Command extends BaseCompilerCommand {
       internal.enableClassStaticizer = false;
       internal.outline.enabled = false;
       internal.enableEnumUnboxing = false;
+      internal.enableLambdaMerging = false;
     }
     if (!internal.isShrinking()) {
-      // If R8 is not shrinking, there is no point in unboxing enums since the unboxed enums
-      // will still remain in the program (The application size would actually increase).
+      // If R8 is not shrinking, there is no point in running various optimizations since the
+      // optimized classes will still remain in the program (the application size could increase).
       internal.enableEnumUnboxing = false;
+      internal.enableHorizontalClassMerging = false;
+      internal.enableLambdaMerging = false;
+      internal.enableStaticClassMerging = false;
+      internal.enableVerticalClassMerging = false;
     }
 
     if (!internal.enableInlining) {
@@ -929,6 +934,7 @@ public final class R8Command extends BaseCompilerCommand {
     if (internal.isGeneratingClassFiles()) {
       internal.outline.enabled = false;
       internal.enableEnumUnboxing = false;
+      internal.enableHorizontalClassMerging = false;
     }
 
     // EXPERIMENTAL flags.

@@ -94,6 +94,10 @@ public abstract class MethodCollectionBacking {
 
   // Removal methods.
 
+  abstract void clearDirectMethods();
+
+  abstract void clearVirtualMethods();
+
   abstract DexEncodedMethod removeMethod(DexMethod method);
 
   abstract void removeMethods(Set<DexEncodedMethod> method);
@@ -108,7 +112,11 @@ public abstract class MethodCollectionBacking {
 
   abstract void replaceDirectMethods(Function<DexEncodedMethod, DexEncodedMethod> replacement);
 
+  abstract void replaceAllDirectMethods(Function<DexEncodedMethod, DexEncodedMethod> replacement);
+
   abstract void replaceVirtualMethods(Function<DexEncodedMethod, DexEncodedMethod> replacement);
+
+  abstract void replaceAllVirtualMethods(Function<DexEncodedMethod, DexEncodedMethod> replacement);
 
   abstract DexEncodedMethod replaceDirectMethod(
       DexMethod method, Function<DexEncodedMethod, DexEncodedMethod> replacement);

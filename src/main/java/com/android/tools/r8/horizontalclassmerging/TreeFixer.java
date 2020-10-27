@@ -120,11 +120,11 @@ class TreeFixer {
    * </ul>
    */
   public HorizontalClassMergerGraphLens fixupTypeReferences() {
-    Iterable<DexProgramClass> classes = appView.appInfo().classesWithDeterministicOrder();
+    List<DexProgramClass> classes = appView.appInfo().classesWithDeterministicOrder();
     Iterables.filter(classes, DexProgramClass::isInterface).forEach(this::fixupInterfaceClass);
 
     classes.forEach(this::fixupProgramClassSuperType);
-    SubtypingForrestForClasses subtypingForrest = new SubtypingForrestForClasses(appView);
+    SubtypingForrestForClasses subtypingForrest = new SubtypingForrestForClasses(appView, classes);
     // TODO(b/170078037): parallelize this code segment.
     for (DexProgramClass root : subtypingForrest.getProgramRoots()) {
       subtypingForrest.traverseNodeDepthFirst(
@@ -153,18 +153,18 @@ class TreeFixer {
     Map<Wrapper<DexMethod>, DexString> remappedClassVirtualMethods =
         new HashMap<>(remappedVirtualMethods);
 
-    Set<DexMethod> newDirectMethodReferences = new LinkedHashSet<>();
-    Set<DexMethod> newVirtualMethodReferences = new LinkedHashSet<>();
-
+    Set<DexMethod> newVirtualMethodReferences = Sets.newIdentityHashSet();
     clazz
         .getMethodCollection()
-        .replaceVirtualMethods(
+        .replaceAllVirtualMethods(
             method ->
                 fixupVirtualMethod(
                     remappedClassVirtualMethods, newVirtualMethodReferences, method));
+
+    Set<DexMethod> newDirectMethodReferences = Sets.newIdentityHashSet();
     clazz
         .getMethodCollection()
-        .replaceDirectMethods(method -> fixupDirectMethod(newDirectMethodReferences, method));
+        .replaceAllDirectMethods(method -> fixupDirectMethod(newDirectMethodReferences, method));
 
     fixupFields(clazz.staticFields(), clazz::setStaticField);
     fixupFields(clazz.instanceFields(), clazz::setInstanceField);

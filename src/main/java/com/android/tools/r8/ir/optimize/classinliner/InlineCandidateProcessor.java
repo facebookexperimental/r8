@@ -6,18 +6,19 @@ package com.android.tools.r8.ir.optimize.classinliner;
 
 import static com.android.tools.r8.graph.DexEncodedMethod.asProgramMethodOrNull;
 import static com.android.tools.r8.graph.DexProgramClass.asProgramClassOrNull;
-import static com.google.common.base.Predicates.alwaysFalse;
 
 import com.android.tools.r8.errors.InternalCompilerError;
 import com.android.tools.r8.errors.Unreachable;
 import com.android.tools.r8.graph.AccessControl;
 import com.android.tools.r8.graph.AppView;
+import com.android.tools.r8.graph.DexClassAndMethod;
 import com.android.tools.r8.graph.DexEncodedField;
 import com.android.tools.r8.graph.DexEncodedMethod;
 import com.android.tools.r8.graph.DexField;
 import com.android.tools.r8.graph.DexItemFactory;
 import com.android.tools.r8.graph.DexMethod;
 import com.android.tools.r8.graph.DexProgramClass;
+import com.android.tools.r8.graph.LibraryMethod;
 import com.android.tools.r8.graph.ProgramMethod;
 import com.android.tools.r8.graph.ResolutionResult;
 import com.android.tools.r8.graph.ResolutionResult.SingleResolutionResult;
@@ -296,21 +297,22 @@ final class InlineCandidateProcessor {
           }
 
           // TODO(b/156853206): Avoid duplicating resolution.
-          DexEncodedMethod singleTargetMethod = invokeMethod.lookupSingleTarget(appView, method);
-          if (singleTargetMethod == null) {
+          DexClassAndMethod singleTarget = invokeMethod.lookupSingleTarget(appView, method);
+          if (singleTarget == null) {
             return user; // Not eligible.
           }
 
-          if (isEligibleLibraryMethodCall(invokeMethod, singleTargetMethod)) {
+          if (singleTarget.isLibraryMethod()
+              && isEligibleLibraryMethodCall(invokeMethod, singleTarget.asLibraryMethod())) {
             continue;
           }
 
-          ProgramMethod singleTarget = singleTargetMethod.asProgramMethod(appView);
-          if (!isEligibleSingleTarget(singleTarget)) {
+          ProgramMethod singleProgramTarget = singleTarget.asProgramMethod();
+          if (!isEligibleSingleTarget(singleProgramTarget)) {
             return user; // Not eligible.
           }
 
-          if (AccessControl.isClassAccessible(singleTarget.getHolder(), method, appView)
+          if (AccessControl.isClassAccessible(singleProgramTarget.getHolder(), method, appView)
               .isPossiblyFalse()) {
             return user; // Not eligible.
           }
@@ -324,7 +326,7 @@ final class InlineCandidateProcessor {
                       && !invoke.inValues().isEmpty()
                       && root.outValue() == invoke.getReceiver();
               if (isCorrespondingConstructorCall) {
-                InliningInfo inliningInfo = isEligibleConstructorCall(invoke, singleTarget);
+                InliningInfo inliningInfo = isEligibleConstructorCall(invoke, singleProgramTarget);
                 if (inliningInfo != null) {
                   methodCallsOnInstance.put(invoke, inliningInfo);
                   continue;
@@ -340,7 +342,7 @@ final class InlineCandidateProcessor {
             InvokeMethodWithReceiver invoke = user.asInvokeMethodWithReceiver();
             InliningInfo inliningInfo =
                 isEligibleDirectVirtualMethodCall(
-                    invoke, resolutionResult, singleTarget, indirectUsers, defaultOracle);
+                    invoke, resolutionResult, singleProgramTarget, indirectUsers, defaultOracle);
             if (inliningInfo != null) {
               methodCallsOnInstance.put(invoke, inliningInfo);
               continue;
@@ -351,7 +353,7 @@ final class InlineCandidateProcessor {
           if (isExtraMethodCall(invokeMethod)) {
             assert !invokeMethod.isInvokeSuper();
             assert !invokeMethod.isInvokePolymorphic();
-            if (isExtraMethodCallEligible(invokeMethod, singleTarget, defaultOracle)) {
+            if (isExtraMethodCallEligible(invokeMethod, singleProgramTarget, defaultOracle)) {
               continue;
             }
           }
@@ -646,12 +648,13 @@ final class InlineCandidateProcessor {
           continue;
         }
 
-        DexEncodedMethod singleTarget = invoke.lookupSingleTarget(appView, method);
-        if (singleTarget != null) {
-          Predicate<InvokeMethod> noSideEffectsPredicate =
-              dexItemFactory.libraryMethodsWithoutSideEffects.getOrDefault(
-                  singleTarget.method, alwaysFalse());
-          if (noSideEffectsPredicate.test(invoke)) {
+        DexClassAndMethod singleTarget = invoke.lookupSingleTarget(appView, method);
+        if (singleTarget != null && singleTarget.isLibraryMethod()) {
+          boolean isSideEffectFree =
+              appView
+                  .getLibraryMethodSideEffectModelCollection()
+                  .isSideEffectFree(invoke, singleTarget.asLibraryMethod());
+          if (isSideEffectFree) {
             if (!invoke.hasOutValue() || !invoke.outValue().hasAnyUsers()) {
               removeInstruction(invoke);
               continue;
@@ -1169,13 +1172,13 @@ final class InlineCandidateProcessor {
     return true;
   }
 
-  private boolean isEligibleLibraryMethodCall(InvokeMethod invoke, DexEncodedMethod singleTarget) {
-    Predicate<InvokeMethod> noSideEffectsPredicate =
-        dexItemFactory.libraryMethodsWithoutSideEffects.get(singleTarget.method);
-    if (noSideEffectsPredicate != null && noSideEffectsPredicate.test(invoke)) {
+  private boolean isEligibleLibraryMethodCall(InvokeMethod invoke, LibraryMethod singleTarget) {
+    boolean isSideEffectFree =
+        appView.getLibraryMethodSideEffectModelCollection().isSideEffectFree(invoke, singleTarget);
+    if (isSideEffectFree) {
       return !invoke.hasOutValue() || !invoke.outValue().hasAnyUsers();
     }
-    if (singleTarget.method == dexItemFactory.objectsMethods.requireNonNull) {
+    if (singleTarget.getReference() == dexItemFactory.objectsMethods.requireNonNull) {
       return !invoke.hasOutValue() || !invoke.outValue().hasAnyUsers();
     }
     return false;

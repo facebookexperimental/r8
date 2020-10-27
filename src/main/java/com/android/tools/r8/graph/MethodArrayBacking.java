@@ -95,6 +95,11 @@ public class MethodArrayBacking extends MethodCollectionBacking {
   }
 
   @Override
+  void clearDirectMethods() {
+    directMethods = DexEncodedMethod.EMPTY_ARRAY;
+  }
+
+  @Override
   DexEncodedMethod removeMethod(DexMethod method) {
     DexEncodedMethod removedDirectMethod =
         removeMethodHelper(
@@ -172,6 +177,11 @@ public class MethodArrayBacking extends MethodCollectionBacking {
     }
     virtualMethods = newMethods;
     assert verifyNoDuplicateMethods();
+  }
+
+  @Override
+  void clearVirtualMethods() {
+    virtualMethods = DexEncodedMethod.EMPTY_ARRAY;
   }
 
   @Override
@@ -343,5 +353,27 @@ public class MethodArrayBacking extends MethodCollectionBacking {
         virtualMethods[i] = newMethod;
       }
     }
+  }
+
+  @Override
+  public void replaceAllDirectMethods(Function<DexEncodedMethod, DexEncodedMethod> replacement) {
+    DexEncodedMethod[] oldMethods = directMethods;
+    clearDirectMethods();
+    DexEncodedMethod[] newMethods = new DexEncodedMethod[oldMethods.length];
+    for (int i = 0; i < oldMethods.length; i++) {
+      newMethods[i] = replacement.apply(oldMethods[i]);
+    }
+    directMethods = newMethods;
+  }
+
+  @Override
+  public void replaceAllVirtualMethods(Function<DexEncodedMethod, DexEncodedMethod> replacement) {
+    DexEncodedMethod[] oldMethods = virtualMethods;
+    clearVirtualMethods();
+    DexEncodedMethod[] newMethods = new DexEncodedMethod[oldMethods.length];
+    for (int i = 0; i < oldMethods.length; i++) {
+      newMethods[i] = replacement.apply(oldMethods[i]);
+    }
+    virtualMethods = newMethods;
   }
 }

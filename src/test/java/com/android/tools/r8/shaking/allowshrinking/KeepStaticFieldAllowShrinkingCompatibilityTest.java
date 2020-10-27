@@ -2,21 +2,23 @@
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
-package com.android.tools.r8.proguard;
+package com.android.tools.r8.shaking.allowshrinking;
 
-import static com.android.tools.r8.utils.codeinspector.CodeMatchers.invokesMethod;
+import static com.android.tools.r8.utils.codeinspector.CodeMatchers.accessesField;
 import static com.android.tools.r8.utils.codeinspector.Matchers.isPresent;
-import static com.android.tools.r8.utils.codeinspector.Matchers.notIf;
+import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.assertTrue;
 
-import com.android.tools.r8.ProguardVersion;
 import com.android.tools.r8.TestBase;
 import com.android.tools.r8.TestParameters;
+import com.android.tools.r8.TestShrinkerBuilder;
 import com.android.tools.r8.utils.BooleanUtils;
 import com.android.tools.r8.utils.codeinspector.ClassSubject;
+import com.android.tools.r8.utils.codeinspector.FieldSubject;
 import com.android.tools.r8.utils.codeinspector.InstructionSubject;
 import com.android.tools.r8.utils.codeinspector.MethodSubject;
+import com.google.common.collect.ImmutableList;
 import java.util.List;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -24,30 +26,38 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 @RunWith(Parameterized.class)
-public class AllowShrinkingCompatibilityTest extends TestBase {
+public class KeepStaticFieldAllowShrinkingCompatibilityTest extends TestBase {
 
   private final boolean allowOptimization;
   private final TestParameters parameters;
-  private final ProguardVersion proguardVersion;
+  private final Shrinker shrinker;
 
   @Parameters(name = "{1}, {2}, allow optimization: {0}")
   public static List<Object[]> data() {
     return buildParameters(
         BooleanUtils.values(),
         getTestParameters().withCfRuntimes().build(),
-        ProguardVersion.values());
+        ImmutableList.of(Shrinker.R8, Shrinker.PG));
   }
 
-  public AllowShrinkingCompatibilityTest(
-      boolean allowOptimization, TestParameters parameters, ProguardVersion proguardVersion) {
+  public KeepStaticFieldAllowShrinkingCompatibilityTest(
+      boolean allowOptimization, TestParameters parameters, Shrinker shrinker) {
     this.allowOptimization = allowOptimization;
     this.parameters = parameters;
-    this.proguardVersion = proguardVersion;
+    this.shrinker = shrinker;
   }
 
   @Test
   public void test() throws Exception {
-    testForProguard(proguardVersion)
+    if (shrinker.isPG()) {
+      run(testForProguard(shrinker.getProguardVersion()).addDontWarn(getClass()));
+    } else {
+      run(testForR8(parameters.getBackend()));
+    }
+  }
+
+  private <T extends TestShrinkerBuilder<?, ?, ?, ?, T>> void run(T builder) throws Exception {
+    builder
         .addProgramClasses(TestClass.class, Companion.class)
         .addKeepMainRule(TestClass.class)
         .addKeepRules(
@@ -55,29 +65,29 @@ public class AllowShrinkingCompatibilityTest extends TestBase {
                 + (allowOptimization ? ",allowoptimization" : "")
                 + " class "
                 + Companion.class.getTypeName()
-                + " { <methods>; }")
-        .addDontWarn(getClass())
+                + " { <fields>; }")
         .compile()
         .inspect(
             inspector -> {
               ClassSubject testClassSubject = inspector.clazz(TestClass.class);
               assertThat(testClassSubject, isPresent());
 
-              ClassSubject companionClassSubject = inspector.clazz(Companion.class);
-              assertThat(companionClassSubject, notIf(isPresent(), allowOptimization));
-
               MethodSubject mainMethodSubject = testClassSubject.mainMethod();
-              MethodSubject getMethodSubject = companionClassSubject.uniqueMethodWithName("get");
+              ClassSubject companionClassSubject = inspector.clazz(Companion.class);
+              FieldSubject xFieldSubject = companionClassSubject.uniqueFieldWithName("x");
 
-              if (allowOptimization) {
+              // PG fails to optimize fields regardless of keep flags.
+              if (allowOptimization && shrinker.isR8()) {
+                assertThat(companionClassSubject, not(isPresent()));
                 assertTrue(
                     testClassSubject
                         .mainMethod()
                         .streamInstructions()
                         .allMatch(InstructionSubject::isReturnVoid));
               } else {
-                assertThat(mainMethodSubject, invokesMethod(getMethodSubject));
-                assertThat(getMethodSubject, isPresent());
+                assertThat(companionClassSubject, isPresent());
+                assertThat(mainMethodSubject, accessesField(xFieldSubject));
+                assertThat(xFieldSubject, isPresent());
               }
             })
         .run(parameters.getRuntime(), TestClass.class)
@@ -87,7 +97,7 @@ public class AllowShrinkingCompatibilityTest extends TestBase {
   static class TestClass {
 
     public static void main(String[] args) {
-      if (Companion.get() != 42) {
+      if (Companion.x != 42) {
         System.out.println("Hello world!");
       }
     }
@@ -95,8 +105,6 @@ public class AllowShrinkingCompatibilityTest extends TestBase {
 
   static class Companion {
 
-    static int get() {
-      return 42;
-    }
+    static int x = 42;
   }
 }

@@ -4,7 +4,7 @@
 package com.android.tools.r8.ir.optimize;
 
 import com.android.tools.r8.graph.AppView;
-import com.android.tools.r8.graph.DexEncodedMethod;
+import com.android.tools.r8.graph.DexClassAndMethod;
 import com.android.tools.r8.graph.DexItemFactory;
 import com.android.tools.r8.graph.DexMethod;
 import com.android.tools.r8.graph.ProgramMethod;
@@ -17,6 +17,7 @@ import com.android.tools.r8.ir.code.Invoke;
 import com.android.tools.r8.ir.code.InvokeMethod;
 import com.android.tools.r8.ir.code.Position;
 import com.android.tools.r8.ir.code.Value;
+import com.android.tools.r8.ir.optimize.info.MethodOptimizationInfo;
 import com.android.tools.r8.logging.Log;
 import com.android.tools.r8.shaking.AppInfoWithLiveness;
 import com.android.tools.r8.utils.StringUtils;
@@ -29,7 +30,6 @@ import it.unimi.dsi.fastutil.objects.Object2ObjectSortedMap.FastSortedEntrySet;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Predicate;
 
 /**
  * Canonicalize idempotent function calls.
@@ -154,10 +154,14 @@ public class IdempotentFunctionCallCanonicalizer {
           //  return the resolution result such that the call site can perform the accessibility
           //  check, or (iii) always perform the accessibility check such that it can be skipped
           //  at the call site.
-          DexEncodedMethod target = invoke.lookupSingleTarget(appViewWithLiveness, context);
-          if (target == null
-              || target.getOptimizationInfo().mayHaveSideEffects()
-              || !target.getOptimizationInfo().returnValueOnlyDependsOnArguments()) {
+          DexClassAndMethod target = invoke.lookupSingleTarget(appViewWithLiveness, context);
+          if (target == null) {
+            continue;
+          }
+
+          MethodOptimizationInfo optimizationInfo = target.getDefinition().getOptimizationInfo();
+          if (optimizationInfo.mayHaveSideEffects()
+              || !optimizationInfo.returnValueOnlyDependsOnArguments()) {
             continue;
           }
 
@@ -272,12 +276,10 @@ public class IdempotentFunctionCallCanonicalizer {
 
   private boolean isIdempotentLibraryMethodInvoke(InvokeMethod invoke) {
     DexMethod invokedMethod = invoke.getInvokedMethod();
-    Predicate<InvokeMethod> noSideEffectPredicate =
-        factory.libraryMethodsWithoutSideEffects.get(invokedMethod);
-    if (noSideEffectPredicate == null || !noSideEffectPredicate.test(invoke)) {
-      return false;
-    }
-    return factory.libraryMethodsWithReturnValueDependingOnlyOnArguments.contains(invokedMethod);
+    return appView
+            .getLibraryMethodSideEffectModelCollection()
+            .isCallToSideEffectFreeFinalMethod(invoke)
+        && factory.libraryMethodsWithReturnValueDependingOnlyOnArguments.contains(invokedMethod);
   }
 
   private static void insertCanonicalizedInvokeWithInValues(

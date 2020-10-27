@@ -6,7 +6,7 @@ package com.android.tools.r8.retrace;
 
 import static com.android.tools.r8.retrace.Retrace.DEFAULT_REGULAR_EXPRESSION;
 import static junit.framework.TestCase.assertEquals;
-import static org.junit.Assume.assumeTrue;
+import static org.junit.Assume.assumeFalse;
 
 import com.android.tools.r8.TestBase;
 import com.android.tools.r8.TestDiagnosticMessagesImpl;
@@ -54,12 +54,12 @@ public class RetraceVerboseTests extends TestBase {
 
   @Test
   public void testAmbiguousMissingLineVerbose() {
+    // TODO(b/169346455): Enable when separated parser.
+    assumeFalse(useRegExpParsing);
     runRetraceTest(new AmbiguousWithSignatureVerboseStackTrace());
   }
 
   private TestDiagnosticMessagesImpl runRetraceTest(StackTraceForTest stackTraceForTest) {
-    // TODO(b/170293906): Remove assumption.
-    assumeTrue(useRegExpParsing);
     TestDiagnosticMessagesImpl diagnosticsHandler = new TestDiagnosticMessagesImpl();
     RetraceCommand retraceCommand =
         RetraceCommand.builder(diagnosticsHandler)

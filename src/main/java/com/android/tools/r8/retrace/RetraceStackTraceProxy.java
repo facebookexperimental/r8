@@ -5,25 +5,41 @@
 package com.android.tools.r8.retrace;
 
 import com.android.tools.r8.Keep;
+import java.util.List;
 
 @Keep
-public interface RetraceStackTraceProxy<T extends StackTraceElementProxy<?>> {
+public interface RetraceStackTraceProxy<T extends StackTraceElementProxy<?>>
+    extends Comparable<RetraceStackTraceProxy<T>> {
 
   boolean isAmbiguous();
+
+  boolean isTopFrame();
 
   boolean hasRetracedClass();
 
   boolean hasRetracedMethod();
 
+  boolean hasRetracedField();
+
   boolean hasSourceFile();
 
   boolean hasLineNumber();
+
+  boolean hasFieldOrReturnType();
+
+  boolean hasMethodArguments();
 
   T getOriginalItem();
 
   RetracedClass getRetracedClass();
 
   RetracedMethod getRetracedMethod();
+
+  RetracedField getRetracedField();
+
+  RetracedType getRetracedFieldOrReturnType();
+
+  List<RetracedType> getMethodArguments();
 
   String getSourceFile();
 

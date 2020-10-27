@@ -5,8 +5,8 @@ package com.android.tools.r8.shaking;
 
 import static com.android.tools.r8.graph.DexProgramClass.asProgramClassOrNull;
 
-import com.android.tools.r8.Diagnostic;
 import com.android.tools.r8.dex.Constants;
+import com.android.tools.r8.errors.AssumeNoSideEffectsRuleForObjectMembersDiagnostic;
 import com.android.tools.r8.errors.Unreachable;
 import com.android.tools.r8.graph.AppInfoWithClassHierarchy;
 import com.android.tools.r8.graph.AppView;
@@ -67,6 +67,7 @@ import java.util.Map.Entry;
 import java.util.Queue;
 import java.util.Set;
 import java.util.Stack;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -83,6 +84,7 @@ public class RootSetBuilder {
   private final DirectMappedDexApplication application;
   private final Iterable<? extends ProguardConfigurationRule> rules;
   private final MutableItemsWithRules noShrinking = new MutableItemsWithRules();
+  private final MutableItemsWithRules softPinned = new MutableItemsWithRules();
   private final Set<DexReference> noObfuscation = Sets.newIdentityHashSet();
   private final LinkedHashMap<DexReference, DexReference> reasonAsked = new LinkedHashMap<>();
   private final LinkedHashMap<DexReference, DexReference> checkDiscarded = new LinkedHashMap<>();
@@ -103,11 +105,13 @@ public class RootSetBuilder {
   private final Set<DexReference> neverPropagateValue = Sets.newIdentityHashSet();
   private final Map<DexReference, MutableItemsWithRules> dependentNoShrinking =
       new IdentityHashMap<>();
+  private final Map<DexReference, MutableItemsWithRules> dependentSoftPinned =
+      new IdentityHashMap<>();
   private final Map<DexType, Set<ProguardKeepRuleBase>> dependentKeepClassCompatRule =
       new IdentityHashMap<>();
   private final Map<DexReference, ProguardMemberRule> mayHaveSideEffects = new IdentityHashMap<>();
-  private final Map<DexReference, ProguardMemberRule> noSideEffects = new IdentityHashMap<>();
-  private final Map<DexReference, ProguardMemberRule> assumedValues = new IdentityHashMap<>();
+  private final Map<DexMember<?, ?>, ProguardMemberRule> noSideEffects = new IdentityHashMap<>();
+  private final Map<DexMember<?, ?>, ProguardMemberRule> assumedValues = new IdentityHashMap<>();
   private final Set<DexReference> identifierNameStrings = Sets.newIdentityHashSet();
   private final Queue<DelayedRootSetActionItem> delayedRootSetActionItems =
       new ConcurrentLinkedQueue<>();
@@ -116,8 +120,8 @@ public class RootSetBuilder {
   private final DexStringCache dexStringCache = new DexStringCache();
   private final Set<ProguardIfRule> ifRules = Sets.newIdentityHashSet();
 
-  private final Map<OriginWithPosition, List<DexMethod>> assumeNoSideEffectsWarnings =
-      new HashMap<>();
+  private final Map<OriginWithPosition, Set<DexMethod>> assumeNoSideEffectsWarnings =
+      new LinkedHashMap<>();
 
   public RootSetBuilder(
       AppView<? extends AppInfoWithClassHierarchy> appView,
@@ -334,6 +338,7 @@ public class RootSetBuilder {
     assert appView.options().isMinificationEnabled() || noObfuscation.isEmpty();
     return new RootSet(
         noShrinking,
+        softPinned,
         noObfuscation,
         ImmutableList.copyOf(reasonAsked.values()),
         ImmutableList.copyOf(checkDiscarded.values()),
@@ -356,6 +361,7 @@ public class RootSetBuilder {
         noSideEffects,
         assumedValues,
         dependentNoShrinking,
+        dependentSoftPinned,
         dependentKeepClassCompatRule,
         identifierNameStrings,
         ifRules,
@@ -382,7 +388,7 @@ public class RootSetBuilder {
       DexType type,
       DexMethod reference,
       Set<DexType> subTypes,
-      Map<DexReference, ProguardMemberRule> assumeRulePool) {
+      Map<DexMember<?, ?>, ProguardMemberRule> assumeRulePool) {
     ProguardMemberRule ruleToBePropagated = null;
     for (DexType subType : subTypes) {
       DexMethod referenceInSubType =
@@ -424,8 +430,10 @@ public class RootSetBuilder {
         neverInline,
         neverClassInline,
         noShrinking,
+        softPinned,
         noObfuscation,
         dependentNoShrinking,
+        dependentSoftPinned,
         dependentKeepClassCompatRule,
         Lists.newArrayList(delayedRootSetActionItems));
   }
@@ -1136,6 +1144,14 @@ public class RootSetBuilder {
           noShrinking.addReferenceWithRule(item.toReference(), keepRule);
         }
         context.markAsUsed();
+      } else if (!modifiers.allowsOptimization) {
+        if (precondition != null) {
+          dependentSoftPinned
+              .computeIfAbsent(precondition.toReference(), x -> new MutableItemsWithRules())
+              .addReferenceWithRule(item.toReference(), keepRule);
+        } else {
+          softPinned.addReferenceWithRule(item.toReference(), keepRule);
+        }
       }
       if (!modifiers.allowsOptimization) {
         // The -dontoptimize flag has only effect through the keep all rule, but we still
@@ -1155,15 +1171,25 @@ public class RootSetBuilder {
       mayHaveSideEffects.put(item.toReference(), rule);
       context.markAsUsed();
     } else if (context instanceof ProguardAssumeNoSideEffectRule) {
-      checkAssumeNoSideEffectsWarnings(item, (ProguardAssumeNoSideEffectRule) context, rule);
-      noSideEffects.put(item.toReference(), rule);
-      context.markAsUsed();
+      if (item.isDexEncodedMember()) {
+        DexEncodedMember<?, ?> member = item.asDexEncodedMember();
+        if (member.holder() == appView.dexItemFactory().objectType) {
+          assert member.isDexEncodedMethod();
+          reportAssumeNoSideEffectsWarningForJavaLangClassMethod(
+              member.asDexEncodedMethod(), (ProguardAssumeNoSideEffectRule) context);
+        } else {
+          noSideEffects.put(member.toReference(), rule);
+        }
+        context.markAsUsed();
+      }
     } else if (context instanceof ProguardWhyAreYouKeepingRule) {
       reasonAsked.computeIfAbsent(item.toReference(), i -> i);
       context.markAsUsed();
     } else if (context instanceof ProguardAssumeValuesRule) {
-      assumedValues.put(item.toReference(), rule);
-      context.markAsUsed();
+      if (item.isDexEncodedMember()) {
+        assumedValues.put(item.asDexEncodedMember().toReference(), rule);
+        context.markAsUsed();
+      }
     } else if (context instanceof ProguardCheckDiscardRule) {
       checkDiscarded.computeIfAbsent(item.toReference(), i -> i);
       context.markAsUsed();
@@ -1301,8 +1327,10 @@ public class RootSetBuilder {
     final Set<DexMethod> neverInline;
     final Set<DexType> neverClassInline;
     final MutableItemsWithRules noShrinking;
+    final MutableItemsWithRules softPinned;
     final Set<DexReference> noObfuscation;
     final Map<DexReference, MutableItemsWithRules> dependentNoShrinking;
+    final Map<DexReference, MutableItemsWithRules> dependentSoftPinned;
     final Map<DexType, Set<ProguardKeepRuleBase>> dependentKeepClassCompatRule;
     final List<DelayedRootSetActionItem> delayedRootSetActionItems;
 
@@ -1310,15 +1338,19 @@ public class RootSetBuilder {
         Set<DexMethod> neverInline,
         Set<DexType> neverClassInline,
         MutableItemsWithRules noShrinking,
+        MutableItemsWithRules softPinned,
         Set<DexReference> noObfuscation,
         Map<DexReference, MutableItemsWithRules> dependentNoShrinking,
+        Map<DexReference, MutableItemsWithRules> dependentSoftPinned,
         Map<DexType, Set<ProguardKeepRuleBase>> dependentKeepClassCompatRule,
         List<DelayedRootSetActionItem> delayedRootSetActionItems) {
       this.neverInline = neverInline;
       this.neverClassInline = neverClassInline;
       this.noShrinking = noShrinking;
+      this.softPinned = softPinned;
       this.noObfuscation = noObfuscation;
       this.dependentNoShrinking = dependentNoShrinking;
+      this.dependentSoftPinned = dependentSoftPinned;
       this.dependentKeepClassCompatRule = dependentKeepClassCompatRule;
       this.delayedRootSetActionItems = delayedRootSetActionItems;
     }
@@ -1445,19 +1477,20 @@ public class RootSetBuilder {
       return reference.apply(this::containsClass, this::containsField, this::containsMethod);
     }
 
-    public abstract void forEachClass(Consumer<DexType> consumer);
+    public abstract void forEachClass(Consumer<? super DexType> consumer);
 
-    public abstract void forEachClass(BiConsumer<DexType, Set<ProguardKeepRuleBase>> consumer);
+    public abstract void forEachClass(
+        BiConsumer<? super DexType, Set<ProguardKeepRuleBase>> consumer);
 
     public abstract void forEachField(Consumer<? super DexField> consumer);
 
     public abstract void forEachField(
         BiConsumer<? super DexField, Set<ProguardKeepRuleBase>> consumer);
 
-    public abstract void forEachMember(Consumer<DexMember<?, ?>> consumer);
+    public abstract void forEachMember(Consumer<? super DexMember<?, ?>> consumer);
 
     public abstract void forEachMember(
-        BiConsumer<DexMember<?, ?>, Set<ProguardKeepRuleBase>> consumer);
+        BiConsumer<? super DexMember<?, ?>, Set<ProguardKeepRuleBase>> consumer);
 
     public abstract void forEachMethod(Consumer<? super DexMethod> consumer);
 
@@ -1554,13 +1587,18 @@ public class RootSetBuilder {
       return methodsWithRules.containsKey(method);
     }
 
+    public void forEachReference(Consumer<DexReference> consumer) {
+      forEachClass(consumer);
+      forEachMember(consumer);
+    }
+
     @Override
-    public void forEachClass(Consumer<DexType> consumer) {
+    public void forEachClass(Consumer<? super DexType> consumer) {
       classesWithRules.keySet().forEach(consumer);
     }
 
     @Override
-    public void forEachClass(BiConsumer<DexType, Set<ProguardKeepRuleBase>> consumer) {
+    public void forEachClass(BiConsumer<? super DexType, Set<ProguardKeepRuleBase>> consumer) {
       classesWithRules.forEach(consumer);
     }
 
@@ -1575,13 +1613,14 @@ public class RootSetBuilder {
     }
 
     @Override
-    public void forEachMember(Consumer<DexMember<?, ?>> consumer) {
+    public void forEachMember(Consumer<? super DexMember<?, ?>> consumer) {
       forEachField(consumer);
       forEachMethod(consumer);
     }
 
     @Override
-    public void forEachMember(BiConsumer<DexMember<?, ?>, Set<ProguardKeepRuleBase>> consumer) {
+    public void forEachMember(
+        BiConsumer<? super DexMember<?, ?>, Set<ProguardKeepRuleBase>> consumer) {
       forEachField(consumer);
       forEachMethod(consumer);
     }
@@ -1655,18 +1694,13 @@ public class RootSetBuilder {
     }
   }
 
-  private void checkAssumeNoSideEffectsWarnings(
-      DexDefinition item, ProguardAssumeNoSideEffectRule context, ProguardMemberRule rule) {
-    if (rule.getRuleType() == ProguardMemberType.METHOD && rule.isSpecific()) {
-      return;
-    }
-    if (item.isDexEncodedMethod()) {
-      DexEncodedMethod method = item.asDexEncodedMethod();
-      if (method.holder() == options.itemFactory.objectType) {
-        OriginWithPosition key = new OriginWithPosition(context.getOrigin(), context.getPosition());
-        assumeNoSideEffectsWarnings.computeIfAbsent(key, k -> new ArrayList<>()).add(method.method);
-      }
-    }
+  private void reportAssumeNoSideEffectsWarningForJavaLangClassMethod(
+      DexEncodedMethod method, ProguardAssumeNoSideEffectRule context) {
+    assert method.getHolderType() == options.dexItemFactory().objectType;
+    OriginWithPosition key = new OriginWithPosition(context.getOrigin(), context.getPosition());
+    assumeNoSideEffectsWarnings
+        .computeIfAbsent(key, ignore -> new TreeSet<>(DexMethod::slowCompareTo))
+        .add(method.getReference());
   }
 
   private boolean isWaitOrNotifyMethod(DexMethod method) {
@@ -1680,50 +1714,27 @@ public class RootSetBuilder {
         options.getProguardConfiguration() != null
             ? options.getProguardConfiguration().getDontWarnPatterns()
             : ProguardClassFilter.empty();
+    if (dontWarnPatterns.matches(options.itemFactory.objectType)) {
+      // Don't report any warnings since we don't apply -assumenosideeffects rules to notify() or
+      // wait() anyway.
+      return;
+    }
 
     assumeNoSideEffectsWarnings.forEach(
         (originWithPosition, methods) -> {
-          boolean waitOrNotifyMethods = methods.stream().anyMatch(this::isWaitOrNotifyMethod);
-          boolean dontWarnObject = dontWarnPatterns.matches(options.itemFactory.objectType);
-          StringBuilder message = new StringBuilder();
-          message.append(
-              "The -assumenosideeffects rule matches methods on `java.lang.Object` with wildcards");
-          message.append(" including the method(s) ");
-          for (int i = 0; i < methods.size(); i++) {
-            if (i > 0) {
-              message.append(i < methods.size() - 1 ? ", " : " and ");
-            }
-            message.append("`");
-            message.append(methods.get(i).toSourceStringWithoutHolder());
-            message.append("`.");
+          boolean matchesWaitOrNotifyMethods =
+              methods.stream().anyMatch(this::isWaitOrNotifyMethod);
+          if (!matchesWaitOrNotifyMethods) {
+            // We model the remaining methods on java.lang.Object, and thus there should be no need
+            // to warn in this case.
+            return;
           }
-          if (waitOrNotifyMethods) {
-            message.append(" This will most likely cause problems.");
-          } else {
-            message.append(" This is most likely not intended.");
-          }
-          if (waitOrNotifyMethods && !dontWarnObject) {
-            message.append(" Specify the methods more precisely.");
-          } else {
-            message.append(" Consider specifying the methods more precisely.");
-          }
-          Diagnostic diagnostic =
-              new StringDiagnostic(
-                  message.toString(),
-                  originWithPosition.getOrigin(),
-                  originWithPosition.getPosition());
-          if (waitOrNotifyMethods) {
-            if (!dontWarnObject) {
-              options.reporter.error(diagnostic);
-            } else {
-              options.reporter.warning(diagnostic);
-            }
-
-          } else {
-            if (!dontWarnObject) {
-              options.reporter.warning(diagnostic);
-            }
-          }
+          options.reporter.warning(
+              new AssumeNoSideEffectsRuleForObjectMembersDiagnostic.Builder()
+                  .addMatchedMethods(methods)
+                  .setOrigin(originWithPosition.getOrigin())
+                  .setPosition(originWithPosition.getPosition())
+                  .build());
         });
   }
 
@@ -1745,13 +1756,14 @@ public class RootSetBuilder {
     public final Set<DexType> noStaticClassMerging;
     public final Set<DexReference> neverPropagateValue;
     public final Map<DexReference, ProguardMemberRule> mayHaveSideEffects;
-    public final Map<DexReference, ProguardMemberRule> noSideEffects;
-    public final Map<DexReference, ProguardMemberRule> assumedValues;
+    public final Map<DexMember<?, ?>, ProguardMemberRule> noSideEffects;
+    public final Map<DexMember<?, ?>, ProguardMemberRule> assumedValues;
     public final Set<DexReference> identifierNameStrings;
     public final Set<ProguardIfRule> ifRules;
 
     private RootSet(
         MutableItemsWithRules noShrinking,
+        MutableItemsWithRules softPinned,
         Set<DexReference> noObfuscation,
         ImmutableList<DexReference> reasonAsked,
         ImmutableList<DexReference> checkDiscarded,
@@ -1771,9 +1783,10 @@ public class RootSetBuilder {
         Set<DexType> noStaticClassMerging,
         Set<DexReference> neverPropagateValue,
         Map<DexReference, ProguardMemberRule> mayHaveSideEffects,
-        Map<DexReference, ProguardMemberRule> noSideEffects,
-        Map<DexReference, ProguardMemberRule> assumedValues,
+        Map<DexMember<?, ?>, ProguardMemberRule> noSideEffects,
+        Map<DexMember<?, ?>, ProguardMemberRule> assumedValues,
         Map<DexReference, MutableItemsWithRules> dependentNoShrinking,
+        Map<DexReference, MutableItemsWithRules> dependentSoftPinned,
         Map<DexType, Set<ProguardKeepRuleBase>> dependentKeepClassCompatRule,
         Set<DexReference> identifierNameStrings,
         Set<ProguardIfRule> ifRules,
@@ -1782,8 +1795,10 @@ public class RootSetBuilder {
           neverInline,
           neverClassInline,
           noShrinking,
+          softPinned,
           noObfuscation,
           dependentNoShrinking,
+          dependentSoftPinned,
           dependentKeepClassCompatRule,
           delayedRootSetActionItems);
       this.reasonAsked = reasonAsked;
@@ -1831,7 +1846,8 @@ public class RootSetBuilder {
       if (addNoShrinking) {
         noShrinking.addAll(consequentRootSet.noShrinking);
       }
-      addDependentItems(consequentRootSet.dependentNoShrinking);
+      addDependentItems(consequentRootSet.dependentNoShrinking, dependentNoShrinking);
+      addDependentItems(consequentRootSet.dependentSoftPinned, dependentSoftPinned);
       consequentRootSet.dependentKeepClassCompatRule.forEach(
           (type, rules) ->
               dependentKeepClassCompatRule.computeIfAbsent(
@@ -1840,10 +1856,12 @@ public class RootSetBuilder {
     }
 
     // Add dependent items that depend on -if rules.
-    private void addDependentItems(Map<DexReference, ? extends ItemsWithRules> dependentItems) {
-      dependentItems.forEach(
+    private static void addDependentItems(
+        Map<DexReference, ? extends ItemsWithRules> dependentItemsToAdd,
+        Map<DexReference, MutableItemsWithRules> dependentItemsToAddTo) {
+      dependentItemsToAdd.forEach(
           (reference, dependence) ->
-              dependentNoShrinking
+              dependentItemsToAddTo
                   .computeIfAbsent(reference, x -> new MutableItemsWithRules())
                   .putAll(dependence));
     }
@@ -1855,11 +1873,15 @@ public class RootSetBuilder {
       if (noObfuscation.contains(original)) {
         noObfuscation.add(rewritten);
       }
-      if (noSideEffects.containsKey(original)) {
-        noSideEffects.put(rewritten, noSideEffects.get(original));
-      }
-      if (assumedValues.containsKey(original)) {
-        assumedValues.put(rewritten, assumedValues.get(original));
+      if (original.isDexMember()) {
+        assert rewritten.isDexMember();
+        DexMember<?, ?> originalMember = original.asDexMember();
+        if (noSideEffects.containsKey(originalMember)) {
+          noSideEffects.put(rewritten.asDexMember(), noSideEffects.get(originalMember));
+        }
+        if (assumedValues.containsKey(originalMember)) {
+          assumedValues.put(rewritten.asDexMember(), assumedValues.get(originalMember));
+        }
       }
     }
 
@@ -2075,16 +2097,20 @@ public class RootSetBuilder {
         Set<DexMethod> neverInline,
         Set<DexType> neverClassInline,
         MutableItemsWithRules noShrinking,
+        MutableItemsWithRules softPinned,
         Set<DexReference> noObfuscation,
         Map<DexReference, MutableItemsWithRules> dependentNoShrinking,
+        Map<DexReference, MutableItemsWithRules> dependentSoftPinned,
         Map<DexType, Set<ProguardKeepRuleBase>> dependentKeepClassCompatRule,
         List<DelayedRootSetActionItem> delayedRootSetActionItems) {
       super(
           neverInline,
           neverClassInline,
           noShrinking,
+          softPinned,
           noObfuscation,
           dependentNoShrinking,
+          dependentSoftPinned,
           dependentKeepClassCompatRule,
           delayedRootSetActionItems);
     }
