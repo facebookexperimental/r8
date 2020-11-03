@@ -109,7 +109,7 @@ public final class InterfaceMethodRewriter {
   private final IRConverter converter;
   private final InternalOptions options;
   final DexItemFactory factory;
-  private final Map<DexType, DexType> emulatedInterfaces = new IdentityHashMap<>();
+  private final Map<DexType, DexType> emulatedInterfaces;
   // The emulatedMethod set is there to avoid doing the emulated look-up too often.
   private final Set<DexString> emulatedMethods = Sets.newIdentityHashSet();
 
@@ -144,6 +144,7 @@ public final class InterfaceMethodRewriter {
     this.converter = converter;
     this.options = appView.options();
     this.factory = appView.dexItemFactory();
+    this.emulatedInterfaces = options.desugaredLibraryConfiguration.getEmulateLibraryInterface();
     initializeEmulatedInterfaceVariables();
   }
 
@@ -182,7 +183,6 @@ public final class InterfaceMethodRewriter {
     Map<DexType, DexType> emulateLibraryInterface =
         options.desugaredLibraryConfiguration.getEmulateLibraryInterface();
     for (DexType interfaceType : emulateLibraryInterface.keySet()) {
-      emulatedInterfaces.put(interfaceType, emulateLibraryInterface.get(interfaceType));
       addRewritePrefix(interfaceType, emulateLibraryInterface.get(interfaceType).toSourceString());
       DexClass emulatedInterfaceClass = appView.definitionFor(interfaceType);
       if (emulatedInterfaceClass != null) {
@@ -565,10 +565,11 @@ public final class InterfaceMethodRewriter {
   }
 
   private Map<DexType, List<DexType>> processEmulatedInterfaceHierarchy() {
-    // TODO(b/134732760): deal with retarget-core-library-member.
     Map<DexType, List<DexType>> emulatedInterfacesHierarchy = new IdentityHashMap<>();
     Set<DexType> processed = Sets.newIdentityHashSet();
-    for (DexType interfaceType : emulatedInterfaces.keySet()) {
+    ArrayList<DexType> emulatedInterfacesSorted = new ArrayList<>(emulatedInterfaces.keySet());
+    emulatedInterfacesSorted.sort(DexType::slowCompareTo);
+    for (DexType interfaceType : emulatedInterfacesSorted) {
       processEmulatedInterfaceHierarchy(interfaceType, processed, emulatedInterfacesHierarchy);
     }
     return emulatedInterfacesHierarchy;

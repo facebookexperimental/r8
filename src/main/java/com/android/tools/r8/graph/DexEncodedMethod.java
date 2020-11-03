@@ -201,6 +201,10 @@ public class DexEncodedMethod extends DexEncodedMember<DexEncodedMethod, DexMeth
     return accessFlags;
   }
 
+  public CompilationState getCompilationState() {
+    return compilationState;
+  }
+
   public DexEncodedMethod getDefaultInterfaceMethodImplementation() {
     return defaultInterfaceMethodImplementation;
   }
@@ -371,7 +375,9 @@ public class DexEncodedMethod extends DexEncodedMember<DexEncodedMethod, DexMeth
     return getReference().proto;
   }
 
+  @Override
   public DexMethod getReference() {
+    checkIfObsolete();
     return method;
   }
 
@@ -1376,12 +1382,6 @@ public class DexEncodedMethod extends DexEncodedMember<DexEncodedMethod, DexMeth
     return code == null ? "<no code>" : code.toString(this, null);
   }
 
-  @Override
-  public DexMethod toReference() {
-    checkIfObsolete();
-    return method;
-  }
-
   public MethodPosition getPosition() {
     return new MethodPosition(method.asMethodReference());
   }
@@ -1515,9 +1515,23 @@ public class DexEncodedMethod extends DexEncodedMember<DexEncodedMethod, DexMeth
       this.method = method;
     }
 
+    public Builder setCompilationState(CompilationState compilationState) {
+      assert this.compilationState == CompilationState.NOT_PROCESSED;
+      this.compilationState = compilationState;
+      return this;
+    }
+
     public Builder setIsLibraryMethodOverride(OptionalBool isLibraryMethodOverride) {
       assert !isLibraryMethodOverride.isUnknown();
       this.isLibraryMethodOverride = isLibraryMethodOverride;
+      return this;
+    }
+
+    public Builder setIsLibraryMethodOverrideIf(
+        boolean condition, OptionalBool isLibraryMethodOverride) {
+      if (condition) {
+        return setIsLibraryMethodOverride(isLibraryMethodOverride);
+      }
       return this;
     }
 

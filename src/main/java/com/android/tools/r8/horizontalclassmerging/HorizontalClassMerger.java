@@ -17,12 +17,13 @@ import com.android.tools.r8.horizontalclassmerging.policies.NoAnnotations;
 import com.android.tools.r8.horizontalclassmerging.policies.NoClassesOrMembersWithAnnotations;
 import com.android.tools.r8.horizontalclassmerging.policies.NoClassesWithInterfaces;
 import com.android.tools.r8.horizontalclassmerging.policies.NoEnums;
-import com.android.tools.r8.horizontalclassmerging.policies.NoFields;
 import com.android.tools.r8.horizontalclassmerging.policies.NoInnerClasses;
+import com.android.tools.r8.horizontalclassmerging.policies.NoInstanceFields;
 import com.android.tools.r8.horizontalclassmerging.policies.NoInterfaces;
 import com.android.tools.r8.horizontalclassmerging.policies.NoKeepRules;
 import com.android.tools.r8.horizontalclassmerging.policies.NoNativeMethods;
 import com.android.tools.r8.horizontalclassmerging.policies.NoRuntimeTypeChecks;
+import com.android.tools.r8.horizontalclassmerging.policies.NoServiceLoaders;
 import com.android.tools.r8.horizontalclassmerging.policies.NoStaticClassInitializer;
 import com.android.tools.r8.horizontalclassmerging.policies.NotEntryPoint;
 import com.android.tools.r8.horizontalclassmerging.policies.NotMatchedByNoHorizontalClassMerging;
@@ -59,7 +60,7 @@ public class HorizontalClassMerger {
     List<Policy> policies =
         ImmutableList.of(
             new NotMatchedByNoHorizontalClassMerging(appView),
-            new NoFields(),
+            new NoInstanceFields(),
             // TODO(b/166071504): Allow merging of classes that implement interfaces.
             new NoInterfaces(),
             new NoClassesWithInterfaces(),
@@ -72,6 +73,7 @@ public class HorizontalClassMerger {
             new NoStaticClassInitializer(),
             new NoNativeMethods(),
             new NoKeepRules(appView),
+            new NoServiceLoaders(appView),
             new NotVerticallyMergedIntoSubtype(appView),
             new NoRuntimeTypeChecks(runtimeTypeCheckInfo),
             new NotEntryPoint(appView.dexItemFactory()),
@@ -155,7 +157,7 @@ public class HorizontalClassMerger {
       group.remove(target);
 
       ClassMerger merger =
-          new ClassMerger.Builder(target)
+          new ClassMerger.Builder(appView, target)
               .addClassesToMerge(group)
               .build(appView, mergedClassesBuilder, lensBuilder, fieldAccessChangesBuilder);
       classMergers.add(merger);
