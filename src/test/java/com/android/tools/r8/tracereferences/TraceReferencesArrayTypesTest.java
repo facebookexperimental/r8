@@ -15,7 +15,7 @@ import com.android.tools.r8.ToolHelper;
 import com.android.tools.r8.references.Reference;
 import com.android.tools.r8.references.TypeReference;
 import com.android.tools.r8.utils.AndroidApiLevel;
-import com.android.tools.r8.utils.ZipUtils;
+import com.android.tools.r8.utils.ZipUtils.ZipBuilder;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import java.nio.file.Path;
@@ -71,22 +71,26 @@ public class TraceReferencesArrayTypesTest extends TestBase {
   @Test
   public void arrayTypes() throws Throwable {
     Path dir = temp.newFolder().toPath();
-    Path targetJar = dir.resolve("target.jar");
-    Path sourceJar = dir.resolve("source.jar");
-    ZipUtils.zip(
-        targetJar,
-        ToolHelper.getClassPathForTests(),
-        ToolHelper.getClassFileForTestClass(Target.class),
-        ToolHelper.getClassFileForTestClass(TargetFieldType.class),
-        ToolHelper.getClassFileForTestClass(TargetArgType.class),
-        ToolHelper.getClassFileForTestClass(TargetReturnType.class),
-        ToolHelper.getClassFileForTestClass(TargetInstantiatedType.class),
-        ToolHelper.getClassFileForTestClass(TargetInstanceOfType.class),
-        ToolHelper.getClassFileForTestClass(TargetCheckCastType.class));
-    ZipUtils.zip(
-        sourceJar,
-        ToolHelper.getClassPathForTests(),
-        ToolHelper.getClassFileForTestClass(Source.class));
+    Path targetJar =
+        ZipBuilder.builder(dir.resolve("target.jar"))
+            .addFilesRelative(
+                ToolHelper.getClassPathForTests(),
+                ToolHelper.getClassFileForTestClass(Target.class),
+                ToolHelper.getClassFileForTestClass(TargetFieldType.class),
+                ToolHelper.getClassFileForTestClass(TargetArgType.class),
+                ToolHelper.getClassFileForTestClass(TargetReturnType.class),
+                ToolHelper.getClassFileForTestClass(TargetInstantiatedType.class),
+                ToolHelper.getClassFileForTestClass(TargetInstanceOfType.class),
+                ToolHelper.getClassFileForTestClass(TargetCheckCastType.class),
+                ToolHelper.getClassFileForTestClass(TargetArrayCloneType.class),
+                ToolHelper.getClassFileForTestClass(TargetArrayCloneType2.class))
+            .build();
+    Path sourceJar =
+        ZipBuilder.builder(dir.resolve("source.jar"))
+            .addFilesRelative(
+                ToolHelper.getClassPathForTests(),
+                ToolHelper.getClassFileForTestClass(Source.class))
+            .build();
     DiagnosticsChecker diagnosticsChecker = new DiagnosticsChecker();
     MissingReferencesConsumer consumer = new MissingReferencesConsumer();
 
@@ -99,7 +103,6 @@ public class TraceReferencesArrayTypesTest extends TestBase {
             .build());
 
     assertEquals(
-        consumer.tracedTypes,
         ImmutableSet.of(
             Reference.classFromClass(Target.class),
             Reference.classFromClass(TargetFieldType.class),
@@ -107,7 +110,10 @@ public class TraceReferencesArrayTypesTest extends TestBase {
             Reference.classFromClass(TargetReturnType.class),
             Reference.classFromClass(TargetInstantiatedType.class),
             Reference.classFromClass(TargetInstanceOfType.class),
-            Reference.classFromClass(TargetCheckCastType.class)));
+            Reference.classFromClass(TargetCheckCastType.class),
+            Reference.classFromClass(TargetArrayCloneType.class),
+            Reference.classFromClass(TargetArrayCloneType2.class)),
+        consumer.tracedTypes);
     assertTrue(consumer.acceptFieldCalled);
     assertTrue(consumer.acceptMethodCalled);
   }
@@ -124,6 +130,10 @@ public class TraceReferencesArrayTypesTest extends TestBase {
 
   static class TargetCheckCastType {}
 
+  static class TargetArrayCloneType {}
+
+  static class TargetArrayCloneType2 {}
+
   static class Target {
     public static TargetFieldType[] field;
 
@@ -139,6 +149,8 @@ public class TraceReferencesArrayTypesTest extends TestBase {
       Object x = new TargetInstantiatedType[] {};
       boolean y = null instanceof TargetInstanceOfType;
       Object z = (TargetCheckCastType) null;
+      Object c = ((TargetArrayCloneType[]) null).clone();
+      Object c2 = ((TargetArrayCloneType2[][][][]) null).clone();
     }
   }
 }

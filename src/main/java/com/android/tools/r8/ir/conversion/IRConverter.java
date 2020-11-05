@@ -111,7 +111,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -124,7 +123,7 @@ public class IRConverter {
   private static final int PEEPHOLE_OPTIMIZATION_PASSES = 2;
 
   public final AppView<?> appView;
-  public final Set<DexType> mainDexClasses;
+  public final MainDexTracingResult mainDexClasses;
 
   private final Timing timing;
   private final Outliner outliner;
@@ -196,7 +195,7 @@ public class IRConverter {
     this.appView = appView;
     this.options = appView.options();
     this.printer = printer;
-    this.mainDexClasses = mainDexClasses.getClasses();
+    this.mainDexClasses = mainDexClasses;
     this.codeRewriter = new CodeRewriter(appView, this);
     this.constantCanonicalizer = new ConstantCanonicalizer(codeRewriter);
     this.classInitializerDefaultsOptimization =
@@ -728,7 +727,7 @@ public class IRConverter {
         postMethodProcessorBuilder.build(appView.withLiveness(), executorService, timing);
     if (postMethodProcessor != null) {
       assert !options.debug;
-      postMethodProcessor.forEachWave(feedback, executorService);
+      postMethodProcessor.forEachWaveWithExtension(feedback, executorService);
       feedback.updateVisibleOptimizationInfo();
       assert graphLensForIR == appView.graphLens();
     }
@@ -1033,7 +1032,7 @@ public class IRConverter {
       // Process the generated method, but don't apply any outlining.
       OneTimeMethodProcessor methodProcessor =
           OneTimeMethodProcessor.create(synthesizedMethod, appView);
-      methodProcessor.forEachWave(
+      methodProcessor.forEachWaveWithExtension(
           (method, methodProcessingId) ->
               processMethod(
                   method, delayedOptimizationFeedback, methodProcessor, methodProcessingId));
@@ -1044,7 +1043,7 @@ public class IRConverter {
       SortedProgramMethodSet wave, ExecutorService executorService) throws ExecutionException {
     if (!wave.isEmpty()) {
       OneTimeMethodProcessor methodProcessor = OneTimeMethodProcessor.create(wave, appView);
-      methodProcessor.forEachWave(
+      methodProcessor.forEachWaveWithExtension(
           (method, methodProcessingId) ->
               processMethod(
                   method, delayedOptimizationFeedback, methodProcessor, methodProcessingId),
@@ -1305,7 +1304,8 @@ public class IRConverter {
     if (appView.appInfo().hasLiveness()) {
       // Reflection optimization 1. getClass() / forName() -> const-class
       timing.begin("Rewrite to const class");
-      ReflectionOptimizer.rewriteGetClassOrForNameToConstClass(appView.withLiveness(), code);
+      ReflectionOptimizer.rewriteGetClassOrForNameToConstClass(
+          appView.withLiveness(), code, mainDexClasses);
       timing.end();
     }
 
@@ -1342,7 +1342,8 @@ public class IRConverter {
     assert code.verifyTypes(appView);
 
     timing.begin("Remove trivial type checks/casts");
-    codeRewriter.removeTrivialCheckCastAndInstanceOfInstructions(code);
+    codeRewriter.removeTrivialCheckCastAndInstanceOfInstructions(
+        code, context, methodProcessor, methodProcessingId);
     timing.end();
 
     if (enumValueOptimizer != null) {
@@ -1388,7 +1389,8 @@ public class IRConverter {
     timing.begin("Simplify control flow");
     if (codeRewriter.simplifyControlFlow(code)) {
       timing.begin("Remove trivial type checks/casts");
-      codeRewriter.removeTrivialCheckCastAndInstanceOfInstructions(code);
+      codeRewriter.removeTrivialCheckCastAndInstanceOfInstructions(
+          code, context, methodProcessor, methodProcessingId);
       timing.end();
     }
     timing.end();
@@ -1466,6 +1468,7 @@ public class IRConverter {
           code,
           feedback,
           methodProcessor,
+          methodProcessingId,
           inliner,
           Suppliers.memoize(
               () ->

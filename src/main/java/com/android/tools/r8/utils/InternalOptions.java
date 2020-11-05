@@ -183,8 +183,7 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     protoShrinking.enableGeneratedMessageLiteShrinking = true;
     protoShrinking.enableGeneratedMessageLiteBuilderShrinking = true;
     protoShrinking.enableGeneratedExtensionRegistryShrinking = true;
-    // TODO(b/170798502): Reland enum unboxing for proto enums.
-    // protoShrinking.enableEnumLiteProtoShrinking = true;
+    protoShrinking.enableEnumLiteProtoShrinking = true;
   }
 
   void disableAllOptimizations() {
@@ -602,6 +601,7 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
   private final ProtoShrinkingOptions protoShrinking = new ProtoShrinkingOptions();
   private final KotlinOptimizationOptions kotlinOptimizationOptions =
       new KotlinOptimizationOptions();
+  private final DesugarSpecificOptions desugarSpecificOptions = new DesugarSpecificOptions();
   public final TestingOptions testing = new TestingOptions();
 
   public List<ProguardConfigurationRule> mainDexKeepRules = ImmutableList.of();
@@ -627,6 +627,10 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
 
   public KotlinOptimizationOptions kotlinOptimizationOptions() {
     return kotlinOptimizationOptions;
+  }
+
+  public DesugarSpecificOptions desugarSpecificOptions() {
+    return desugarSpecificOptions;
   }
 
   public static boolean shouldEnableKeepRuleSynthesisForRecompilation() {
@@ -1162,6 +1166,14 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
   public static class KotlinOptimizationOptions {
     public boolean disableKotlinSpecificOptimizations =
         System.getProperty("com.android.tools.r8.disableKotlinSpecificOptimizations") != null;
+  }
+
+  // Temporary desugar specific options to make progress on b/147485959
+  // All options should be including bugs to either fix the underlying issue or extend the api.
+  public static class DesugarSpecificOptions {
+    // b/172508621
+    public boolean sortMethodsOnCfOutput =
+        System.getProperty("com.android.tools.r8.sortMethodsOnCfWriting") != null;
   }
 
   public static class CallSiteOptimizationOptions {

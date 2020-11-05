@@ -13,7 +13,6 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
-import java.util.function.Consumer;
 import java.util.function.Function;
 import org.hamcrest.Matcher;
 
@@ -40,7 +39,7 @@ public abstract class TestRunResult<RR extends TestRunResult<RR>> {
 
   public abstract RR disassemble() throws IOException, ExecutionException;
 
-  public RR apply(Consumer<RR> fn) {
+  public <E extends Throwable> RR apply(ThrowingConsumer<RR, E> fn) throws E {
     fn.accept(self());
     return self();
   }
@@ -66,6 +65,13 @@ public abstract class TestRunResult<RR extends TestRunResult<RR>> {
     return assertSuccessWithOutputLines(Arrays.asList(expected));
   }
 
+  public RR assertSuccessWithOutputLinesIf(boolean condition, String... expected) {
+    if (condition) {
+      return assertSuccessWithOutputLines(Arrays.asList(expected));
+    }
+    return self();
+  }
+
   public RR assertSuccessWithOutputLines(List<String> expected) {
     return assertSuccessWithOutput(StringUtils.lines(expected));
   }
@@ -75,6 +81,13 @@ public abstract class TestRunResult<RR extends TestRunResult<RR>> {
     return assertFailure();
   }
 
+  public RR assertFailureWithErrorThatMatchesIf(boolean condition, Matcher<String> matcher) {
+    if (condition) {
+      return assertFailureWithErrorThatMatches(matcher);
+    }
+    return self();
+  }
+
   public RR assertFailureWithOutput(String expected) {
     assertStdoutMatches(is(expected));
     return assertFailure();
@@ -82,5 +95,13 @@ public abstract class TestRunResult<RR extends TestRunResult<RR>> {
 
   public RR assertFailureWithErrorThatThrows(Class<? extends Throwable> expectedError) {
     return assertFailureWithErrorThatMatches(containsString(expectedError.getName()));
+  }
+
+  public RR assertFailureWithErrorThatThrowsIf(
+      boolean condition, Class<? extends Throwable> expectedError) {
+    if (condition) {
+      return assertFailureWithErrorThatThrows(expectedError);
+    }
+    return self();
   }
 }
