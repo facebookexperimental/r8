@@ -14,12 +14,12 @@ import com.android.tools.r8.TestParametersCollection;
 import com.android.tools.r8.TestRuntime.CfVm;
 import com.android.tools.r8.TestRuntime.DexRuntime;
 import com.android.tools.r8.ToolHelper.DexVm;
+import com.android.tools.r8.dex.Constants;
 import com.android.tools.r8.graph.AppView;
 import com.android.tools.r8.graph.DexMethod;
 import com.android.tools.r8.graph.DexProgramClass;
 import com.android.tools.r8.shaking.AppInfoWithLiveness;
 import com.android.tools.r8.transformers.ClassTransformer;
-import com.android.tools.r8.utils.AndroidApiLevel;
 import java.io.IOException;
 import java.util.concurrent.ExecutionException;
 import org.hamcrest.CoreMatchers;
@@ -35,9 +35,6 @@ import org.objectweb.asm.MethodVisitor;
 public class InvokeInterfaceClInitTest extends TestBase {
 
   private final TestParameters parameters;
-
-  static {
-  }
 
   @Parameters(name = "{0}")
   public static TestParametersCollection data() {
@@ -83,9 +80,6 @@ public class InvokeInterfaceClInitTest extends TestBase {
     if (dexRuntime.getVm().isOlderThanOrEqual(DexVm.ART_4_4_4_TARGET)) {
       return containsString("NoSuchMethodError");
     }
-    if (parameters.getApiLevel().isGreaterThanOrEqualTo(AndroidApiLevel.N)) {
-      return containsString("java.lang.ClassNotFoundException");
-    }
     return containsString("java.lang.VerifyError");
   }
 
@@ -121,7 +115,8 @@ public class InvokeInterfaceClInitTest extends TestBase {
                   String descriptor,
                   String signature,
                   String[] exceptions) {
-                return super.visitMethod(access, "<clinit>", descriptor, signature, exceptions);
+                return super.visitMethod(
+                    access | Constants.ACC_STATIC, "<clinit>", descriptor, signature, exceptions);
               }
             })
         .transform();

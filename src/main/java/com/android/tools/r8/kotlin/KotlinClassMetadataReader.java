@@ -5,6 +5,7 @@ package com.android.tools.r8.kotlin;
 
 import static com.android.tools.r8.kotlin.KotlinMetadataUtils.INVALID_KOTLIN_INFO;
 import static com.android.tools.r8.kotlin.KotlinMetadataUtils.NO_KOTLIN_INFO;
+import static com.android.tools.r8.kotlin.KotlinSyntheticClassInfo.getFlavour;
 
 import com.android.tools.r8.graph.DexAnnotation;
 import com.android.tools.r8.graph.DexAnnotationElement;
@@ -16,6 +17,7 @@ import com.android.tools.r8.graph.DexItemFactory;
 import com.android.tools.r8.graph.DexString;
 import com.android.tools.r8.graph.DexValue;
 import com.android.tools.r8.graph.DexValue.DexValueArray;
+import com.android.tools.r8.kotlin.KotlinSyntheticClassInfo.Flavour;
 import com.android.tools.r8.utils.Reporter;
 import com.android.tools.r8.utils.StringDiagnostic;
 import java.util.IdentityHashMap;
@@ -24,10 +26,9 @@ import java.util.function.Consumer;
 import kotlinx.metadata.InconsistentKotlinMetadataException;
 import kotlinx.metadata.jvm.KotlinClassHeader;
 import kotlinx.metadata.jvm.KotlinClassMetadata;
+import kotlinx.metadata.jvm.KotlinClassMetadata.SyntheticClass;
 
 public final class KotlinClassMetadataReader {
-
-  private static int KOTLIN_METADATA_KIND_LAMBDA = 3;
 
   public static KotlinClassLevelInfo getKotlinInfo(
       Kotlin kotlin,
@@ -53,7 +54,7 @@ public final class KotlinClassMetadataReader {
       DexAnnotation annotation) {
     try {
       KotlinClassMetadata kMetadata = toKotlinClassMetadata(kotlin, annotation.annotation);
-      if (onlyProcessLambda && kMetadata.getHeader().getKind() != KOTLIN_METADATA_KIND_LAMBDA) {
+      if (onlyProcessLambda && !isSyntheticClassifiedLambda(kotlin, clazz, kMetadata)) {
         return NO_KOTLIN_INFO;
       }
       return createKotlinInfo(kotlin, clazz, kMetadata, factory, reporter, keepByteCode);
@@ -74,6 +75,16 @@ public final class KotlinClassMetadataReader {
                   + e.getMessage()));
       return INVALID_KOTLIN_INFO;
     }
+  }
+
+  private static boolean isSyntheticClassifiedLambda(
+      Kotlin kotlin, DexClass clazz, KotlinClassMetadata kMetadata) {
+    if (kMetadata instanceof SyntheticClass) {
+      SyntheticClass syntheticClass = (SyntheticClass) kMetadata;
+      return syntheticClass.isLambda()
+          && getFlavour(syntheticClass, clazz, kotlin) != Flavour.Unclassified;
+    }
+    return false;
   }
 
   public static boolean hasKotlinClassMetadataAnnotation(

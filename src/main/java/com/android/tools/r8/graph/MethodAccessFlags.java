@@ -61,6 +61,10 @@ public class MethodAccessFlags extends AccessFlags<MethodAccessFlags> {
     super(originalFlags, modifiedFlags);
   }
 
+  public static Builder builder() {
+    return new Builder();
+  }
+
   @Override
   public MethodAccessFlags copy() {
     return new MethodAccessFlags(originalFlags, modifiedFlags);
@@ -183,6 +187,12 @@ public class MethodAccessFlags extends AccessFlags<MethodAccessFlags> {
     set(Constants.ACC_CONSTRUCTOR);
   }
 
+  public void setConstructor(DexMethod method, DexItemFactory dexItemFactory) {
+    if (dexItemFactory.isConstructor(method) || dexItemFactory.isClassConstructor(method)) {
+      setConstructor();
+    }
+  }
+
   public void unsetConstructor() {
     unset(Constants.ACC_CONSTRUCTOR);
   }
@@ -199,5 +209,22 @@ public class MethodAccessFlags extends AccessFlags<MethodAccessFlags> {
 
   private void unsetDeclaredSynchronized() {
     unset(Constants.ACC_DECLARED_SYNCHRONIZED);
+  }
+
+  public static class Builder extends BuilderBase<Builder, MethodAccessFlags> {
+
+    Builder() {
+      super(MethodAccessFlags.fromSharedAccessFlags(0, false));
+    }
+
+    public Builder setConstructor() {
+      flags.setConstructor();
+      return this;
+    }
+
+    @Override
+    public Builder self() {
+      return this;
+    }
   }
 }

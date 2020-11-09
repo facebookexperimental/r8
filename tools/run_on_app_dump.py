@@ -1,7 +1,7 @@
 #!/usr/bin/env python
-#  Copyright (c) 2020, the R8 project authors. Please see the AUTHORS file
-#  for details. All rights reserved. Use of this source code is governed by a
-#  BSD-style license that can be found in the LICENSE file.
+# Copyright (c) 2020, the R8 project authors. Please see the AUTHORS file
+# for details. All rights reserved. Use of this source code is governed by a
+# BSD-style license that can be found in the LICENSE file.
 
 import adb
 import apk_masseur
@@ -103,7 +103,62 @@ APPS = [
     'url': 'https://github.com/mkj-gram/applymapping',
     'revision': 'e3ae14b8c16fa4718e5dea8f7ad00937701b3c48',
     'folder': 'applymapping',
-  })
+  }),
+  App({
+    'id': 'com.chanapps.four.activity',
+    'name': 'chanu',
+    'dump_app': 'dump_app.zip',
+    'apk_app': 'app-release.apk',
+    'url': 'https://github.com/mkj-gram/chanu.git',
+    'revision': '6e53458f167b6d78398da60c20fd0da01a232617',
+    'folder': 'chanu',
+    # TODO(b/172535996): Fix recompilation
+    'skip_recompilation': True
+  }),
+  # TODO(b/172539375): Monkey runner fails on recompilation.
+  App({
+    'id': 'com.google.firebase.example.fireeats',
+    'name': 'FriendlyEats',
+    'dump_app': 'dump_app.zip',
+    'apk_app': 'app-release-unsigned.apk',
+    'url': 'https://github.com/firebase/friendlyeats-android',
+    'revision': '7c6dd016fc31ea5ecb948d5166b8479efc3775cc',
+    'folder': 'friendlyeats',
+  }),
+  App({
+    'id': 'com.google.samples.apps.sunflower',
+    'name': 'Sunflower',
+    'dump_app': 'dump_app.zip',
+    'apk_app': 'app-debug.apk',
+    # TODO(b/172549283): Compiling tests fails
+    'id_test': 'com.example.applymapping.test',
+    'dump_test': 'dump_test.zip',
+    'apk_test': 'app-debug-androidTest.apk',
+    'url': 'https://github.com/android/sunflower',
+    'revision': '0c4c88fdad2a74791199dffd1a6559559b1dbd4a',
+    'folder': 'sunflower',
+    # TODO(b/172548728): Fix recompilation
+    'skip_recompilation': True
+  }),
+  # TODO(b/172565385): Monkey runner fails on recompilation
+  App({
+    'id': 'com.google.samples.apps.iosched',
+    'name': 'iosched',
+    'dump_app': 'dump_app.zip',
+    'apk_app': 'mobile-release.apk',
+    'url': 'https://github.com/christofferqa/iosched.git',
+    'revision': '581cbbe2253711775dbccb753cdb53e7e506cb02',
+    'folder': 'iosched',
+  }),
+  App({
+    'id': 'org.wikipedia',
+    'name': 'Wikipedia',
+    'dump_app': 'dump_app.zip',
+    'apk_app': 'app-prod-release.apk',
+    'url': 'https://github.com/wikimedia/apps-android-wikipedia',
+    'revision': '0fa7cad843c66313be8e25790ef084cf1a1fa67e',
+    'folder': 'wikipedia',
+  }),
 ]
 
 
@@ -232,7 +287,6 @@ def build_app_and_run_with_shrinker(app, options, temp_dir, app_dir, shrinker,
           and not is_last_build(compilation_step, compilation_steps)):
         result['recompilation_status'] = 'failed'
         warn('Failed to build {} with {}'.format(app.name, shrinker))
-        break
       recomp_jar = new_recomp_jar
     except Exception as e:
       warn('Failed to build {} with {}'.format(app.name, shrinker))
@@ -270,18 +324,21 @@ def build_app_and_run_with_shrinker(app, options, temp_dir, app_dir, shrinker,
       test_jar = build_test_with_shrinker(
         app, options, temp_dir, app_dir,shrinker, compilation_step,
         result['output_mapping'])
-      original_test_apk = os.path.join(app_dir, app.apk_test)
-      test_apk_destination = os.path.join(
-        temp_dir,"{}_{}.test.apk".format(app.id_test, compilation_step))
-      apk_masseur.masseur(
-        original_test_apk, dex=test_jar, resources='META-INF/services/*',
-        out=test_apk_destination,
-        quiet=options.quiet, logging=is_logging_enabled_for(app, options),
-        keystore=options.keystore)
-      result['instrumentation_test_status'] = 'success' if adb.run_instrumented(
-        app.id, app.id_test, options.emulator_id, app_apk_destination,
-        test_apk_destination, options.quiet,
-        is_logging_enabled_for(app, options)) else 'failed'
+      if not test_jar:
+        result['instrumentation_test_status'] = 'compilation_failed'
+      else:
+        original_test_apk = os.path.join(app_dir, app.apk_test)
+        test_apk_destination = os.path.join(
+          temp_dir,"{}_{}.test.apk".format(app.id_test, compilation_step))
+        apk_masseur.masseur(
+          original_test_apk, dex=test_jar, resources='META-INF/services/*',
+          out=test_apk_destination,
+          quiet=options.quiet, logging=is_logging_enabled_for(app, options),
+          keystore=options.keystore)
+        result['instrumentation_test_status'] = 'success' if adb.run_instrumented(
+          app.id, app.id_test, options.emulator_id, app_apk_destination,
+          test_apk_destination, options.quiet,
+          is_logging_enabled_for(app, options)) else 'failed'
 
     results.append(result)
     if result.get('recompilation_status') != 'success':
@@ -335,6 +392,7 @@ def build_app_with_shrinker(app, options, temp_dir, app_dir, shrinker,
 
   return (app_jar, app_mapping, recomp_jar)
 
+
 def build_test_with_shrinker(app, options, temp_dir, app_dir, shrinker,
                              compilation_step_index, mapping):
   r8jar = os.path.join(
@@ -371,7 +429,8 @@ def build_test_with_shrinker(app, options, temp_dir, app_dir, shrinker,
       app.name, shrinker, compilation_step_index))
 
   if compile_result != 0 or not os.path.isfile(out_jar):
-    assert False, "Compilation of test_jar failed"
+    return None
+
   shutil.move(out_jar, test_jar)
 
   return test_jar

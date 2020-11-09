@@ -292,12 +292,12 @@ public class VerticalClassMerger {
     // another default method in the same interface (see InterfaceMethodDesugaringTests.testInvoke-
     // SpecialToDefaultMethod). However, in a class, that would lead to a verification error.
     // Therefore, we disallow merging such interfaces into their subtypes.
-    for (DexMethod signature : appInfo.virtualMethodsTargetedByInvokeDirect) {
+    for (DexMethod signature : appInfo.getVirtualMethodsTargetedByInvokeDirect()) {
       markTypeAsPinned(signature.holder, AbortReason.UNHANDLED_INVOKE_DIRECT);
     }
 
     // The set of targets that must remain for proper resolution error cases should not be merged.
-    for (DexMethod method : appInfo.failedResolutionTargets) {
+    for (DexMethod method : appInfo.getFailedResolutionTargets()) {
       markTypeAsPinned(method.holder, AbortReason.RESOLUTION_FOR_METHODS_MAY_CHANGE);
     }
   }
@@ -1110,8 +1110,8 @@ public class VerticalClassMerger {
       target.forEachField(feedback::markFieldCannotBeKept);
       target.forEachMethod(feedback::markMethodCannotBeKept);
       // Step 3: Clear the members of the source class since they have now been moved to the target.
-      source.setDirectMethods(null);
-      source.setVirtualMethods(null);
+      source.getMethodCollection().clearDirectMethods();
+      source.getMethodCollection().clearVirtualMethods();
       source.setInstanceFields(null);
       source.setStaticFields(null);
       // Step 4: Record merging.

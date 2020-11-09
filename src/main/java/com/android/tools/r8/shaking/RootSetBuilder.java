@@ -1970,12 +1970,12 @@ public class RootSetBuilder {
     public boolean verifyKeptMethodsAreTargetedAndLive(AppInfoWithLiveness appInfo) {
       noShrinking.forEachMethod(
           reference -> {
-            assert appInfo.targetedMethods.contains(reference)
+            assert appInfo.isTargetedMethod(reference)
                 : "Expected kept method `" + reference.toSourceString() + "` to be targeted";
             DexEncodedMethod method =
                 appInfo.definitionForHolder(reference).lookupMethod(reference);
             if (!method.isAbstract() && isKeptDirectlyOrIndirectly(method.holder(), appInfo)) {
-              assert appInfo.liveMethods.contains(reference)
+              assert appInfo.isLiveMethod(reference)
                   : "Expected non-abstract kept method `"
                       + reference.toSourceString()
                       + "` to be live";

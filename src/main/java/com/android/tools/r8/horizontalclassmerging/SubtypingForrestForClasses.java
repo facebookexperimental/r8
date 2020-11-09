@@ -35,10 +35,9 @@ public class SubtypingForrestForClasses {
   private final Collection<DexProgramClass> roots = new ArrayList<>();
   private final Map<DexProgramClass, List<DexProgramClass>> subtypeMap = new IdentityHashMap<>();
 
-  public SubtypingForrestForClasses(
-      AppView<AppInfoWithLiveness> appView, List<DexProgramClass> classesWithDeterministicOrder) {
+  public SubtypingForrestForClasses(AppView<AppInfoWithLiveness> appView) {
     this.appView = appView;
-    calculateSubtyping(classesWithDeterministicOrder);
+    calculateSubtyping(appView.appInfo().classes());
   }
 
   private DexProgramClass superClass(DexProgramClass clazz) {
@@ -65,13 +64,14 @@ public class SubtypingForrestForClasses {
     return roots;
   }
 
-  private Collection<DexProgramClass> getSubtypesFor(DexProgramClass clazz) {
+  public Collection<DexProgramClass> getSubtypesFor(DexProgramClass clazz) {
     return subtypeMap.getOrDefault(clazz, Collections.emptyList());
   }
 
-  public <T> void traverseNodeDepthFirst(
+  public <T> T traverseNodeDepthFirst(
       DexProgramClass clazz, T state, BiFunction<DexProgramClass, T, T> consumer) {
     T newState = consumer.apply(clazz, state);
     getSubtypesFor(clazz).forEach(subClazz -> traverseNodeDepthFirst(subClazz, newState, consumer));
+    return newState;
   }
 }

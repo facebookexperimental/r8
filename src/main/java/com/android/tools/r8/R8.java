@@ -422,7 +422,7 @@ public class R8 {
                   appViewWithLiveness, appViewWithLiveness.appInfo().computeSubtypingInfo())
               .run();
 
-          if (appView.options().protoShrinking().isProtoShrinkingEnabled()) {
+          if (appView.options().protoShrinking().isProtoEnumShrinkingEnabled()) {
             appView.protoShrinker().enumProtoShrinker.clearDeadEnumLiteMaps();
           }
 
@@ -571,12 +571,11 @@ public class R8 {
         }
         if (options.enableHorizontalClassMerging && options.enableInlining) {
           timing.begin("HorizontalClassMerger");
-          HorizontalClassMerger merger =
-              new HorizontalClassMerger(
-                  appViewWithLiveness, mainDexTracingResult, runtimeTypeCheckInfo);
+          HorizontalClassMerger merger = new HorizontalClassMerger(appViewWithLiveness);
           DirectMappedDexApplication.Builder appBuilder =
               appView.appInfo().app().asDirect().builder();
-          HorizontalClassMergerGraphLens lens = merger.run(appBuilder);
+          HorizontalClassMergerGraphLens lens =
+              merger.run(appBuilder, mainDexTracingResult, runtimeTypeCheckInfo);
           if (lens != null) {
             DirectMappedDexApplication app = appBuilder.build();
             appView.removePrunedClasses(app, appView.horizontallyMergedClasses().getSources());
@@ -783,7 +782,9 @@ public class R8 {
         }
 
         if (appView.options().protoShrinking().isProtoShrinkingEnabled()) {
-          appView.protoShrinker().enumProtoShrinker.verifyDeadEnumLiteMapsAreDead();
+          if (appView.options().protoShrinking().isProtoEnumShrinkingEnabled()) {
+            appView.protoShrinker().enumProtoShrinker.verifyDeadEnumLiteMapsAreDead();
+          }
 
           IRConverter converter = new IRConverter(appView, timing, null, mainDexTracingResult);
 

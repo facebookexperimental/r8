@@ -99,24 +99,25 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
    * contained in {@link #liveMethods}, it may be marked as abstract and its implementation may be
    * removed.
    */
-  final SortedSet<DexMethod> targetedMethods;
+  private final Set<DexMethod> targetedMethods;
 
   /** Set of targets that lead to resolution errors, such as non-existing or invalid targets. */
-  public final Set<DexMethod> failedResolutionTargets;
+  private final Set<DexMethod> failedResolutionTargets;
 
   /**
    * Set of program methods that are used as the bootstrap method for an invoke-dynamic instruction.
    */
-  public final SortedSet<DexMethod> bootstrapMethods;
+  private final Set<DexMethod> bootstrapMethods;
+
   /** Set of methods that are the immediate target of an invoke-dynamic. */
-  public final SortedSet<DexMethod> methodsTargetedByInvokeDynamic;
+  private final Set<DexMethod> methodsTargetedByInvokeDynamic;
   /** Set of virtual methods that are the immediate target of an invoke-direct. */
-  final SortedSet<DexMethod> virtualMethodsTargetedByInvokeDirect;
+  private final Set<DexMethod> virtualMethodsTargetedByInvokeDirect;
   /**
    * Set of methods that belong to live classes and can be reached by invokes. These need to be
    * kept.
    */
-  public final SortedSet<DexMethod> liveMethods;
+  private final Set<DexMethod> liveMethods;
   /**
    * Information about all fields that are accessed by the program. The information includes whether
    * a given field is read/written by the program, and it also includes all indirect accesses to
@@ -141,11 +142,11 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
   /** All items with assumevalues rule. */
   public final Map<DexMember<?, ?>, ProguardMemberRule> assumedValues;
   /** All methods that should be inlined if possible due to a configuration directive. */
-  public final Set<DexMethod> alwaysInline;
+  private final Set<DexMethod> alwaysInline;
   /** All methods that *must* be inlined due to a configuration directive (testing only). */
-  public final Set<DexMethod> forceInline;
+  private final Set<DexMethod> forceInline;
   /** All methods that *must* never be inlined due to a configuration directive (testing only). */
-  public final Set<DexMethod> neverInline;
+  private final Set<DexMethod> neverInline;
   /** Items for which to print inlining decisions for (testing only). */
   public final Set<DexMethod> whyAreYouNotInlining;
   /** All methods that may not have any parameters with a constant value removed. */
@@ -205,12 +206,12 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
       Set<DexType> missingTypes,
       Set<DexType> liveTypes,
       Set<DexType> instantiatedAppServices,
-      SortedSet<DexMethod> targetedMethods,
+      Set<DexMethod> targetedMethods,
       Set<DexMethod> failedResolutionTargets,
-      SortedSet<DexMethod> bootstrapMethods,
-      SortedSet<DexMethod> methodsTargetedByInvokeDynamic,
-      SortedSet<DexMethod> virtualMethodsTargetedByInvokeDirect,
-      SortedSet<DexMethod> liveMethods,
+      Set<DexMethod> bootstrapMethods,
+      Set<DexMethod> methodsTargetedByInvokeDynamic,
+      Set<DexMethod> virtualMethodsTargetedByInvokeDirect,
+      Set<DexMethod> liveMethods,
       FieldAccessInfoCollectionImpl fieldAccessInfoCollection,
       MethodAccessInfoCollection methodAccessInfoCollection,
       ObjectAllocationInfoCollectionImpl objectAllocationInfoCollection,
@@ -288,10 +289,10 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
       Set<DexType> missingTypes,
       Set<DexType> liveTypes,
       Set<DexType> instantiatedAppServices,
-      SortedSet<DexMethod> targetedMethods,
+      Set<DexMethod> targetedMethods,
       Set<DexMethod> failedResolutionTargets,
-      SortedSet<DexMethod> bootstrapMethods,
-      SortedSet<DexMethod> methodsTargetedByInvokeDynamic,
+      Set<DexMethod> bootstrapMethods,
+      Set<DexMethod> methodsTargetedByInvokeDynamic,
       SortedSet<DexMethod> virtualMethodsTargetedByInvokeDirect,
       SortedSet<DexMethod> liveMethods,
       FieldAccessInfoCollectionImpl fieldAccessInfoCollection,
@@ -624,6 +625,54 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
     }
     DexClass clazz = definitionFor(type);
     return clazz == null || !clazz.isProgramClass();
+  }
+
+  public boolean isLiveMethod(DexMethod method) {
+    return liveMethods.contains(method);
+  }
+
+  public boolean isTargetedMethod(DexMethod method) {
+    return targetedMethods.contains(method);
+  }
+
+  public boolean isFailedResolutionTarget(DexMethod method) {
+    return failedResolutionTargets.contains(method);
+  }
+
+  public Set<DexMethod> getFailedResolutionTargets() {
+    return failedResolutionTargets;
+  }
+
+  public boolean isBootstrapMethod(DexMethod method) {
+    return bootstrapMethods.contains(method);
+  }
+
+  public boolean isMethodTargetedByInvokeDynamic(DexMethod method) {
+    return methodsTargetedByInvokeDynamic.contains(method);
+  }
+
+  public Set<DexMethod> getVirtualMethodsTargetedByInvokeDirect() {
+    return virtualMethodsTargetedByInvokeDirect;
+  }
+
+  public boolean isAlwaysInlineMethod(DexMethod method) {
+    return alwaysInline.contains(method);
+  }
+
+  public boolean hasNoAlwaysInlineMethods() {
+    return alwaysInline.isEmpty();
+  }
+
+  public boolean isForceInlineMethod(DexMethod method) {
+    return forceInline.contains(method);
+  }
+
+  public boolean hasNoForceInlineMethods() {
+    return forceInline.isEmpty();
+  }
+
+  public boolean isNeverInlineMethod(DexMethod method) {
+    return neverInline.contains(method);
   }
 
   public Collection<DexClass> computeReachableInterfaces() {
@@ -1036,11 +1085,11 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
         lens.rewriteMethods(alwaysInline),
         lens.rewriteMethods(forceInline),
         lens.rewriteMethods(neverInline),
-        lens.rewriteMethods(whyAreYouNotInlining),
-        lens.rewriteMethods(keepConstantArguments),
-        lens.rewriteMethods(keepUnusedArguments),
-        lens.rewriteMethods(reprocess),
-        lens.rewriteMethods(neverReprocess),
+        lens.rewriteMethodsSorted(whyAreYouNotInlining),
+        lens.rewriteMethodsSorted(keepConstantArguments),
+        lens.rewriteMethodsSorted(keepUnusedArguments),
+        lens.rewriteMethodsSorted(reprocess),
+        lens.rewriteMethodsSorted(neverReprocess),
         alwaysClassInline.rewriteItems(lens::lookupType),
         lens.rewriteTypes(neverClassInline),
         lens.rewriteTypes(noUnusedInterfaceRemoval),

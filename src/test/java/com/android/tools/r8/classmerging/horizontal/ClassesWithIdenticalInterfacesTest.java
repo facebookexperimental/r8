@@ -8,77 +8,84 @@ import static com.android.tools.r8.utils.codeinspector.Matchers.isPresent;
 import static com.android.tools.r8.utils.codeinspector.Matchers.notIf;
 import static org.hamcrest.MatcherAssert.assertThat;
 
-import com.android.tools.r8.CompilationFailedException;
 import com.android.tools.r8.NeverClassInline;
 import com.android.tools.r8.NeverInline;
-import com.android.tools.r8.NoVerticalClassMerging;
 import com.android.tools.r8.TestParameters;
-import java.io.IOException;
-import java.util.concurrent.ExecutionException;
 import org.junit.Test;
 
-public class MergedSuperMethodIsDefaultMethodTest extends HorizontalClassMergingTestBase {
-  public MergedSuperMethodIsDefaultMethodTest(
+public class ClassesWithIdenticalInterfacesTest extends HorizontalClassMergingTestBase {
+  public ClassesWithIdenticalInterfacesTest(
       TestParameters parameters, boolean enableHorizontalClassMerging) {
     super(parameters, enableHorizontalClassMerging);
   }
 
   @Test
-  public void testR8() throws IOException, CompilationFailedException, ExecutionException {
+  public void testR8() throws Exception {
     testForR8(parameters.getBackend())
-        .addInnerClasses(this.getClass())
+        .addInnerClasses(getClass())
+        .addKeepMainRule(Main.class)
         .addOptionsModification(
             options -> options.enableHorizontalClassMerging = enableHorizontalClassMerging)
-        .enableNoVerticalClassMergingAnnotations()
-        .enableNeverClassInliningAnnotations()
         .enableInliningAnnotations()
-        .addKeepMainRule(Main.class)
+        .enableNeverClassInliningAnnotations()
         .setMinApi(parameters.getApiLevel())
+        .addHorizontallyMergedClassesInspector(
+            inspector -> inspector.assertMergedInto(Z.class, Y.class))
         .run(parameters.getRuntime(), Main.class)
-        .assertSuccessWithOutputLines("I.foo")
+        .assertSuccessWithOutputLines("bar", "foo y", "foo z")
         .inspect(
             codeInspector -> {
               assertThat(codeInspector.clazz(I.class), isPresent());
-              assertThat(codeInspector.clazz(A.class), isPresent());
-              assertThat(codeInspector.clazz(B.class), isPresent());
+              assertThat(codeInspector.clazz(X.class), isPresent());
+              assertThat(codeInspector.clazz(Y.class), isPresent());
               assertThat(
-                  codeInspector.clazz(C.class), notIf(isPresent(), enableHorizontalClassMerging));
+                  codeInspector.clazz(Z.class), notIf(isPresent(), enableHorizontalClassMerging));
             });
   }
 
-  @NoVerticalClassMerging
   public interface I {
+    void foo();
+  }
+
+  @NeverClassInline
+  public static class X {
     @NeverInline
-    default void foo() {
-      System.out.println("I.foo");
+    public void bar() {
+      System.out.println("bar");
     }
   }
 
-  @NoVerticalClassMerging
-  public abstract static class A implements I {}
-
   @NeverClassInline
-  public static class B extends A {
-
+  public static class Y implements I {
+    @NeverInline
     @Override
-    @NeverInline
     public void foo() {
-      System.out.println("B.foo");
+      System.out.println("foo y");
     }
   }
 
   @NeverClassInline
-  public static class C extends A {}
+  public static class Z implements I {
+    @NeverInline
+    @Override
+    public void foo() {
+      System.out.println("foo z");
+    }
+  }
 
   public static class Main {
-
-    public static void main(String[] args) {
-      callA(args.length == 0 ? new C() : new B());
+    @NeverInline
+    public static void foo(I i) {
+      i.foo();
     }
 
-    @NeverInline
-    private static void callA(A a) {
-      a.foo();
+    public static void main(String[] args) {
+      X x = new X();
+      x.bar();
+      Y y = new Y();
+      Z z = new Z();
+      foo(y);
+      foo(z);
     }
   }
 }

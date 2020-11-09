@@ -11,6 +11,7 @@ import com.android.tools.r8.kotlin.KotlinClassLevelInfo;
 import com.android.tools.r8.origin.Origin;
 import com.android.tools.r8.shaking.AppInfoWithLiveness;
 import com.android.tools.r8.utils.InternalOptions;
+import com.android.tools.r8.utils.IterableUtils;
 import com.android.tools.r8.utils.OptionalBool;
 import com.android.tools.r8.utils.TraversalContinuation;
 import com.google.common.base.MoreObjects;
@@ -179,6 +180,10 @@ public abstract class DexClass extends DexDefinition {
     return methodCollection.removeMethod(method);
   }
 
+  public void setDirectMethods(List<DexEncodedMethod> methods) {
+    setDirectMethods(methods.toArray(DexEncodedMethod.EMPTY_ARRAY));
+  }
+
   public void setDirectMethods(DexEncodedMethod[] methods) {
     methodCollection.setDirectMethods(methods);
   }
@@ -193,6 +198,10 @@ public abstract class DexClass extends DexDefinition {
 
   public void addVirtualMethods(Collection<DexEncodedMethod> methods) {
     methodCollection.addVirtualMethods(methods);
+  }
+
+  public void setVirtualMethods(List<DexEncodedMethod> methods) {
+    setVirtualMethods(methods.toArray(DexEncodedMethod.EMPTY_ARRAY));
   }
 
   public void setVirtualMethods(DexEncodedMethod[] methods) {
@@ -261,6 +270,10 @@ public abstract class DexClass extends DexDefinition {
       return Collections.unmodifiableList(Arrays.asList(staticFields));
     }
     return Arrays.asList(staticFields);
+  }
+
+  public Iterable<DexEncodedField> staticFields(Predicate<DexEncodedField> predicate) {
+    return IterableUtils.filter(staticFields(), predicate);
   }
 
   public void appendStaticField(DexEncodedField field) {
@@ -496,6 +509,10 @@ public abstract class DexClass extends DexDefinition {
       }
     }
     return null;
+  }
+
+  public boolean canBeInstantiatedByNewInstance() {
+    return !isAbstract() && !isAnnotation() && !isInterface();
   }
 
   public boolean isAbstract() {

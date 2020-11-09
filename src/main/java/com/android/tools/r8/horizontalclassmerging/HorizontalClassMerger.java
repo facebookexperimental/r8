@@ -8,6 +8,7 @@ import com.android.tools.r8.graph.AppView;
 import com.android.tools.r8.graph.DexProgramClass;
 import com.android.tools.r8.graph.DirectMappedDexApplication;
 import com.android.tools.r8.horizontalclassmerging.policies.AllInstantiatedOrUninstantiated;
+import com.android.tools.r8.horizontalclassmerging.policies.ClassesHaveSameInterfaces;
 import com.android.tools.r8.horizontalclassmerging.policies.DontInlinePolicy;
 import com.android.tools.r8.horizontalclassmerging.policies.DontMergeIntoLessVisible;
 import com.android.tools.r8.horizontalclassmerging.policies.DontMergeSynchronizedClasses;
@@ -15,12 +16,12 @@ import com.android.tools.r8.horizontalclassmerging.policies.IgnoreSynthetics;
 import com.android.tools.r8.horizontalclassmerging.policies.NoAbstractClasses;
 import com.android.tools.r8.horizontalclassmerging.policies.NoAnnotations;
 import com.android.tools.r8.horizontalclassmerging.policies.NoClassesOrMembersWithAnnotations;
-import com.android.tools.r8.horizontalclassmerging.policies.NoClassesWithInterfaces;
 import com.android.tools.r8.horizontalclassmerging.policies.NoEnums;
 import com.android.tools.r8.horizontalclassmerging.policies.NoInnerClasses;
 import com.android.tools.r8.horizontalclassmerging.policies.NoInstanceFields;
 import com.android.tools.r8.horizontalclassmerging.policies.NoInterfaces;
 import com.android.tools.r8.horizontalclassmerging.policies.NoKeepRules;
+import com.android.tools.r8.horizontalclassmerging.policies.NoKotlinMetadata;
 import com.android.tools.r8.horizontalclassmerging.policies.NoNativeMethods;
 import com.android.tools.r8.horizontalclassmerging.policies.NoRuntimeTypeChecks;
 import com.android.tools.r8.horizontalclassmerging.policies.NoServiceLoaders;
@@ -30,6 +31,7 @@ import com.android.tools.r8.horizontalclassmerging.policies.NotMatchedByNoHorizo
 import com.android.tools.r8.horizontalclassmerging.policies.NotVerticallyMergedIntoSubtype;
 import com.android.tools.r8.horizontalclassmerging.policies.PreventChangingVisibility;
 import com.android.tools.r8.horizontalclassmerging.policies.PreventMergeIntoMainDex;
+import com.android.tools.r8.horizontalclassmerging.policies.PreventMethodImplementation;
 import com.android.tools.r8.horizontalclassmerging.policies.RespectPackageBoundaries;
 import com.android.tools.r8.horizontalclassmerging.policies.SameFeatureSplit;
 import com.android.tools.r8.horizontalclassmerging.policies.SameNestHost;
@@ -48,64 +50,28 @@ import java.util.Map;
 
 public class HorizontalClassMerger {
   private final AppView<AppInfoWithLiveness> appView;
-  private final PolicyExecutor policyExecutor;
 
-  public HorizontalClassMerger(
-      AppView<AppInfoWithLiveness> appView,
-      MainDexTracingResult mainDexTracingResult,
-      RuntimeTypeCheckInfo runtimeTypeCheckInfo) {
+  public HorizontalClassMerger(AppView<AppInfoWithLiveness> appView) {
     this.appView = appView;
     assert appView.options().enableInlining;
-
-    List<Policy> policies =
-        ImmutableList.of(
-            new NotMatchedByNoHorizontalClassMerging(appView),
-            new NoInstanceFields(),
-            // TODO(b/166071504): Allow merging of classes that implement interfaces.
-            new NoInterfaces(),
-            new NoClassesWithInterfaces(),
-            new NoAnnotations(),
-            new NoEnums(appView),
-            new NoAbstractClasses(),
-            new IgnoreSynthetics(appView),
-            new NoClassesOrMembersWithAnnotations(),
-            new NoInnerClasses(),
-            new NoStaticClassInitializer(),
-            new NoNativeMethods(),
-            new NoKeepRules(appView),
-            new NoServiceLoaders(appView),
-            new NotVerticallyMergedIntoSubtype(appView),
-            new NoRuntimeTypeChecks(runtimeTypeCheckInfo),
-            new NotEntryPoint(appView.dexItemFactory()),
-            new DontInlinePolicy(appView, mainDexTracingResult),
-            new PreventMergeIntoMainDex(appView, mainDexTracingResult),
-            new AllInstantiatedOrUninstantiated(appView),
-            new SameParentClass(),
-            new SameNestHost(),
-            new PreventChangingVisibility(),
-            new SameFeatureSplit(appView),
-            new RespectPackageBoundaries(appView),
-            new DontMergeSynchronizedClasses(appView),
-            // TODO(b/166577694): no policies should be run after this policy, as it would
-            // potentially break tests
-            new DontMergeIntoLessVisible()
-            // TODO: add policies
-            );
-
-    this.policyExecutor = new SimplePolicyExecutor(policies);
   }
 
   // TODO(b/165577835): replace Collection<DexProgramClass> with MergeGroup
-  public HorizontalClassMergerGraphLens run(DirectMappedDexApplication.Builder appBuilder) {
+  public HorizontalClassMergerGraphLens run(
+      DirectMappedDexApplication.Builder appBuilder,
+      MainDexTracingResult mainDexTracingResult,
+      RuntimeTypeCheckInfo runtimeTypeCheckInfo) {
     Map<FieldMultiset, List<DexProgramClass>> classes = new LinkedHashMap<>();
 
     // Group classes by same field signature using the hash map.
-    for (DexProgramClass clazz : appView.appInfo().app().classesWithDeterministicOrder()) {
+    for (DexProgramClass clazz : appView.appInfo().classesWithDeterministicOrder()) {
       classes.computeIfAbsent(new FieldMultiset(clazz), ignore -> new ArrayList<>()).add(clazz);
     }
 
     // Run the policies on all collected classes to produce a final grouping.
-    Collection<List<DexProgramClass>> groups = policyExecutor.run(classes.values());
+    Collection<List<DexProgramClass>> groups =
+        new SimplePolicyExecutor()
+            .run(classes.values(), getPolicies(mainDexTracingResult, runtimeTypeCheckInfo));
     // If there are no groups, then end horizontal class merging.
     if (groups.isEmpty()) {
       appView.setHorizontallyMergedClasses(HorizontallyMergedClasses.empty());
@@ -136,6 +102,45 @@ public class HorizontalClassMerger {
     appView.setHorizontallyMergedClasses(mergedClasses);
     return createLens(
         mergedClasses, lensBuilder, fieldAccessChangesBuilder, syntheticArgumentClass);
+  }
+
+  private List<Policy> getPolicies(
+      MainDexTracingResult mainDexTracingResult,
+      RuntimeTypeCheckInfo runtimeTypeCheckInfo) {
+    return ImmutableList.of(
+        new NotMatchedByNoHorizontalClassMerging(appView),
+        new NoInstanceFields(),
+        new NoInterfaces(),
+        new ClassesHaveSameInterfaces(),
+        new NoAnnotations(),
+        new NoEnums(appView),
+        new NoAbstractClasses(),
+        new IgnoreSynthetics(appView),
+        new NoClassesOrMembersWithAnnotations(),
+        new NoInnerClasses(),
+        new NoStaticClassInitializer(),
+        new NoNativeMethods(),
+        new NoKeepRules(appView),
+        new NoKotlinMetadata(),
+        new NoServiceLoaders(appView),
+        new NotVerticallyMergedIntoSubtype(appView),
+        new NoRuntimeTypeChecks(runtimeTypeCheckInfo),
+        new NotEntryPoint(appView.dexItemFactory()),
+        new PreventMethodImplementation(appView),
+        new DontInlinePolicy(appView, mainDexTracingResult),
+        new PreventMergeIntoMainDex(appView, mainDexTracingResult),
+        new AllInstantiatedOrUninstantiated(appView),
+        new SameParentClass(),
+        new SameNestHost(),
+        new PreventChangingVisibility(),
+        new SameFeatureSplit(appView),
+        new RespectPackageBoundaries(appView),
+        new DontMergeSynchronizedClasses(appView),
+        // TODO(b/166577694): no policies should be run after this policy, as it would
+        // potentially break tests
+        new DontMergeIntoLessVisible()
+        // TODO: add policies
+        );
   }
 
   /**

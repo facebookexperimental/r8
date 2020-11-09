@@ -59,18 +59,15 @@ public class VirtualMethodMerger {
 
     /** Get the super method handle if this method overrides a parent method. */
     private DexMethod superMethod(AppView<AppInfoWithLiveness> appView, DexProgramClass target) {
-      // TODO(b/167981556): Correctly detect super methods defined on interfaces.
       DexMethod template = methods.iterator().next().getReference();
       SingleResolutionResult resolutionResult =
           appView
-              .withLiveness()
               .appInfo()
               .resolveMethodOnClass(template, target.getSuperType())
               .asSingleResolution();
-      if (resolutionResult == null) {
-        return null;
-      }
-      if (resolutionResult.getResolvedMethod().isAbstract()) {
+
+      if (resolutionResult == null || resolutionResult.getResolvedMethod().isAbstract()) {
+        // If there is no super method or the method is abstract it should not be called.
         return null;
       }
       if (resolutionResult.getResolvedHolder().isInterface()) {
@@ -84,17 +81,26 @@ public class VirtualMethodMerger {
     }
 
     public VirtualMethodMerger build(
-        AppView<AppInfoWithLiveness> appView, DexProgramClass target, DexField classIdField) {
-      DexMethod superMethod = superMethod(appView, target);
+        AppView<AppInfoWithLiveness> appView,
+        DexProgramClass target,
+        DexField classIdField,
+        int mergeGroupSize) {
+      // If not all the classes are in the merge group, find the fallback super method to call.
+      DexMethod superMethod = methods.size() < mergeGroupSize ? superMethod(appView, target) : null;
+
       return new VirtualMethodMerger(appView, target, methods, classIdField, superMethod);
     }
   }
 
-  public int getArity() {
-    return methods.iterator().next().getReference().getArity();
+  public DexMethod getMethodReference() {
+    return methods.iterator().next().getReference();
   }
 
-  private DexMethod moveMethod(ProgramMethod oldMethod) {
+  public int getArity() {
+    return getMethodReference().getArity();
+  }
+
+  private DexMethod moveMethod(ClassMethodsBuilder classMethodsBuilder, ProgramMethod oldMethod) {
     DexMethod oldMethodReference = oldMethod.getReference();
     DexMethod method =
         dexItemFactory.createFreshMethodName(
@@ -102,18 +108,14 @@ public class VirtualMethodMerger {
             oldMethod.getHolderType(),
             oldMethodReference.proto,
             target.type,
-            tryMethod -> target.lookupMethod(tryMethod) == null);
-
-    if (oldMethod.getHolderType() == target.type) {
-      target.removeMethod(oldMethod.getReference());
-    }
+            classMethodsBuilder::isFresh);
 
     DexEncodedMethod encodedMethod = oldMethod.getDefinition().toTypeSubstitutedMethod(method);
     MethodAccessFlags flags = encodedMethod.accessFlags;
     flags.unsetProtected();
     flags.unsetPublic();
     flags.setPrivate();
-    target.addDirectMethod(encodedMethod);
+    classMethodsBuilder.addDirectMethod(encodedMethod);
 
     return encodedMethod.method;
   }
@@ -127,24 +129,26 @@ public class VirtualMethodMerger {
     return flags;
   }
 
-
   /**
    * If there is only a single method that does not override anything then it is safe to just move
    * it to the target type if it is not already in it.
    */
-  public void mergeTrivial(HorizontalClassMergerGraphLens.Builder lensBuilder) {
-    ProgramMethod method = methods.iterator().next();
+  public void mergeTrivial(
+      ClassMethodsBuilder classMethodsBuilder, HorizontalClassMergerGraphLens.Builder lensBuilder) {
+    DexEncodedMethod method = methods.iterator().next().getDefinition();
 
     if (method.getHolderType() != target.type) {
       // If the method is not in the target type, move it and record it in the lens.
-      DexEncodedMethod newMethod =
-          method.getDefinition().toRenamedHolderMethod(target.type, dexItemFactory);
-      target.addVirtualMethod(newMethod);
-      lensBuilder.moveMethod(method.getReference(), newMethod.getReference());
+      DexMethod originalReference = method.getReference();
+      method = method.toRenamedHolderMethod(target.type, dexItemFactory);
+      lensBuilder.moveMethod(originalReference, method.getReference());
     }
+
+    classMethodsBuilder.addVirtualMethod(method);
   }
 
   public void merge(
+      ClassMethodsBuilder classMethodsBuilder,
       HorizontalClassMergerGraphLens.Builder lensBuilder,
       FieldAccessInfoCollectionModifier.Builder fieldAccessChangesBuilder,
       Reference2IntMap classIdentifiers) {
@@ -153,7 +157,7 @@ public class VirtualMethodMerger {
 
     // Handle trivial merges.
     if (superMethod == null && methods.size() == 1) {
-      mergeTrivial(lensBuilder);
+      mergeTrivial(classMethodsBuilder, lensBuilder);
       return;
     }
 
@@ -165,7 +169,7 @@ public class VirtualMethodMerger {
         CfVersion methodVersion = method.getDefinition().getClassFileVersion();
         classFileVersion = CfVersion.maxAllowNull(classFileVersion, methodVersion);
       }
-      DexMethod newMethod = moveMethod(method);
+      DexMethod newMethod = moveMethod(classMethodsBuilder, method);
       lensBuilder.mapMethod(newMethod, newMethod);
       lensBuilder.mapMethodInverse(method.getReference(), newMethod);
       classIdToMethodMap.put(classIdentifiers.getInt(method.getHolderType()), newMethod);
@@ -181,7 +185,7 @@ public class VirtualMethodMerger {
             null,
             originalMethodReference.proto,
             originalMethodReference.getHolderType(),
-            tryMethod -> target.lookupMethod(tryMethod) == null);
+            classMethodsBuilder::isFresh);
 
     DexMethod newMethodReference =
         dexItemFactory.createMethod(target.type, templateReference.proto, templateReference.name);
@@ -209,7 +213,7 @@ public class VirtualMethodMerger {
     }
     lensBuilder.recordExtraOriginalSignature(bridgeMethodReference, newMethodReference);
 
-    target.addVirtualMethod(newMethod);
+    classMethodsBuilder.addVirtualMethod(newMethod);
 
     fieldAccessChangesBuilder.fieldReadByMethod(classIdField, newMethod.method);
   }
