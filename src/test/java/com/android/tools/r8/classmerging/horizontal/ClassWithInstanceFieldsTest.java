@@ -10,12 +10,12 @@ import static org.hamcrest.MatcherAssert.assertThat;
 
 import com.android.tools.r8.NeverClassInline;
 import com.android.tools.r8.NeverInline;
-import com.android.tools.r8.NoVerticalClassMerging;
 import com.android.tools.r8.TestParameters;
 import org.junit.Test;
 
-public class NoAbstractClassesTest extends HorizontalClassMergingTestBase {
-  public NoAbstractClassesTest(TestParameters parameters, boolean enableHorizontalClassMerging) {
+public class ClassWithInstanceFieldsTest extends HorizontalClassMergingTestBase {
+  public ClassWithInstanceFieldsTest(
+      TestParameters parameters, boolean enableHorizontalClassMerging) {
     super(parameters, enableHorizontalClassMerging);
   }
 
@@ -26,69 +26,61 @@ public class NoAbstractClassesTest extends HorizontalClassMergingTestBase {
         .addKeepMainRule(Main.class)
         .addOptionsModification(
             options -> options.enableHorizontalClassMerging = enableHorizontalClassMerging)
-        .enableInliningAnnotations()
         .enableNeverClassInliningAnnotations()
-        .enableNoVerticalClassMergingAnnotations()
+        .enableInliningAnnotations()
         .setMinApi(parameters.getApiLevel())
+        .addHorizontallyMergedClassesInspectorIf(
+            enableHorizontalClassMerging, inspector -> inspector.assertMergedInto(B.class, A.class))
         .run(parameters.getRuntime(), Main.class)
-        .assertSuccessWithOutputLines("bar", "foo c", "foo d", "foo c")
+        .assertSuccessWithOutputLines("A. field: 5, v: a, j: 1", "B. field: b, v: 2, j: 3")
         .inspect(
             codeInspector -> {
               assertThat(codeInspector.clazz(A.class), isPresent());
-              assertThat(codeInspector.clazz(B.class), isPresent());
-              assertThat(codeInspector.clazz(C.class), isPresent());
               assertThat(
-                  codeInspector.clazz(D.class), notIf(isPresent(), enableHorizontalClassMerging));
+                  codeInspector.clazz(B.class), notIf(isPresent(), enableHorizontalClassMerging));
             });
   }
 
-  @NoVerticalClassMerging
-  public abstract static class A {
-    public abstract void foo();
+  @NeverClassInline
+  public static class A {
+    public int field;
+    public String v;
+    public int j;
+
+    public A(int field, String v, int j) {
+      this.field = field;
+      this.v = v;
+      this.j = j;
+    }
+
+    @NeverInline
+    public void foo() {
+      System.out.println("A. field: " + field + ", v: " + v + ", j: " + j);
+    }
   }
 
   @NeverClassInline
   public static class B {
-    @NeverInline
-    public void bar() {
-      System.out.println("bar");
+    public String field;
+    public int v;
+    public int j;
+
+    public B(String field, int v, int j) {
+      this.field = field;
+      this.v = v;
+      this.j = j;
     }
-  }
 
-  @NeverClassInline
-  public static class C extends A {
-
-    @Override
     @NeverInline
     public void foo() {
-      System.out.println("foo c");
-    }
-  }
-
-  @NeverClassInline
-  public static class D extends A {
-
-    @Override
-    @NeverInline
-    public void foo() {
-      System.out.println("foo d");
+      System.out.println("B. field: " + field + ", v: " + v + ", j: " + j);
     }
   }
 
   public static class Main {
-    @NeverInline
-    public static void foo(A a) {
-      a.foo();
-    }
-
     public static void main(String[] args) {
-      new B().bar();
-      C c = new C();
-
-      // This test also checks that the synthesized C#foo does not try to call the abstract A#foo.
-      foo(c);
-      foo(new D());
-      c.foo();
+      new A(5, "a", 1).foo();
+      new B("b", 2, 3).foo();
     }
   }
 }

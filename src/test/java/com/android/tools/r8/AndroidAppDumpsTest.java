@@ -8,6 +8,7 @@ import static org.junit.Assert.assertTrue;
 
 import com.android.tools.r8.DataResourceProvider.Visitor;
 import com.android.tools.r8.ProgramResource.Kind;
+import com.android.tools.r8.dex.Marker.Tool;
 import com.android.tools.r8.origin.Origin;
 import com.android.tools.r8.utils.AndroidApiLevel;
 import com.android.tools.r8.utils.AndroidApp;
@@ -42,6 +43,7 @@ public class AndroidAppDumpsTest extends TestBase {
   @Test
   public void test() throws Exception {
     InternalOptions options = new InternalOptions();
+    options.dumpOptions = DumpOptions.builder(Tool.D8).build();
 
     String dataResourceName = "my-resource.bin";
     byte[] dataResourceData = new byte[] {1, 2, 3};
@@ -67,7 +69,7 @@ public class AndroidAppDumpsTest extends TestBase {
             .build();
 
     Path dumpFile = temp.newFolder().toPath().resolve("dump.zip");
-    appIn.dump(dumpFile, options);
+    appIn.dump(dumpFile, options.dumpOptions, options.reporter, options.dexItemFactory());
 
     AndroidApp appOut = AndroidApp.builder(options.reporter).addDump(dumpFile).build();
     assertEquals(1, appOut.getClassProgramResourcesForTesting().size());

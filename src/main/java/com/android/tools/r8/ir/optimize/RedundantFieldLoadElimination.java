@@ -15,6 +15,7 @@ import com.android.tools.r8.graph.DexType;
 import com.android.tools.r8.graph.FieldResolutionResult.SuccessfulFieldResolutionResult;
 import com.android.tools.r8.graph.ProgramMethod;
 import com.android.tools.r8.graph.classmerging.VerticallyMergedClasses;
+import com.android.tools.r8.horizontalclassmerging.HorizontallyMergedClasses;
 import com.android.tools.r8.ir.analysis.type.TypeAnalysis;
 import com.android.tools.r8.ir.analysis.value.SingleValue;
 import com.android.tools.r8.ir.code.BasicBlock;
@@ -282,12 +283,7 @@ public class RedundantFieldLoadElimination {
             killAllNonFinalActiveFields();
           } else if (instruction.isNewInstance()) {
             NewInstance newInstance = instruction.asNewInstance();
-            if (newInstance.clazz.classInitializationMayHaveSideEffects(
-                appView,
-                // Types that are a super type of `context` are guaranteed to be initialized
-                // already.
-                type -> appView.isSubtype(method.getHolderType(), type).isTrue(),
-                Sets.newIdentityHashSet())) {
+            if (newInstance.clazz.classInitializationMayHaveSideEffectsInContext(appView, method)) {
               killAllNonFinalActiveFields();
             }
           } else {
@@ -345,8 +341,11 @@ public class RedundantFieldLoadElimination {
 
   private boolean verifyWasInstanceInitializer() {
     VerticallyMergedClasses verticallyMergedClasses = appView.verticallyMergedClasses();
+    HorizontallyMergedClasses horizontallyMergedClasses = appView.horizontallyMergedClasses();
     assert verticallyMergedClasses != null;
-    assert verticallyMergedClasses.isTarget(method.getHolderType());
+    assert horizontallyMergedClasses != null;
+    assert verticallyMergedClasses.isTarget(method.getHolderType())
+        || horizontallyMergedClasses.isMergeTarget(method.getHolderType());
     assert appView
         .dexItemFactory()
         .isConstructor(appView.graphLens().getOriginalMethodSignature(method.getReference()));

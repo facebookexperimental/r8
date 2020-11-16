@@ -38,6 +38,7 @@ def make_parser():
     help='Compiler version to use (default read from dump version file).'
       'Valid arguments are:'
       '  "master" to run from your own tree,'
+      '  "source" to run from build classes directly,'
       '  "X.Y.Z" to run a specific version, or'
       '  <hash> to run that hash from master.',
     default=None)
@@ -87,6 +88,12 @@ def make_parser():
     help='Set desugared-library (default set from dump)',
     default=None)
   parser.add_argument(
+    '--disable-desugared-lib',
+    help='Disable desugared-libary if it will be set from dump',
+    default=False,
+    action='store_true'
+  )
+  parser.add_argument(
     '--loop',
     help='Run the compilation in a loop',
     default=False,
@@ -130,6 +137,14 @@ class Dump(object):
 
   def desugared_library_json(self):
     return self.if_exists('desugared-library.json')
+
+  def proguard_input_map(self):
+    if self.if_exists('proguard_input.config'):
+      print "Unimplemented: proguard_input configuration."
+
+  def main_dex_resource(self):
+    if self.if_exists('main-dex-list.txt'):
+      print "Unimplemented: main-dex-list."
 
   def build_properties_file(self):
     return self.if_exists('build.properties')
@@ -209,6 +224,8 @@ def determine_class_file(args, build_properties):
 def download_distribution(args, version, temp):
   if version == 'master':
     return utils.R8_JAR if args.nolib else utils.R8LIB_JAR
+  if version == 'source':
+    return '%s:%s' % (utils.BUILD_JAVA_MAIN_DIR, utils.ALL_DEPS_JAR)
   name = 'r8.jar' if args.nolib else 'r8lib.jar'
   source = archive.GetUploadDestination(version, name, is_hash(version))
   dest = os.path.join(temp, 'r8.jar')
@@ -219,12 +236,14 @@ def prepare_wrapper(dist, temp):
   wrapper_file = os.path.join(
       utils.REPO_ROOT,
       'src/main/java/com/android/tools/r8/utils/CompileDumpCompatR8.java')
-  subprocess.check_output([
+  cmd = [
     jdk.GetJavacExecutable(),
     wrapper_file,
     '-d', temp,
     '-cp', dist,
-    ])
+  ]
+  utils.PrintCmd(cmd)
+  subprocess.check_output(cmd)
   return temp
 
 def is_hash(version):
@@ -248,6 +267,8 @@ def run1(out, args, otherargs):
     min_api = determine_min_api(args, build_properties)
     classfile = determine_class_file(args, build_properties)
     jar = args.r8_jar if args.r8_jar else download_distribution(args, version, temp)
+    if ':' not in jar and not os.path.exists(jar):
+      error("Distribution does not exist: " + jar)
     wrapper_dir = prepare_wrapper(jar, temp)
     cmd = [jdk.GetJavaExecutable()]
     if args.debug_agent:
@@ -261,6 +282,8 @@ def run1(out, args, otherargs):
       cmd.append('-ea')
     if args.printtimes:
       cmd.append('-Dcom.android.tools.r8.printtimes=1')
+    if hasattr(args, 'properties'):
+      cmd.extend(args.properties);
     cmd.extend(['-cp', '%s:%s' % (wrapper_dir, jar)])
     if compiler == 'd8':
       cmd.append('com.android.tools.r8.D8')
@@ -278,7 +301,7 @@ def run1(out, args, otherargs):
       cmd.extend(['--lib', dump.library_jar()])
     if dump.classpath_jar():
       cmd.extend(['--classpath', dump.classpath_jar()])
-    if dump.desugared_library_json():
+    if dump.desugared_library_json() and not args.disable_desugared_lib:
       cmd.extend(['--desugared-lib', dump.desugared_library_json()])
     if compiler != 'd8' and dump.config_file():
       if hasattr(args, 'config_file_consumer') and args.config_file_consumer:
@@ -299,7 +322,7 @@ def run1(out, args, otherargs):
       return 0
     except subprocess.CalledProcessError, e:
       print e.output
-      if not args.nolib:
+      if not args.nolib and version != 'source':
         stacktrace = os.path.join(temp, 'stacktrace')
         open(stacktrace, 'w+').write(e.output)
         local_map = utils.R8LIB_MAP if version == 'master' else None

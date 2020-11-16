@@ -7,12 +7,12 @@ import adb
 import apk_masseur
 import compiledump
 import gradle
-import jdk
 import optparse
 import os
 import shutil
 import sys
 import time
+import update_prebuilds_in_android
 import utils
 import zipfile
 
@@ -38,14 +38,27 @@ class App(object):
     defaults = {
       'id': None,
       'name': None,
+      'collections': [],
       'dump_app': None,
       'apk_app': None,
+      'dump_test': None,
       'apk_test': None,
       'skip': False,
       'url': None,  # url is not used but nice to have for updating apps
       'revision': None,
       'folder': None,
       'skip_recompilation': False,
+      'compiler_properties': [],
+    }
+    # This below does not work in python3
+    defaults.update(fields.items())
+    self.__dict__ = defaults
+
+
+class AppCollection(object):
+  def __init__(self, fields):
+    defaults = {
+      'name': None
     }
     # This below does not work in python3
     defaults.update(fields.items())
@@ -89,8 +102,6 @@ APPS = [
     'url': 'https://github.com/christofferqa/AntennaPod.git',
     'revision': '77e94f4783a16abe9cc5b78dc2d2b2b1867d8c06',
     'folder': 'antennapod',
-    # TODO(b/172450929): Fix recompilation
-    'skip_recompilation': True
   }),
   App({
     'id': 'com.example.applymapping',
@@ -112,8 +123,9 @@ APPS = [
     'url': 'https://github.com/mkj-gram/chanu.git',
     'revision': '6e53458f167b6d78398da60c20fd0da01a232617',
     'folder': 'chanu',
-    # TODO(b/172535996): Fix recompilation
-    'skip_recompilation': True
+    # The app depends on a class file that has access flags interface but
+    # not abstract
+    'compiler_properties': ['-Dcom.android.tools.r8.allowInvalidCfAccessFlags=true']
   }),
   # TODO(b/172539375): Monkey runner fails on recompilation.
   App({
@@ -131,14 +143,12 @@ APPS = [
     'dump_app': 'dump_app.zip',
     'apk_app': 'app-debug.apk',
     # TODO(b/172549283): Compiling tests fails
-    'id_test': 'com.example.applymapping.test',
+    'id_test': 'com.google.samples.apps.sunflower.test',
     'dump_test': 'dump_test.zip',
     'apk_test': 'app-debug-androidTest.apk',
     'url': 'https://github.com/android/sunflower',
     'revision': '0c4c88fdad2a74791199dffd1a6559559b1dbd4a',
     'folder': 'sunflower',
-    # TODO(b/172548728): Fix recompilation
-    'skip_recompilation': True
   }),
   # TODO(b/172565385): Monkey runner fails on recompilation
   App({
@@ -151,6 +161,175 @@ APPS = [
     'folder': 'iosched',
   }),
   App({
+    'id': 'fr.neamar.kiss',
+    'name': 'KISS',
+    'dump_app': 'dump_app.zip',
+    'apk_app': 'app-release.apk',
+    # TODO(b/172569220): Running tests fails due to missing keep rules
+    'id_test': 'fr.neamar.kiss.test',
+    'dump_test': 'dump_test.zip',
+    'apk_test': 'app-release-androidTest.apk',
+    'url': 'https://github.com/Neamar/KISS',
+    'revision': '8ccffaadaf0d0b8fc4418ed2b4281a0935d3d971',
+    'folder': 'kiss',
+  }),
+  # TODO(b/172577344): Monkey runner not working.
+  App({
+    'id': 'io.github.hidroh.materialistic',
+    'name': 'materialistic',
+    'dump_app': 'dump_app.zip',
+    'apk_app': 'app-release.apk',
+    'url': 'https://github.com/christofferqa/materialistic.git',
+    'revision': '2b2b2ee25ce9e672d5aab1dc90a354af1522b1d9',
+    'folder': 'materialistic',
+  }),
+  App({
+    'id': 'com.avjindersinghsekhon.minimaltodo',
+    'name': 'MinimalTodo',
+    'dump_app': 'dump_app.zip',
+    'apk_app': 'app-release.apk',
+    'url': 'https://github.com/christofferqa/Minimal-Todo',
+    'revision': '9d8c73746762cd376b718858ec1e8783ca07ba7c',
+    'folder': 'minimal-todo',
+  }),
+  App({
+    'id': 'net.nurik.roman.muzei',
+    'name': 'muzei',
+    'dump_app': 'dump_app.zip',
+    'apk_app': 'muzei-release.apk',
+    'url': 'https://github.com/romannurik/muzei',
+    'revision': '9eac6e98aebeaf0ae40bdcd85f16dd2886551138',
+    'folder': 'muzei',
+  }),
+  # TODO(b/172806281): Monkey runner does not work.
+  App({
+    'id': 'org.schabi.newpipe',
+    'name': 'NewPipe',
+    'dump_app': 'dump_app.zip',
+    'apk_app': 'app-release-unsigned.apk',
+    'url': 'https://github.com/TeamNewPipe/NewPipe',
+    'revision': 'f4435f90313281beece70c544032f784418d85fa',
+    'folder': 'newpipe',
+  }),
+  # TODO(b/172806808): Monkey runner does not work.
+  App({
+    'id': 'io.rover.app.debug',
+    'name': 'Rover',
+    'dump_app': 'dump_app.zip',
+    'apk_app': 'example-app-release-unsigned.apk',
+    'url': 'https://github.com/RoverPlatform/rover-android',
+    'revision': '94342117097770ea3ca2c6df6ab496a1a55c3ce7',
+    'folder': 'rover-android',
+  }),
+  App({
+    'id': 'io.rover.app.debug',
+    'name': 'Rover',
+    'dump_app': 'dump_app.zip',
+    'apk_app': 'example-app-release-unsigned.apk',
+    'url': 'https://github.com/RoverPlatform/rover-android',
+    'revision': '94342117097770ea3ca2c6df6ab496a1a55c3ce7',
+    'folder': 'rover-android',
+  }),
+  # TODO(b/172808159): Monkey runner does not work
+  App({
+    'id': 'com.google.android.apps.santatracker',
+    'name': 'SantaTracker',
+    'dump_app': 'dump_app.zip',
+    'apk_app': 'santa-tracker-release.apk',
+    'url': 'https://github.com/christofferqa/santa-tracker-android',
+    'revision': '8dee74be7d9ee33c69465a07088c53087d24a6dd',
+    'folder': 'santa-tracker',
+  }),
+  App({
+    'id': 'org.thoughtcrime.securesms',
+    'name': 'Signal',
+    'dump_app': 'dump_app.zip',
+    'apk_app': 'Signal-Android-play-prod-universal-release-4.76.2.apk',
+    # TODO(b/172812839): Instrumentation test fails.
+    'id_test': 'org.thoughtcrime.securesms.test',
+    'dump_test': 'dump_test.zip',
+    'apk_test': 'Signal-Android-play-prod-release-androidTest.apk',
+    'url': 'https://github.com/signalapp/Signal-Android',
+    'revision': '91ca19f294362ccee2c2b43c247eba228e2b30a1',
+    'folder': 'signal-android',
+  }),
+  # TODO(b/172815827): Monkey runner does not work
+  App({
+    'id': 'com.simplemobiletools.calendar.pro',
+    'name': 'Simple-Calendar',
+    'dump_app': 'dump_app.zip',
+    'apk_app': 'calendar-release.apk',
+    'url': 'https://github.com/SimpleMobileTools/Simple-Calendar',
+    'revision': '906209874d0a091c7fce5a57972472f272d6b068',
+    'folder': 'simple-calendar',
+  }),
+  # TODO(b/172815534): Monkey runner does not work
+  App({
+    'id': 'com.simplemobiletools.camera.pro',
+    'name': 'Simple-Camera',
+    'dump_app': 'dump_app.zip',
+    'apk_app': 'camera-release.apk',
+    'url': 'https://github.com/SimpleMobileTools/Simple-Camera',
+    'revision': 'ebf9820c51e960912b3238287e30a131244fdee6',
+    'folder': 'simple-camera',
+  }),
+  App({
+    'id': 'com.simplemobiletools.filemanager.pro',
+    'name': 'Simple-File-Manager',
+    'dump_app': 'dump_app.zip',
+    'apk_app': 'file-manager-release.apk',
+    'url': 'https://github.com/SimpleMobileTools/Simple-File-Manager',
+    'revision': '2b7fa68ea251222cc40cf6d62ad1de260a6f54d9',
+    'folder': 'simple-file-manager',
+  }),
+  App({
+    'id': 'com.simplemobiletools.gallery.pro',
+    'name': 'Simple-Gallery',
+    'dump_app': 'dump_app.zip',
+    'apk_app': 'gallery-326-foss-release.apk',
+    'url': 'https://github.com/SimpleMobileTools/Simple-Gallery',
+    'revision': '564e56b20d33b28d0018c8087ec705beeb60785e',
+    'folder': 'simple-gallery',
+  }),
+  App({
+    'id': 'com.example.sqldelight.hockey',
+    'name': 'SQLDelight',
+    'dump_app': 'dump_app.zip',
+    'apk_app': 'android-release.apk',
+    'url': 'https://github.com/christofferqa/sqldelight',
+    'revision': '2e67a1126b6df05e4119d1e3a432fde51d76cdc8',
+    'folder': 'sqldelight',
+  }),
+  # TODO(b/172824096): Monkey runner does not work.
+  App({
+    'id': 'eu.kanade.tachiyomi',
+    'name': 'Tachiyomi',
+    'dump_app': 'dump_app.zip',
+    'apk_app': 'app-dev-release.apk',
+    'url': 'https://github.com/inorichi/tachiyomi',
+    'revision': '8aa6486bf76ab9a61a5494bee284b1a5e9180bf3',
+    'folder': 'tachiyomi',
+  }),
+  # TODO(b/172862042): Monkey runner does not work.
+  App({
+    'id': 'app.tivi',
+    'name': 'Tivi',
+    'dump_app': 'dump_app.zip',
+    'apk_app': 'app-release.apk',
+    'url': 'https://github.com/chrisbanes/tivi',
+    'revision': '8e2ddd8fe2d343264a66aa1ef8acbd4cc587e8ce',
+    'folder': 'tivi',
+  }),
+  App({
+    'id': 'com.keylesspalace.tusky',
+    'name': 'Tusky',
+    'dump_app': 'dump_app.zip',
+    'apk_app': 'app-blue-release.apk',
+    'url': 'https://github.com/tuskyapp/Tusky',
+    'revision': '814a9b8f9bacf8d26f712b06a0313a3534a2be95',
+    'folder': 'tusky',
+  }),
+  App({
     'id': 'org.wikipedia',
     'name': 'Wikipedia',
     'dump_app': 'dump_app.zip',
@@ -159,6 +338,107 @@ APPS = [
     'revision': '0fa7cad843c66313be8e25790ef084cf1a1fa67e',
     'folder': 'wikipedia',
   }),
+  # TODO(b/173167253): Check if monkey testing works.
+  App({
+    'id': 'androidx.compose.samples.crane',
+    'name': 'compose-crane',
+    'collections': ['compose-samples'],
+    'dump_app': 'dump_app.zip',
+    'apk_app': 'app-release-unsigned.apk',
+    'url': 'https://github.com/android/compose-samples',
+    'revision': '779cf9e187b8ee2c6b620b2abb4524719b3f10f8',
+    'folder': 'android/compose-samples/crane',
+  }),
+  # TODO(b/173167253): Check if monkey testing works.
+  App({
+    'id': 'com.example.jetcaster',
+    'name': 'compose-jetcaster',
+    'collections': ['compose-samples'],
+    'dump_app': 'dump_app.zip',
+    'apk_app': 'app-release-unsigned.apk',
+    'url': 'https://github.com/android/compose-samples',
+    'revision': '779cf9e187b8ee2c6b620b2abb4524719b3f10f8',
+    'folder': 'android/compose-samples/jetcaster',
+    # TODO(b/173176042): Fix recompilation
+    'skip_recompilation': True,
+  }),
+  # TODO(b/173167253): Check if monkey testing works.
+  App({
+    'id': 'com.example.compose.jetchat',
+    'name': 'compose-jetchat',
+    'collections': ['compose-samples'],
+    'dump_app': 'dump_app.zip',
+    'apk_app': 'app-release-unsigned.apk',
+    'url': 'https://github.com/android/compose-samples',
+    'revision': '779cf9e187b8ee2c6b620b2abb4524719b3f10f8',
+    'folder': 'android/compose-samples/jetchat',
+    # TODO(b/173176042): Fix recompilation
+    'skip_recompilation': True,
+  }),
+  # TODO(b/173167253): Check if monkey testing works.
+  App({
+    'id': 'com.example.jetnews',
+    'name': 'compose-jetnews',
+    'collections': ['compose-samples'],
+    'dump_app': 'dump_app.zip',
+    'apk_app': 'app-release-unsigned.apk',
+    'url': 'https://github.com/android/compose-samples',
+    'revision': '779cf9e187b8ee2c6b620b2abb4524719b3f10f8',
+    'folder': 'android/compose-samples/jetnews',
+    # TODO(b/173176042): Fix recompilation
+    'skip_recompilation': True,
+  }),
+  # TODO(b/173167253): Check if monkey testing works.
+  App({
+    'id': 'com.example.jetsnack',
+    'name': 'compose-jetsnack',
+    'collections': ['compose-samples'],
+    'dump_app': 'dump_app.zip',
+    'apk_app': 'app-release-unsigned.apk',
+    'url': 'https://github.com/android/compose-samples',
+    'revision': '779cf9e187b8ee2c6b620b2abb4524719b3f10f8',
+    'folder': 'android/compose-samples/jetsnack',
+  }),
+  # TODO(b/173167253): Check if monkey testing works.
+  App({
+    'id': 'com.example.compose.jetsurvey',
+    'name': 'compose-jetsurvey',
+    'collections': ['compose-samples'],
+    'dump_app': 'dump_app.zip',
+    'apk_app': 'app-release-unsigned.apk',
+    'url': 'https://github.com/android/compose-samples',
+    'revision': '779cf9e187b8ee2c6b620b2abb4524719b3f10f8',
+    'folder': 'android/compose-samples/jetsurvey',
+  }),
+  # TODO(b/173167253): Check if monkey testing works.
+  App({
+    'id': 'com.example.owl',
+    'name': 'compose-owl',
+    'collections': ['compose-samples'],
+    'dump_app': 'dump_app.zip',
+    'apk_app': 'app-release-unsigned.apk',
+    'url': 'https://github.com/android/compose-samples',
+    'revision': '779cf9e187b8ee2c6b620b2abb4524719b3f10f8',
+    'folder': 'android/compose-samples/owl',
+  }),
+  # TODO(b/173167253): Check if monkey testing works.
+  App({
+    'id': 'com.example.compose.rally',
+    'name': 'compose-rally',
+    'collections': ['compose-samples'],
+    'dump_app': 'dump_app.zip',
+    'apk_app': 'app-release-unsigned.apk',
+    'url': 'https://github.com/android/compose-samples',
+    'revision': '779cf9e187b8ee2c6b620b2abb4524719b3f10f8',
+    'folder': 'android/compose-samples/rally',
+  }),
+]
+
+
+APP_COLLECTIONS = [
+  AppCollection({
+    'name': 'compose-samples',
+  })
 ]
 
 
@@ -188,7 +468,11 @@ def is_minified_r8(shrinker):
 
 
 def is_full_r8(shrinker):
-  return '-full' not in shrinker
+  return '-full' in shrinker
+
+
+def version_is_built_jar(version):
+  return version != 'master' and version != 'source'
 
 
 def compute_size_of_dex_files_in_package(path):
@@ -206,6 +490,13 @@ def dump_for_app(app_dir, app):
 
 def dump_test_for_app(app_dir, app):
   return os.path.join(app_dir, app.dump_test)
+
+
+def get_r8_jar(options, temp_dir, shrinker):
+  if (options.version == 'source'):
+    return None
+  return os.path.join(
+      temp_dir, 'r8lib.jar' if is_minified_r8(shrinker) else 'r8.jar')
 
 
 def get_results_for_app(app, options, temp_dir):
@@ -255,7 +546,7 @@ def build_app_and_run_with_shrinker(app, options, temp_dir, app_dir, shrinker,
     app.name,
     shrinker))
   print('To compile locally: '
-        'tools/run_on_as_app.py --shrinker {} --r8-compilation-steps {} '
+        'tools/run_on_app_dump.py --shrinker {} --r8-compilation-steps {} '
         '--app {}'.format(
     shrinker,
     options.r8_compilation_steps,
@@ -263,7 +554,9 @@ def build_app_and_run_with_shrinker(app, options, temp_dir, app_dir, shrinker,
   print('HINT: use --shrinker r8-nolib --no-build if you have a local R8.jar')
   recomp_jar = None
   status = 'success'
-  compilation_steps = 1 if app.skip_recompilation else options.r8_compilation_steps;
+  if options.r8_compilation_steps < 1:
+    return
+  compilation_steps = 1 if app.skip_recompilation else options.r8_compilation_steps
   for compilation_step in range(0, compilation_steps):
     if status != 'success':
       break
@@ -312,7 +605,8 @@ def build_app_and_run_with_shrinker(app, options, temp_dir, app_dir, shrinker,
         app.id, options.emulator_id, app_apk_destination, options.monkey_events,
         options.quiet, is_logging_enabled_for(app, options)) else 'failed'
 
-    if result.get('build_status') == 'success' and options.run_tests:
+    if (result.get('build_status') == 'success'
+        and options.run_tests and app.dump_test):
       if not os.path.isfile(app_apk_destination):
         apk_masseur.masseur(
           original_app_apk, dex=app_jar, resources='META-INF/services/*',
@@ -348,55 +642,55 @@ def build_app_and_run_with_shrinker(app, options, temp_dir, app_dir, shrinker,
 def build_app_with_shrinker(app, options, temp_dir, app_dir, shrinker,
                             compilation_step_index, compilation_steps,
                             prev_recomp_jar):
-  r8jar = os.path.join(
-    temp_dir, 'r8lib.jar' if is_minified_r8(shrinker) else 'r8.jar')
 
   args = AttrDict({
     'dump': dump_for_app(app_dir, app),
-    'r8_jar': r8jar,
+    'r8_jar': get_r8_jar(options, temp_dir, shrinker),
     'ea': False if options.disable_assertions else True,
-    'version': 'master',
+    'version': options.version,
     'compiler': 'r8full' if is_full_r8(shrinker) else 'r8',
     'debug_agent': options.debug_agent,
     'program_jar': prev_recomp_jar,
     'nolib': not is_minified_r8(shrinker),
     'config_file_consumer': remove_print_lines,
+    'properties': app.compiler_properties,
+    'disable_desugared_lib': False,
   })
 
-  compile_result = compiledump.run1(temp_dir, args, [])
-
-  out_jar = os.path.join(temp_dir, "out.jar")
-  out_mapping = os.path.join(temp_dir, "out.jar.map")
   app_jar = os.path.join(
     temp_dir, '{}_{}_{}_dex_out.jar'.format(
       app.name, shrinker, compilation_step_index))
   app_mapping = os.path.join(
     temp_dir, '{}_{}_{}_dex_out.jar.map'.format(
       app.name, shrinker, compilation_step_index))
-
-  if compile_result != 0 or not os.path.isfile(out_jar):
-    assert False, "Compilation of app_jar failed"
-  shutil.move(out_jar, app_jar)
-  shutil.move(out_mapping, app_mapping)
-
   recomp_jar = None
-  if compilation_step_index < compilation_steps - 1:
-    args['classfile'] = True
-    args['min_api'] = "10000"
-    compile_result = compiledump.run1(temp_dir, args, [])
-    if compile_result == 0:
-      recomp_jar = os.path.join(
-        temp_dir, '{}_{}_{}_cf_out.jar'.format(
-          app.name, shrinker, compilation_step_index))
-      shutil.move(out_jar, recomp_jar)
+
+  with utils.TempDir() as compile_temp_dir:
+    compile_result = compiledump.run1(compile_temp_dir, args, [])
+    out_jar = os.path.join(compile_temp_dir, "out.jar")
+    out_mapping = os.path.join(compile_temp_dir, "out.jar.map")
+
+    if compile_result != 0 or not os.path.isfile(out_jar):
+      assert False, 'Compilation of {} failed'.format(dump_for_app(app_dir, app))
+    shutil.move(out_jar, app_jar)
+    shutil.move(out_mapping, app_mapping)
+
+    if compilation_step_index < compilation_steps - 1:
+      args['classfile'] = True
+      args['min_api'] = "10000"
+      args['disable_desugared_lib'] = True
+      compile_result = compiledump.run1(compile_temp_dir, args, [])
+      if compile_result == 0:
+        recomp_jar = os.path.join(
+          temp_dir, '{}_{}_{}_cf_out.jar'.format(
+            app.name, shrinker, compilation_step_index))
+        shutil.move(out_jar, recomp_jar)
 
   return (app_jar, app_mapping, recomp_jar)
 
 
 def build_test_with_shrinker(app, options, temp_dir, app_dir, shrinker,
                              compilation_step_index, mapping):
-  r8jar = os.path.join(
-    temp_dir, 'r8lib.jar' if is_minified_r8(shrinker) else 'r8.jar')
 
   def rewrite_file(file):
     remove_print_lines(file)
@@ -410,9 +704,9 @@ def build_test_with_shrinker(app, options, temp_dir, app_dir, shrinker,
 
   args = AttrDict({
     'dump': dump_test_for_app(app_dir, app),
-    'r8_jar': r8jar,
+    'r8_jar': get_r8_jar(options, temp_dir, shrinker),
     'ea': False if options.disable_assertions else True,
-    'version': 'master',
+    'version': options.version,
     'compiler': 'r8full' if is_full_r8(shrinker) else 'r8',
     'debug_agent': options.debug_agent,
     'nolib': not is_minified_r8(shrinker),
@@ -421,17 +715,16 @@ def build_test_with_shrinker(app, options, temp_dir, app_dir, shrinker,
     'config_file_consumer': rewrite_file
   })
 
-  compile_result = compiledump.run1(temp_dir, args, [])
-
-  out_jar = os.path.join(temp_dir, "out.jar")
   test_jar = os.path.join(
     temp_dir, '{}_{}_{}_test_out.jar'.format(
       app.name, shrinker, compilation_step_index))
 
-  if compile_result != 0 or not os.path.isfile(out_jar):
-    return None
-
-  shutil.move(out_jar, test_jar)
+  with utils.TempDir() as compile_temp_dir:
+    compile_result = compiledump.run1(compile_temp_dir, args, [])
+    out_jar = os.path.join(compile_temp_dir, "out.jar")
+    if compile_result != 0 or not os.path.isfile(out_jar):
+      return None
+    shutil.move(out_jar, test_jar)
 
   return test_jar
 
@@ -538,6 +831,10 @@ def parse_options(argv):
                     help='What app to run on',
                     choices=[app.name for app in APPS],
                     action='append')
+  result.add_option('--app-collection', '--app_collection',
+                    help='What app collection to run',
+                    choices=[collection.name for collection in APP_COLLECTIONS],
+                    action='append')
   result.add_option('--bot',
                     help='Running on bot, use third_party dependency.',
                     default=False,
@@ -610,13 +907,26 @@ def parse_options(argv):
                     help='The shrinkers to use (by default, all are run)',
                     action='append')
   result.add_option('--version',
+                    default='master',
                     help='The version of R8 to use (e.g., 1.4.51)')
   (options, args) = result.parse_args(argv)
-  if options.app:
-    options.apps = [app for app in APPS if app.name in options.app]
+
+  if options.app or options.app_collection:
+    if not options.app:
+      options.app = []
+    if not options.app_collection:
+      options.app_collection = []
+    options.apps = [
+        app
+        for app in APPS
+        if app.name in options.app
+           or any(collection in options.app_collection
+                  for collection in app.collections)]
     del options.app
+    del options.app_collection
   else:
     options.apps = APPS
+
   if options.app_logging_filter:
     for app_name in options.app_logging_filter:
       assert any(app.name == app_name for app in options.apps)
@@ -626,7 +936,7 @@ def parse_options(argv):
   else:
     options.shrinker = [shrinker for shrinker in SHRINKERS]
 
-  if options.hash or options.version:
+  if options.hash or version_is_built_jar(options.version):
     # No need to build R8 if a specific version should be used.
     options.no_build = True
     if 'r8-nolib' in options.shrinker:
@@ -666,16 +976,16 @@ def main(argv):
       as_utils.MoveFile(
         os.path.join(temp_dir, target), os.path.join(temp_dir, 'r8lib.jar'),
         quiet=options.quiet)
-    elif options.version:
-      # Download r8-<version>.jar from
-      # https://storage.googleapis.com/r8-releases/raw/.
-      target = 'r8-{}.jar'.format(options.version)
-      update_prebuilds_in_android.download_version(
-        temp_dir, 'com/android/tools/r8/' + options.version, target)
-      as_utils.MoveFile(
-        os.path.join(temp_dir, target), os.path.join(temp_dir, 'r8lib.jar'),
-        quiet=options.quiet)
-    else:
+    elif version_is_built_jar(options.version):
+        # Download r8-<version>.jar from
+        # https://storage.googleapis.com/r8-releases/raw/.
+        target = 'r8-{}.jar'.format(options.version)
+        update_prebuilds_in_android.download_version(
+          temp_dir, 'com/android/tools/r8/' + options.version, target)
+        as_utils.MoveFile(
+          os.path.join(temp_dir, target), os.path.join(temp_dir, 'r8lib.jar'),
+          quiet=options.quiet)
+    elif options.version == 'master':
       if not (options.no_build or options.golem):
         gradle.RunGradle(['r8', '-Pno_internal'])
         build_r8lib = False
@@ -699,7 +1009,12 @@ def main(argv):
         continue
       result_per_shrinker_per_app.append(
         (app, get_results_for_app(app, options, temp_dir)))
-    return log_results_for_apps(result_per_shrinker_per_app, options)
+    errors = log_results_for_apps(result_per_shrinker_per_app, options)
+    if errors > 0:
+      dest = 'gs://r8-test-results/r8-libs/' + str(int(time.time()))
+      utils.upload_file_to_cloud_storage(os.path.join(temp_dir, 'r8lib.jar'), dest)
+      print('R8lib saved to %s' % dest)
+    return errors
 
 
 def success(message):

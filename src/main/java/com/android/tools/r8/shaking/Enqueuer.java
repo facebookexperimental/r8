@@ -208,8 +208,8 @@ public class Enqueuer {
 
   private final FieldAccessInfoCollectionImpl fieldAccessInfoCollection =
       new FieldAccessInfoCollectionImpl();
-  private final MethodAccessInfoCollection.SortedBuilder methodAccessInfoCollection =
-      MethodAccessInfoCollection.sortedBuilder();
+  private final MethodAccessInfoCollection.IdentityBuilder methodAccessInfoCollection =
+      MethodAccessInfoCollection.identityBuilder();
   private final ObjectAllocationInfoCollectionImpl.Builder objectAllocationInfoCollection;
   private final Map<DexCallSite, ProgramMethodSet> callSites = new IdentityHashMap<>();
 
@@ -271,6 +271,8 @@ public class Enqueuer {
   /** Set of types that was pruned during the first round of tree shaking. */
   private Set<DexType> initialPrunedTypes;
 
+  private final Set<DexType> noClassMerging = Sets.newIdentityHashSet();
+
   /** Mapping from each unused interface to the set of live types that implements the interface. */
   private final Map<DexProgramClass, Set<DexProgramClass>> unusedInterfaceTypes =
       new IdentityHashMap<>();
@@ -307,12 +309,6 @@ public class Enqueuer {
    * Set of fields that belong to live classes and can be reached by invokes. These need to be kept.
    */
   private final LiveFieldsSet liveFields;
-
-  /**
-   * Set of service types (from META-INF/services/) that may have been instantiated reflectively via
-   * ServiceLoader.load() or ServiceLoader.loadInstalled().
-   */
-  private final Set<DexType> instantiatedAppServices = Sets.newIdentityHashSet();
 
   /** A queue of items that need processing. Different items trigger different actions. */
   private final EnqueuerWorklist workList;
@@ -1360,6 +1356,7 @@ public class Enqueuer {
 
     FieldResolutionResult resolutionResult = resolveField(fieldReference);
     if (resolutionResult.isFailedOrUnknownResolution()) {
+      noClassMerging.add(fieldReference.getHolderType());
       return;
     }
 
@@ -1410,6 +1407,7 @@ public class Enqueuer {
 
     FieldResolutionResult resolutionResult = resolveField(fieldReference);
     if (resolutionResult.isFailedOrUnknownResolution()) {
+      noClassMerging.add(fieldReference.getHolderType());
       return;
     }
 
@@ -1460,6 +1458,7 @@ public class Enqueuer {
     if (resolutionResult.isFailedOrUnknownResolution()) {
       // Must mark the field as targeted even if it does not exist.
       markFieldAsTargeted(fieldReference, currentMethod);
+      noClassMerging.add(fieldReference.getHolderType());
       return;
     }
 
@@ -1518,6 +1517,7 @@ public class Enqueuer {
     if (resolutionResult.isFailedOrUnknownResolution()) {
       // Must mark the field as targeted even if it does not exist.
       markFieldAsTargeted(fieldReference, currentMethod);
+      noClassMerging.add(fieldReference.getHolderType());
       return;
     }
 
@@ -3242,7 +3242,6 @@ public class Enqueuer {
                 ? Sets.union(initialMissingTypes, missingTypes)
                 : missingTypes,
             SetUtils.mapIdentityHashSet(liveTypes.getItems(), DexProgramClass::getType),
-            Collections.unmodifiableSet(instantiatedAppServices),
             Enqueuer.toDescriptorSet(targetedMethods.getItems()),
             Collections.unmodifiableSet(failedResolutionTargets),
             Collections.unmodifiableSet(bootstrapMethods),
@@ -3268,7 +3267,7 @@ public class Enqueuer {
             rootSet.neverReprocess,
             rootSet.alwaysClassInline,
             rootSet.neverClassInline,
-            rootSet.noUnusedInterfaceRemoval,
+            noClassMerging,
             rootSet.noVerticalClassMerging,
             rootSet.noHorizontalClassMerging,
             rootSet.noStaticClassMerging,
@@ -3925,6 +3924,11 @@ public class Enqueuer {
       } else if (identifierTypeLookupResult.isTypeInitializedFromUse()) {
         markDirectAndIndirectClassInitializersAsLive(clazz);
       }
+      // To ensure we are not moving the class because we cannot prune it when there is a reflective
+      // use of it.
+      if (!keepInfo.getClassInfo(clazz).isPinned()) {
+        keepInfo.pinClass(clazz);
+      }
     } else if (referencedItem.isDexField()) {
       DexField field = referencedItem.asDexField();
       DexProgramClass clazz = getProgramClassOrNull(field.holder);
@@ -4200,8 +4204,6 @@ public class Enqueuer {
   }
 
   private void handleServiceInstantiation(DexType serviceType, KeepReason reason) {
-    instantiatedAppServices.add(serviceType);
-
     List<DexType> serviceImplementationTypes =
         appView.appServices().serviceImplementationsFor(serviceType);
     for (DexType serviceImplementationType : serviceImplementationTypes) {

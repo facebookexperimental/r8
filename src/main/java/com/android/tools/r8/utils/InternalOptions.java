@@ -11,6 +11,7 @@ import com.android.tools.r8.DataResourceConsumer;
 import com.android.tools.r8.DesugarGraphConsumer;
 import com.android.tools.r8.DexFilePerClassFileConsumer;
 import com.android.tools.r8.DexIndexedConsumer;
+import com.android.tools.r8.DumpOptions;
 import com.android.tools.r8.FeatureSplit;
 import com.android.tools.r8.ProgramConsumer;
 import com.android.tools.r8.StringConsumer;
@@ -40,6 +41,7 @@ import com.android.tools.r8.graph.DexType;
 import com.android.tools.r8.graph.EnumValueInfoMapCollection;
 import com.android.tools.r8.graph.ProgramMethod;
 import com.android.tools.r8.graph.classmerging.HorizontallyMergedLambdaClasses;
+import com.android.tools.r8.graph.classmerging.StaticallyMergedClasses;
 import com.android.tools.r8.graph.classmerging.VerticallyMergedClasses;
 import com.android.tools.r8.horizontalclassmerging.HorizontallyMergedClasses;
 import com.android.tools.r8.inspector.internal.InspectorImpl;
@@ -227,6 +229,7 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
   public boolean enableNeverMergePrefixes = true;
   public Set<String> neverMergePrefixes = ImmutableSet.of("j$.");
 
+  public boolean classpathInterfacesMayHaveStaticInitialization = false;
   public boolean libraryInterfacesMayHaveStaticInitialization = false;
 
   // Optimization-related flags. These should conform to -dontoptimize and disableAllOptimizations.
@@ -235,6 +238,7 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
       System.getProperty("com.android.tools.r8.fieldBitAccessAnalysis") != null;
   public boolean enableStaticClassMerging = true;
   public boolean enableHorizontalClassMerging = true;
+  public boolean enableHorizontalClassMergingOfKotlinLambdas = true;
   public boolean enableVerticalClassMerging = true;
   public boolean enableArgumentRemoval = true;
   public boolean enableUnusedInterfaceRemoval = true;
@@ -332,6 +336,9 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
 
   // Boolean value indicating that byte code pass through may be enabled.
   public boolean enableCfByteCodePassThrough = false;
+
+  // Contain the contents of the build properties file from the compiler command.
+  public DumpOptions dumpOptions;
 
   // Hidden marker for classes.dex
   private boolean hasMarker = false;
@@ -1176,6 +1183,8 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     // b/172508621
     public boolean sortMethodsOnCfOutput =
         System.getProperty("com.android.tools.r8.sortMethodsOnCfWriting") != null;
+    public boolean allowDesugaredInput =
+        System.getProperty("com.android.tools.r8.allowDesugaredInput") != null;
   }
 
   public static class CallSiteOptimizationOptions {
@@ -1274,6 +1283,9 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     public BiConsumer<DexItemFactory, HorizontallyMergedLambdaClasses>
         horizontallyMergedLambdaClassesConsumer = ConsumerUtils.emptyBiConsumer();
 
+    public BiConsumer<DexItemFactory, StaticallyMergedClasses> staticallyMergedClassesConsumer =
+        ConsumerUtils.emptyBiConsumer();
+
     public BiConsumer<DexItemFactory, EnumValueInfoMapCollection> unboxedEnumsConsumer =
         ConsumerUtils.emptyBiConsumer();
 
@@ -1338,6 +1350,8 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     public boolean forceIRForCfToCfDesugar =
         System.getProperty("com.android.tools.r8.forceIRForCfToCfDesugar") != null;
     public boolean disableMappingToOriginalProgramVerification = false;
+    public boolean allowInvalidCfAccessFlags =
+        System.getProperty("com.android.tools.r8.allowInvalidCfAccessFlags") != null;
 
     // Flag to allow processing of resources in D8. A data resource consumer still needs to be
     // specified.
@@ -1425,7 +1439,7 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
 
   public boolean canUseConstClassInstructions(CfVersion cfVersion) {
     assert isGeneratingClassFiles();
-    return cfVersion.isGreaterThanOrEqual(requiredCfVersionForConstClassInstructions());
+    return cfVersion.isGreaterThanOrEqualTo(requiredCfVersionForConstClassInstructions());
   }
 
   public CfVersion requiredCfVersionForConstClassInstructions() {

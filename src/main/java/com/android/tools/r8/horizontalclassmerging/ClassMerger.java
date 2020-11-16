@@ -4,6 +4,8 @@
 
 package com.android.tools.r8.horizontalclassmerging;
 
+import static com.google.common.base.Predicates.not;
+
 import com.android.tools.r8.dex.Constants;
 import com.android.tools.r8.graph.AppView;
 import com.android.tools.r8.graph.DexAnnotationSet;
@@ -22,7 +24,6 @@ import com.android.tools.r8.shaking.AppInfoWithLiveness;
 import com.android.tools.r8.shaking.FieldAccessInfoCollectionModifier;
 import com.android.tools.r8.utils.MethodSignatureEquivalence;
 import com.google.common.base.Equivalence.Wrapper;
-import com.google.common.base.Predicates;
 import com.google.common.collect.Iterables;
 import it.unimi.dsi.fastutil.objects.Reference2IntMap;
 import it.unimi.dsi.fastutil.objects.Reference2IntOpenHashMap;
@@ -52,6 +53,7 @@ public class ClassMerger {
   private final ClassMethodsBuilder classMethodsBuilder = new ClassMethodsBuilder();
   private final Reference2IntMap<DexType> classIdentifiers = new Reference2IntOpenHashMap<>();
   private final ClassStaticFieldsMerger classStaticFieldsMerger;
+  private final ClassInstanceFieldsMerger classInstanceFieldsMerger;
   private final Collection<VirtualMethodMerger> virtualMethodMergers;
   private final Collection<ConstructorMerger> constructorMergers;
   private final DexField classIdField;
@@ -77,6 +79,7 @@ public class ClassMerger {
 
     this.dexItemFactory = appView.dexItemFactory();
     this.classStaticFieldsMerger = new ClassStaticFieldsMerger(appView, lensBuilder, target);
+    this.classInstanceFieldsMerger = new ClassInstanceFieldsMerger(lensBuilder, target);
 
     buildClassIdentifierMap();
   }
@@ -182,22 +185,26 @@ public class ClassMerger {
     toMergeGroup.forEach(clazz -> clazz.setStaticFields(null));
   }
 
-  void fixFinal() {
-    if (Iterables.any(toMergeGroup, Predicates.not(DexProgramClass::isFinal))) {
-      target.accessFlags.demoteFromFinal();
+  void fixAccessFlags() {
+    if (Iterables.any(toMergeGroup, not(DexProgramClass::isAbstract))) {
+      target.getAccessFlags().demoteFromAbstract();
+    }
+    if (Iterables.any(toMergeGroup, not(DexProgramClass::isFinal))) {
+      target.getAccessFlags().demoteFromFinal();
     }
   }
 
   void mergeInstanceFields() {
-    // TODO: support instance field merging
-    assert Iterables.all(toMergeGroup, clazz -> !clazz.hasInstanceFields());
-
-    // The target should only have the class id field.
-    assert target.instanceFields().size() == 1;
+    toMergeGroup.forEach(
+        clazz -> {
+          classInstanceFieldsMerger.addFields(clazz);
+          clazz.setInstanceFields(null);
+        });
+    classInstanceFieldsMerger.merge();
   }
 
   public void mergeGroup(SyntheticArgumentClass syntheticArgumentClass) {
-    fixFinal();
+    fixAccessFlags();
     appendClassIdField();
 
     mergeVirtualMethods();

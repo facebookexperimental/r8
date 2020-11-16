@@ -7,28 +7,35 @@ package com.android.tools.r8.graph.classmerging;
 import com.android.tools.r8.graph.AppView;
 import com.android.tools.r8.graph.DexType;
 import com.android.tools.r8.shaking.AppInfoWithLiveness;
+import com.android.tools.r8.utils.collections.BidirectionalManyToOneMap;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiConsumer;
 
 public class VerticallyMergedClasses implements MergedClasses {
 
-  private final Map<DexType, DexType> mergedClasses;
-  private final Map<DexType, Set<DexType>> mergedClassesInverse;
+  private final BidirectionalManyToOneMap<DexType, DexType> mergedClasses;
 
-  public VerticallyMergedClasses(
-      Map<DexType, DexType> mergedClasses, Map<DexType, Set<DexType>> mergedClassesInverse) {
+  public VerticallyMergedClasses(BidirectionalManyToOneMap<DexType, DexType> mergedClasses) {
     this.mergedClasses = mergedClasses;
-    this.mergedClassesInverse = mergedClassesInverse;
+  }
+
+  public static VerticallyMergedClasses empty() {
+    return new VerticallyMergedClasses(BidirectionalManyToOneMap.empty());
+  }
+
+  @Override
+  public void forEachMergeGroup(BiConsumer<Set<DexType>, DexType> consumer) {
+    mergedClasses.forEach(consumer);
   }
 
   public Map<DexType, DexType> getForwardMap() {
-    return mergedClasses;
+    return mergedClasses.getForwardMap();
   }
 
   public Collection<DexType> getSourcesFor(DexType type) {
-    return mergedClassesInverse.getOrDefault(type, Collections.emptySet());
+    return mergedClasses.getKeys(type);
   }
 
   public DexType getTargetFor(DexType type) {
@@ -36,8 +43,16 @@ public class VerticallyMergedClasses implements MergedClasses {
     return mergedClasses.get(type);
   }
 
+  public DexType getTargetForOrDefault(DexType type, DexType defaultValue) {
+    return mergedClasses.getOrDefault(type, defaultValue);
+  }
+
   public boolean hasBeenMergedIntoSubtype(DexType type) {
     return mergedClasses.containsKey(type);
+  }
+
+  public boolean isEmpty() {
+    return mergedClasses.isEmpty();
   }
 
   public boolean isTarget(DexType type) {
@@ -45,18 +60,16 @@ public class VerticallyMergedClasses implements MergedClasses {
   }
 
   @Override
-  public boolean verifyAllSourcesPruned(AppView<AppInfoWithLiveness> appView) {
-    for (Collection<DexType> sourcesForTarget : mergedClassesInverse.values()) {
-      for (DexType source : sourcesForTarget) {
-        assert appView.appInfo().wasPruned(source)
-            : "Expected vertically merged class `" + source.toSourceString() + "` to be absent";
-      }
-    }
-    return true;
+  public boolean hasBeenMerged(DexType type) {
+    return hasBeenMergedIntoSubtype(type);
   }
 
   @Override
-  public boolean hasBeenMerged(DexType type) {
-    return hasBeenMergedIntoSubtype(type);
+  public boolean verifyAllSourcesPruned(AppView<AppInfoWithLiveness> appView) {
+    for (DexType source : mergedClasses.keySet()) {
+      assert appView.appInfo().wasPruned(source)
+          : "Expected vertically merged class `" + source.toSourceString() + "` to be absent";
+    }
+    return true;
   }
 }

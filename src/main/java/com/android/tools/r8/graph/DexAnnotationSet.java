@@ -3,6 +3,8 @@
 // BSD-style license that can be found in the LICENSE file.
 package com.android.tools.r8.graph;
 
+import static com.android.tools.r8.utils.PredicateUtils.not;
+
 import com.android.tools.r8.dex.IndexedItemCollection;
 import com.android.tools.r8.dex.MixedSectionCollection;
 import com.android.tools.r8.naming.NamingLens;
@@ -99,7 +101,8 @@ public class DexAnnotationSet extends CachedHashValueDexItem {
       return;
     }
     Arrays.sort(
-        annotations, (a, b) -> a.annotation.type.slowCompareTo(b.annotation.type, namingLens));
+        annotations,
+        (a, b) -> a.annotation.type.compareToWithNamingLens(b.annotation.type, namingLens));
     for (DexAnnotation annotation : annotations) {
       annotation.annotation.sort();
     }
@@ -157,7 +160,11 @@ public class DexAnnotationSet extends CachedHashValueDexItem {
   }
 
   public DexAnnotationSet keepIf(Predicate<DexAnnotation> filter) {
-    return rewrite(anno -> filter.test(anno) ? anno : null);
+    return removeIf(not(filter));
+  }
+
+  public DexAnnotationSet removeIf(Predicate<DexAnnotation> filter) {
+    return rewrite(annotation -> filter.test(annotation) ? null : annotation);
   }
 
   public DexAnnotationSet rewrite(Function<DexAnnotation, DexAnnotation> rewriter) {

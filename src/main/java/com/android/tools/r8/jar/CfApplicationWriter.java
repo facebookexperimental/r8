@@ -46,6 +46,7 @@ import com.android.tools.r8.utils.AsmUtils;
 import com.android.tools.r8.utils.ExceptionUtils;
 import com.android.tools.r8.utils.InternalOptions;
 import com.android.tools.r8.utils.PredicateUtils;
+import com.android.tools.r8.utils.structural.Ordered;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMap.Builder;
 import com.google.common.collect.Sets;
@@ -173,7 +174,7 @@ public class CfApplicationWriter {
     String sourceDebug = getSourceDebugExtension(clazz.annotations());
     writer.visitSource(clazz.sourceFile != null ? clazz.sourceFile.toString() : null, sourceDebug);
     CfVersion version = getClassFileVersion(clazz);
-    if (version.isGreaterThanOrEqual(CfVersion.V1_8)) {
+    if (version.isGreaterThanOrEqualTo(CfVersion.V1_8)) {
       // JDK8 and after ignore ACC_SUPER so unset it.
       clazz.accessFlags.unsetSuper();
     } else {
@@ -182,7 +183,10 @@ public class CfApplicationWriter {
         clazz.accessFlags.setSuper();
       }
     }
-    int access = clazz.accessFlags.getAsCfAccessFlags();
+    int access =
+        options.testing.allowInvalidCfAccessFlags
+            ? clazz.accessFlags.materialize()
+            : clazz.accessFlags.getAsCfAccessFlags();
     if (clazz.isDeprecated()) {
       access = AsmUtils.withDeprecated(access);
     }
@@ -227,8 +231,7 @@ public class CfApplicationWriter {
     }
     if (options.desugarSpecificOptions().sortMethodsOnCfOutput) {
       SortedSet<ProgramMethod> programMethodSortedSet =
-          Sets.newTreeSet(
-              (a, b) -> a.getDefinition().method.slowCompareTo(b.getDefinition().method));
+          Sets.newTreeSet((a, b) -> a.getDefinition().method.compareTo(b.getDefinition().method));
       clazz.forEachProgramMethod(programMethodSortedSet::add);
       programMethodSortedSet.forEach(
           method -> writeMethod(method, version, rewriter, writer, defaults));
@@ -257,8 +260,9 @@ public class CfApplicationWriter {
       // In this case bridges have been introduced for the Cf back-end,
       // which do not have class file version.
       assert options.testing.enableForceNestBasedAccessDesugaringForTest
-          || options.isDesugaredLibraryCompilation()
-          || options.cfToCfDesugar;
+              || options.isDesugaredLibraryCompilation()
+              || options.cfToCfDesugar
+          : "Expected class file version for " + method.method.toSourceString();
       // TODO(b/146424042): We may call static methods on interface classes so we have to go for
       //  Java 8.
       assert MIN_VERSION_FOR_COMPILER_GENERATED_CODE.isLessThan(CfVersion.V1_8);
@@ -273,10 +277,10 @@ public class CfApplicationWriter {
             ? clazz.getInitialClassFileVersion()
             : MIN_VERSION_FOR_COMPILER_GENERATED_CODE;
     for (DexEncodedMethod method : clazz.directMethods()) {
-      version = version.max(getClassFileVersion(method));
+      version = Ordered.max(version, getClassFileVersion(method));
     }
     for (DexEncodedMethod method : clazz.virtualMethods()) {
-      version = version.max(getClassFileVersion(method));
+      version = Ordered.max(version, getClassFileVersion(method));
     }
     return version;
   }

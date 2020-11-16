@@ -19,7 +19,6 @@ import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Sets;
 import it.unimi.dsi.fastutil.objects.Object2BooleanArrayMap;
 import it.unimi.dsi.fastutil.objects.Object2BooleanMap;
@@ -29,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -104,20 +104,41 @@ public abstract class GraphLens {
    */
   public static class FieldLookupResult extends MemberLookupResult<DexField> {
 
-    private FieldLookupResult(DexField reference, DexField reboundReference) {
+    private final DexType castType;
+
+    private FieldLookupResult(DexField reference, DexField reboundReference, DexType castType) {
       super(reference, reboundReference);
+      this.castType = castType;
     }
 
     public static Builder builder(GraphLens lens) {
       return new Builder(lens);
     }
 
+    public boolean hasCastType() {
+      return castType != null;
+    }
+
+    public DexType getCastType() {
+      return castType;
+    }
+
+    public DexType getRewrittenCastType(Function<DexType, DexType> fn) {
+      return hasCastType() ? fn.apply(castType) : null;
+    }
+
     public static class Builder extends MemberLookupResult.Builder<DexField, Builder> {
 
+      private DexType castType;
       private GraphLens lens;
 
       private Builder(GraphLens lens) {
         this.lens = lens;
+      }
+
+      public Builder setCastType(DexType castType) {
+        this.castType = castType;
+        return this;
       }
 
       @Override
@@ -127,7 +148,7 @@ public abstract class GraphLens {
 
       public FieldLookupResult build() {
         // TODO(b/168282032): All non-identity graph lenses should set the rebound reference.
-        return new FieldLookupResult(reference, reboundReference);
+        return new FieldLookupResult(reference, reboundReference, castType);
       }
     }
   }
@@ -544,15 +565,6 @@ public abstract class GraphLens {
     return builder.build();
   }
 
-  public ImmutableSortedSet<DexMethod> rewriteMethodsSorted(Set<DexMethod> methods) {
-    ImmutableSortedSet.Builder<DexMethod> builder =
-        new ImmutableSortedSet.Builder<>(PresortedComparable::slowCompare);
-    for (DexMethod method : methods) {
-      builder.add(getRenamedMethodSignature(method));
-    }
-    return builder.build();
-  }
-
   public <T> ImmutableMap<DexField, T> rewriteFieldKeys(Map<DexField, T> map) {
     ImmutableMap.Builder<DexField, T> builder = ImmutableMap.builder();
     map.forEach((field, value) -> builder.put(getRenamedFieldSignature(field), value));
@@ -560,8 +572,7 @@ public abstract class GraphLens {
   }
 
   public ImmutableSet<DexType> rewriteTypes(Set<DexType> types) {
-    ImmutableSortedSet.Builder<DexType> builder =
-        new ImmutableSortedSet.Builder<>(PresortedComparable::slowCompare);
+    ImmutableSet.Builder<DexType> builder = new ImmutableSet.Builder<>();
     for (DexType type : types) {
       builder.add(lookupType(type));
     }
@@ -1056,12 +1067,16 @@ public abstract class GraphLens {
         return FieldLookupResult.builder(this)
             .setReboundReference(rewrittenReboundReference)
             .setReference(rewrittenNonReboundReference)
+            .setCastType(previous.getRewrittenCastType(this::internalDescribeLookupClassType))
             .build();
       } else {
         // TODO(b/168282032): We should always have the rebound reference, so this should become
         //  unreachable.
         DexField rewrittenReference = previous.getRewrittenReference(fieldMap);
-        return FieldLookupResult.builder(this).setReference(rewrittenReference).build();
+        return FieldLookupResult.builder(this)
+            .setReference(rewrittenReference)
+            .setCastType(previous.getRewrittenCastType(this::internalDescribeLookupClassType))
+            .build();
       }
     }
 

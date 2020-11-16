@@ -11,7 +11,9 @@ import com.android.tools.r8.TestParameters;
 import com.android.tools.r8.desugar.desugaredlibrary.DesugaredLibraryTestBase;
 import com.android.tools.r8.utils.AndroidApiLevel;
 import com.android.tools.r8.utils.BooleanUtils;
+import com.android.tools.r8.utils.DescriptorUtils;
 import com.android.tools.r8.utils.StringUtils;
+import com.android.tools.r8.utils.ZipUtils;
 import com.android.tools.r8.utils.codeinspector.CodeInspector;
 import com.android.tools.r8.utils.codeinspector.FoundMethodSubject;
 import java.nio.file.Path;
@@ -104,7 +106,7 @@ public class CallBackConversionTest extends DesugaredLibraryTestBase {
   @Test
   public void testCallBackD8Cf() throws Exception {
     // Use D8 to desugar with Java classfile output.
-    Path jar =
+    Path firstJar =
         testForD8(Backend.CF)
             .setMinApi(parameters.getApiLevel())
             .addProgramClasses(Impl.class)
@@ -114,9 +116,37 @@ public class CallBackConversionTest extends DesugaredLibraryTestBase {
             .inspect(CallBackConversionTest::assertDuplicatedAPI)
             .writeToZip();
 
+    ClassFileInfo info =
+        extractClassFileInfo(
+            ZipUtils.readSingleEntry(firstJar, ZipUtils.zipEntryNameForClass(Impl.class)));
+    assertEquals(
+        Impl.class.getTypeName(),
+        DescriptorUtils.getJavaTypeFromBinaryName(info.getClassBinaryName()));
+    assertEquals(2, info.getMethodNames().stream().filter(name -> name.equals("foo")).count());
+
+    // Use D8 to desugar with Java classfile output.
+    Path secondJar =
+        testForD8(Backend.CF)
+            .setMinApi(parameters.getApiLevel())
+            .addProgramFiles(firstJar)
+            .addLibraryClasses(CustomLibClass.class)
+            .enableCoreLibraryDesugaring(parameters.getApiLevel(), new AbsentKeepRuleConsumer())
+            .compile()
+            .inspect(CallBackConversionTest::assertDuplicatedAPI)
+            .writeToZip();
+
+    info =
+        extractClassFileInfo(
+            ZipUtils.readSingleEntry(secondJar, ZipUtils.zipEntryNameForClass(Impl.class)));
+    assertEquals(
+        Impl.class.getTypeName(),
+        DescriptorUtils.getJavaTypeFromBinaryName(info.getClassBinaryName()));
+    // TODO(b/171867367): This should only be 2.
+    assertEquals(3, info.getMethodNames().stream().filter(name -> name.equals("foo")).count());
+
     // Convert to DEX without desugaring and run.
     testForD8()
-        .addProgramFiles(jar)
+        .addProgramFiles(firstJar)
         .setMinApi(parameters.getApiLevel())
         .disableDesugaring()
         .compile()
@@ -125,7 +155,7 @@ public class CallBackConversionTest extends DesugaredLibraryTestBase {
             this::buildDesugaredLibrary,
             parameters.getApiLevel(),
             collectKeepRulesWithTraceReferences(
-                jar, buildDesugaredLibraryClassFile(parameters.getApiLevel())),
+                firstJar, buildDesugaredLibraryClassFile(parameters.getApiLevel())),
             shrinkDesugaredLibrary)
         .addRunClasspathFiles(CUSTOM_LIB)
         .run(parameters.getRuntime(), Impl.class)

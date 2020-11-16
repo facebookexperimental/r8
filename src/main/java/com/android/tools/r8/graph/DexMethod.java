@@ -5,10 +5,12 @@ package com.android.tools.r8.graph;
 
 import com.android.tools.r8.dex.IndexedItemCollection;
 import com.android.tools.r8.errors.CompilationError;
-import com.android.tools.r8.naming.NamingLens;
 import com.android.tools.r8.references.MethodReference;
 import com.android.tools.r8.references.Reference;
 import com.android.tools.r8.references.TypeReference;
+import com.android.tools.r8.utils.structural.CompareToVisitor;
+import com.android.tools.r8.utils.structural.StructuralAccept;
+import com.android.tools.r8.utils.structural.StructuralSpecification;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BiConsumer;
@@ -27,6 +29,25 @@ public class DexMethod extends DexMember<DexEncodedMethod, DexMethod> {
           "Method name '" + name + "' in class '" + holder.toSourceString() +
               "' cannot be represented in dex format.");
     }
+  }
+
+  private static void accept(StructuralSpecification<DexMethod, ?> spec) {
+    spec.withItem(DexMethod::getHolderType).withItem(DexMethod::getName).withItem(m -> m.proto);
+  }
+
+  @Override
+  public StructuralAccept<DexMethod> getStructuralAccept() {
+    return DexMethod::accept;
+  }
+
+  @Override
+  public DexMethod self() {
+    return this;
+  }
+
+  @Override
+  public void acceptCompareTo(DexMethod other, CompareToVisitor visitor) {
+    visitor.visitDexMethod(this, other);
   }
 
   public DexType getHolderType() {
@@ -181,32 +202,6 @@ public class DexMethod extends DexMember<DexEncodedMethod, DexMethod> {
   }
 
   @Override
-  public int slowCompareTo(DexMethod other) {
-    int result = holder.slowCompareTo(other.holder);
-    if (result != 0) {
-      return result;
-    }
-    result = name.slowCompareTo(other.name);
-    if (result != 0) {
-      return result;
-    }
-    return proto.slowCompareTo(other.proto);
-  }
-
-  @Override
-  public int slowCompareTo(DexMethod other, NamingLens namingLens) {
-    int result = holder.slowCompareTo(other.holder, namingLens);
-    if (result != 0) {
-      return result;
-    }
-    result = namingLens.lookupName(this).slowCompareTo(namingLens.lookupName(other));
-    if (result != 0) {
-      return result;
-    }
-    return proto.slowCompareTo(other.proto, namingLens);
-  }
-
-  @Override
   public boolean match(DexMethod method) {
     return method.name == name && method.proto == proto;
   }
@@ -270,8 +265,12 @@ public class DexMethod extends DexMember<DexEncodedMethod, DexMethod> {
         holder, dexItemFactory.prependTypeToProto(type, proto), name);
   }
 
-  public DexMethod withHolder(DexType holder, DexItemFactory dexItemFactory) {
-    return dexItemFactory.createMethod(holder, proto, name);
+  public DexMethod withHolder(DexDefinition definition, DexItemFactory dexItemFactory) {
+    return withHolder(definition.getReference(), dexItemFactory);
+  }
+
+  public DexMethod withHolder(DexReference reference, DexItemFactory dexItemFactory) {
+    return dexItemFactory.createMethod(reference.getContextType(), proto, name);
   }
 
   public DexMethod withName(DexString name, DexItemFactory dexItemFactory) {

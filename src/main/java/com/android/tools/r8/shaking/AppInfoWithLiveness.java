@@ -26,13 +26,11 @@ import com.android.tools.r8.graph.DexReference;
 import com.android.tools.r8.graph.DexType;
 import com.android.tools.r8.graph.DirectMappedDexApplication;
 import com.android.tools.r8.graph.EnumValueInfoMapCollection;
-import com.android.tools.r8.graph.EnumValueInfoMapCollection.EnumValueInfo;
 import com.android.tools.r8.graph.EnumValueInfoMapCollection.EnumValueInfoMap;
 import com.android.tools.r8.graph.FieldAccessInfo;
 import com.android.tools.r8.graph.FieldAccessInfoCollection;
 import com.android.tools.r8.graph.FieldAccessInfoCollectionImpl;
 import com.android.tools.r8.graph.FieldResolutionResult;
-import com.android.tools.r8.graph.GraphLens;
 import com.android.tools.r8.graph.GraphLens.NonIdentityGraphLens;
 import com.android.tools.r8.graph.InstantiatedSubTypeInfo;
 import com.android.tools.r8.graph.LookupResult.LookupResultSuccess;
@@ -40,7 +38,6 @@ import com.android.tools.r8.graph.LookupTarget;
 import com.android.tools.r8.graph.MethodAccessInfoCollection;
 import com.android.tools.r8.graph.ObjectAllocationInfoCollection;
 import com.android.tools.r8.graph.ObjectAllocationInfoCollectionImpl;
-import com.android.tools.r8.graph.PresortedComparable;
 import com.android.tools.r8.graph.ProgramField;
 import com.android.tools.r8.graph.ProgramMethod;
 import com.android.tools.r8.graph.ResolutionResult.SingleResolutionResult;
@@ -60,6 +57,7 @@ import com.android.tools.r8.utils.TraversalContinuation;
 import com.android.tools.r8.utils.Visibility;
 import com.android.tools.r8.utils.WorkList;
 import com.android.tools.r8.utils.collections.ProgramMethodSet;
+import com.android.tools.r8.utils.structural.Ordered;
 import com.google.common.collect.Sets;
 import it.unimi.dsi.fastutil.ints.Int2ReferenceMap;
 import it.unimi.dsi.fastutil.objects.Object2BooleanMap;
@@ -70,9 +68,6 @@ import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.SortedMap;
-import java.util.SortedSet;
-import java.util.TreeMap;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -88,11 +83,6 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
    * for these.
    */
   private final Set<DexType> liveTypes;
-  /**
-   * Set of service types (from META-INF/services/) that may have been instantiated reflectively via
-   * ServiceLoader.load() or ServiceLoader.loadInstalled().
-   */
-  public final Set<DexType> instantiatedAppServices;
   /**
    * Set of methods that are the immediate target of an invoke. They might not actually be live but
    * are required so that invokes can find the method. If such a method is not live (i.e. not
@@ -148,29 +138,29 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
   /** All methods that *must* never be inlined due to a configuration directive (testing only). */
   private final Set<DexMethod> neverInline;
   /** Items for which to print inlining decisions for (testing only). */
-  public final Set<DexMethod> whyAreYouNotInlining;
+  private final Set<DexMethod> whyAreYouNotInlining;
   /** All methods that may not have any parameters with a constant value removed. */
-  public final Set<DexMethod> keepConstantArguments;
+  private final Set<DexMethod> keepConstantArguments;
   /** All methods that may not have any unused arguments removed. */
-  public final Set<DexMethod> keepUnusedArguments;
+  private final Set<DexMethod> keepUnusedArguments;
   /** All methods that must be reprocessed (testing only). */
-  public final Set<DexMethod> reprocess;
+  private final Set<DexMethod> reprocess;
   /** All methods that must not be reprocessed (testing only). */
-  public final Set<DexMethod> neverReprocess;
+  private final Set<DexMethod> neverReprocess;
   /** All types that should be inlined if possible due to a configuration directive. */
   public final PredicateSet<DexType> alwaysClassInline;
   /** All types that *must* never be inlined due to a configuration directive (testing only). */
-  public final Set<DexType> neverClassInline;
+  private final Set<DexType> neverClassInline;
 
-  private final Set<DexType> noUnusedInterfaceRemoval;
-  private final Set<DexType> noVerticalClassMerging;
+  private final Set<DexType> noClassMerging;
   private final Set<DexType> noHorizontalClassMerging;
+  private final Set<DexType> noVerticalClassMerging;
   private final Set<DexType> noStaticClassMerging;
 
   /**
    * Set of lock candidates (i.e., types whose class reference may flow to a monitor instruction).
    */
-  public final Set<DexType> lockCandidates;
+  private final Set<DexType> lockCandidates;
   /**
    * A map from seen init-class references to the minimum required visibility of the corresponding
    * static field.
@@ -205,7 +195,6 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
       Set<DexType> deadProtoTypes,
       Set<DexType> missingTypes,
       Set<DexType> liveTypes,
-      Set<DexType> instantiatedAppServices,
       Set<DexMethod> targetedMethods,
       Set<DexMethod> failedResolutionTargets,
       Set<DexMethod> bootstrapMethods,
@@ -230,7 +219,7 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
       Set<DexMethod> neverReprocess,
       PredicateSet<DexType> alwaysClassInline,
       Set<DexType> neverClassInline,
-      Set<DexType> noUnusedInterfaceRemoval,
+      Set<DexType> noClassMerging,
       Set<DexType> noVerticalClassMerging,
       Set<DexType> noHorizontalClassMerging,
       Set<DexType> noStaticClassMerging,
@@ -245,7 +234,6 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
     this.deadProtoTypes = deadProtoTypes;
     this.missingTypes = missingTypes;
     this.liveTypes = liveTypes;
-    this.instantiatedAppServices = instantiatedAppServices;
     this.targetedMethods = targetedMethods;
     this.failedResolutionTargets = failedResolutionTargets;
     this.bootstrapMethods = bootstrapMethods;
@@ -270,93 +258,7 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
     this.neverReprocess = neverReprocess;
     this.alwaysClassInline = alwaysClassInline;
     this.neverClassInline = neverClassInline;
-    this.noUnusedInterfaceRemoval = noUnusedInterfaceRemoval;
-    this.noVerticalClassMerging = noVerticalClassMerging;
-    this.noHorizontalClassMerging = noHorizontalClassMerging;
-    this.noStaticClassMerging = noStaticClassMerging;
-    this.neverPropagateValue = neverPropagateValue;
-    this.identifierNameStrings = identifierNameStrings;
-    this.prunedTypes = prunedTypes;
-    this.switchMaps = switchMaps;
-    this.enumValueInfoMaps = enumValueInfoMaps;
-    this.lockCandidates = lockCandidates;
-    this.initClassReferences = initClassReferences;
-  }
-
-  public AppInfoWithLiveness(
-      AppInfoWithClassHierarchy appInfoWithClassHierarchy,
-      Set<DexType> deadProtoTypes,
-      Set<DexType> missingTypes,
-      Set<DexType> liveTypes,
-      Set<DexType> instantiatedAppServices,
-      Set<DexMethod> targetedMethods,
-      Set<DexMethod> failedResolutionTargets,
-      Set<DexMethod> bootstrapMethods,
-      Set<DexMethod> methodsTargetedByInvokeDynamic,
-      SortedSet<DexMethod> virtualMethodsTargetedByInvokeDirect,
-      SortedSet<DexMethod> liveMethods,
-      FieldAccessInfoCollectionImpl fieldAccessInfoCollection,
-      MethodAccessInfoCollection methodAccessInfoCollection,
-      ObjectAllocationInfoCollectionImpl objectAllocationInfoCollection,
-      Map<DexCallSite, ProgramMethodSet> callSites,
-      KeepInfoCollection keepInfo,
-      Map<DexReference, ProguardMemberRule> mayHaveSideEffects,
-      Map<DexMember<?, ?>, ProguardMemberRule> noSideEffects,
-      Map<DexMember<?, ?>, ProguardMemberRule> assumedValues,
-      Set<DexMethod> alwaysInline,
-      Set<DexMethod> forceInline,
-      Set<DexMethod> neverInline,
-      Set<DexMethod> whyAreYouNotInlining,
-      Set<DexMethod> keepConstantArguments,
-      Set<DexMethod> keepUnusedArguments,
-      Set<DexMethod> reprocess,
-      Set<DexMethod> neverReprocess,
-      PredicateSet<DexType> alwaysClassInline,
-      Set<DexType> neverClassInline,
-      Set<DexType> noUnusedInterfaceRemoval,
-      Set<DexType> noVerticalClassMerging,
-      Set<DexType> noHorizontalClassMerging,
-      Set<DexType> noStaticClassMerging,
-      Set<DexReference> neverPropagateValue,
-      Object2BooleanMap<DexReference> identifierNameStrings,
-      Set<DexType> prunedTypes,
-      Map<DexField, Int2ReferenceMap<DexField>> switchMaps,
-      EnumValueInfoMapCollection enumValueInfoMaps,
-      Set<DexType> lockCandidates,
-      Map<DexType, Visibility> initClassReferences) {
-    super(
-        appInfoWithClassHierarchy.getSyntheticItems().commit(appInfoWithClassHierarchy.app()),
-        appInfoWithClassHierarchy.getClassToFeatureSplitMap(),
-        appInfoWithClassHierarchy.getMainDexClasses());
-    this.deadProtoTypes = deadProtoTypes;
-    this.missingTypes = missingTypes;
-    this.liveTypes = liveTypes;
-    this.instantiatedAppServices = instantiatedAppServices;
-    this.targetedMethods = targetedMethods;
-    this.failedResolutionTargets = failedResolutionTargets;
-    this.bootstrapMethods = bootstrapMethods;
-    this.methodsTargetedByInvokeDynamic = methodsTargetedByInvokeDynamic;
-    this.virtualMethodsTargetedByInvokeDirect = virtualMethodsTargetedByInvokeDirect;
-    this.liveMethods = liveMethods;
-    this.fieldAccessInfoCollection = fieldAccessInfoCollection;
-    this.methodAccessInfoCollection = methodAccessInfoCollection;
-    this.objectAllocationInfoCollection = objectAllocationInfoCollection;
-    this.keepInfo = keepInfo;
-    this.mayHaveSideEffects = mayHaveSideEffects;
-    this.noSideEffects = noSideEffects;
-    this.assumedValues = assumedValues;
-    this.callSites = callSites;
-    this.alwaysInline = alwaysInline;
-    this.forceInline = forceInline;
-    this.neverInline = neverInline;
-    this.whyAreYouNotInlining = whyAreYouNotInlining;
-    this.keepConstantArguments = keepConstantArguments;
-    this.keepUnusedArguments = keepUnusedArguments;
-    this.reprocess = reprocess;
-    this.neverReprocess = neverReprocess;
-    this.alwaysClassInline = alwaysClassInline;
-    this.neverClassInline = neverClassInline;
-    this.noUnusedInterfaceRemoval = noUnusedInterfaceRemoval;
+    this.noClassMerging = noClassMerging;
     this.noVerticalClassMerging = noVerticalClassMerging;
     this.noHorizontalClassMerging = noHorizontalClassMerging;
     this.noStaticClassMerging = noStaticClassMerging;
@@ -379,7 +281,6 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
         previous.missingTypes,
         CollectionUtils.mergeSets(
             Sets.difference(previous.liveTypes, removedTypes), committedItems.getCommittedTypes()),
-        previous.instantiatedAppServices,
         previous.targetedMethods,
         previous.failedResolutionTargets,
         previous.bootstrapMethods,
@@ -404,7 +305,7 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
         previous.neverReprocess,
         previous.alwaysClassInline,
         previous.neverClassInline,
-        previous.noUnusedInterfaceRemoval,
+        previous.noClassMerging,
         previous.noVerticalClassMerging,
         previous.noHorizontalClassMerging,
         previous.noStaticClassMerging,
@@ -431,7 +332,6 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
         removedClasses == null
             ? previous.liveTypes
             : Sets.difference(previous.liveTypes, removedClasses),
-        previous.instantiatedAppServices,
         previous.targetedMethods,
         previous.failedResolutionTargets,
         previous.bootstrapMethods,
@@ -456,7 +356,7 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
         previous.neverReprocess,
         previous.alwaysClassInline,
         previous.neverClassInline,
-        previous.noUnusedInterfaceRemoval,
+        previous.noClassMerging,
         previous.noVerticalClassMerging,
         previous.noHorizontalClassMerging,
         previous.noStaticClassMerging,
@@ -520,7 +420,6 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
     this.deadProtoTypes = previous.deadProtoTypes;
     this.missingTypes = previous.missingTypes;
     this.liveTypes = previous.liveTypes;
-    this.instantiatedAppServices = previous.instantiatedAppServices;
     this.targetedMethods = previous.targetedMethods;
     this.failedResolutionTargets = previous.failedResolutionTargets;
     this.bootstrapMethods = previous.bootstrapMethods;
@@ -545,7 +444,7 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
     this.neverReprocess = previous.neverReprocess;
     this.alwaysClassInline = previous.alwaysClassInline;
     this.neverClassInline = previous.neverClassInline;
-    this.noUnusedInterfaceRemoval = previous.noUnusedInterfaceRemoval;
+    this.noClassMerging = previous.noClassMerging;
     this.noVerticalClassMerging = previous.noVerticalClassMerging;
     this.noHorizontalClassMerging = previous.noHorizontalClassMerging;
     this.noStaticClassMerging = previous.noStaticClassMerging;
@@ -601,7 +500,7 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
       // Skip synthetic classes which may not have a specified version.
       if (clazz.hasClassFileVersion()) {
         largestInputCfVersion =
-            CfVersion.maxAllowNull(largestInputCfVersion, clazz.getInitialClassFileVersion());
+            Ordered.maxIgnoreNull(largestInputCfVersion, clazz.getInitialClassFileVersion());
       }
     }
     assert largestInputCfVersion != null;
@@ -673,6 +572,30 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
 
   public boolean isNeverInlineMethod(DexMethod method) {
     return neverInline.contains(method);
+  }
+
+  public boolean isWhyAreYouNotInliningMethod(DexMethod method) {
+    return whyAreYouNotInlining.contains(method);
+  }
+
+  public boolean hasNoWhyAreYouNotInliningMethods() {
+    return whyAreYouNotInlining.isEmpty();
+  }
+
+  public boolean isKeepConstantArgumentsMethod(DexMethod method) {
+    return keepConstantArguments.contains(method);
+  }
+
+  public boolean isKeepUnusedArgumentsMethod(DexMethod method) {
+    return keepUnusedArguments.contains(method);
+  }
+
+  public boolean isNeverReprocessMethod(DexMethod method) {
+    return neverReprocess.contains(method);
+  }
+
+  public Set<DexMethod> getReprocessMethods() {
+    return reprocess;
   }
 
   public Collection<DexClass> computeReachableInterfaces() {
@@ -778,12 +701,6 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
   public EnumValueInfoMap getEnumValueInfoMap(DexType enumType) {
     assert checkIfObsolete();
     return enumValueInfoMaps.getEnumValueInfoMap(enumType);
-  }
-
-  public EnumValueInfo getEnumValueInfo(DexField field) {
-    assert checkIfObsolete();
-    EnumValueInfoMap map = enumValueInfoMaps.getEnumValueInfoMap(field.type);
-    return map != null ? map.getEnumValueInfo(field) : null;
   }
 
   public Int2ReferenceMap<DexField> getSwitchMap(DexField field) {
@@ -936,18 +853,6 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
     return holder == null || holder.isLibraryClass() || holder.isClasspathClass();
   }
 
-  private static SortedMap<DexMethod, ProgramMethodSet> rewriteInvokesWithContexts(
-      Map<DexMethod, ProgramMethodSet> invokes, GraphLens lens) {
-    SortedMap<DexMethod, ProgramMethodSet> result = new TreeMap<>(PresortedComparable::slowCompare);
-    invokes.forEach(
-        (method, contexts) ->
-            result
-                .computeIfAbsent(
-                    lens.getRenamedMethodSignature(method), ignore -> ProgramMethodSet.create())
-                .addAll(contexts));
-    return Collections.unmodifiableSortedMap(result);
-  }
-
   public boolean isInstantiatedInterface(DexProgramClass clazz) {
     assert checkIfObsolete();
     return objectAllocationInfoCollection.isInterfaceWithUnknownSubtypeHierarchy(clazz);
@@ -1067,7 +972,6 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
         deadProtoTypes,
         missingTypes,
         lens.rewriteTypes(liveTypes),
-        lens.rewriteTypes(instantiatedAppServices),
         lens.rewriteMethods(targetedMethods),
         lens.rewriteMethods(failedResolutionTargets),
         lens.rewriteMethods(bootstrapMethods),
@@ -1085,14 +989,14 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
         lens.rewriteMethods(alwaysInline),
         lens.rewriteMethods(forceInline),
         lens.rewriteMethods(neverInline),
-        lens.rewriteMethodsSorted(whyAreYouNotInlining),
-        lens.rewriteMethodsSorted(keepConstantArguments),
-        lens.rewriteMethodsSorted(keepUnusedArguments),
-        lens.rewriteMethodsSorted(reprocess),
-        lens.rewriteMethodsSorted(neverReprocess),
+        lens.rewriteMethods(whyAreYouNotInlining),
+        lens.rewriteMethods(keepConstantArguments),
+        lens.rewriteMethods(keepUnusedArguments),
+        lens.rewriteMethods(reprocess),
+        lens.rewriteMethods(neverReprocess),
         alwaysClassInline.rewriteItems(lens::lookupType),
         lens.rewriteTypes(neverClassInline),
-        lens.rewriteTypes(noUnusedInterfaceRemoval),
+        lens.rewriteTypes(noClassMerging),
         lens.rewriteTypes(noVerticalClassMerging),
         lens.rewriteTypes(noHorizontalClassMerging),
         lens.rewriteTypes(noStaticClassMerging),
@@ -1463,25 +1367,14 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
         .shouldBreak();
   }
 
-  /** All unused interface types that *must* never be pruned. */
-  public Set<DexType> getNoUnusedInterfaceRemovalSet() {
-    return noUnusedInterfaceRemoval;
+  /** Predicate on types that *must* never be merged horizontally. */
+  public boolean isNoHorizontalClassMergingOfType(DexType type) {
+    return noClassMerging.contains(type) || noHorizontalClassMerging.contains(type);
   }
 
-  /**
-   * All types that *must* never be merged vertically due to a configuration directive (testing
-   * only).
-   */
-  public Set<DexType> getNoVerticalClassMergingSet() {
-    return noVerticalClassMerging;
-  }
-
-  /**
-   * All types that *must* never be merged horizontally due to a configuration directive (testing
-   * only).
-   */
-  public Set<DexType> getNoHorizontalClassMergingSet() {
-    return noHorizontalClassMerging;
+  /** Predicate on types that *must* never be merged vertically. */
+  public boolean isNoVerticalClassMergingOfType(DexType type) {
+    return noClassMerging.contains(type) || noVerticalClassMerging.contains(type);
   }
 
   /**

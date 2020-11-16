@@ -5,6 +5,7 @@
 package com.android.tools.r8.classmerging.horizontal;
 
 import static com.android.tools.r8.utils.codeinspector.Matchers.isPresent;
+import static com.android.tools.r8.utils.codeinspector.Matchers.notIf;
 import static org.hamcrest.MatcherAssert.assertThat;
 
 import com.android.tools.r8.*;
@@ -30,16 +31,9 @@ public class IdenticalFieldMembersTest extends HorizontalClassMergingTestBase {
         .assertSuccessWithOutputLines("foo A", "bar 2")
         .inspect(
             codeInspector -> {
-              if (enableHorizontalClassMerging) {
-                assertThat(codeInspector.clazz(A.class), isPresent());
-                assertThat(codeInspector.clazz(B.class), isPresent());
-                // TODO(b/163311975): A and B should be merged
-                //   assertThat(codeInspector.clazz(B.class), not(isPresent()));
-                // TODO(b/165517236): Explicitly check classes have been merged.
-              } else {
-                assertThat(codeInspector.clazz(A.class), isPresent());
-                assertThat(codeInspector.clazz(B.class), isPresent());
-              }
+              assertThat(codeInspector.clazz(A.class), isPresent());
+              assertThat(
+                  codeInspector.clazz(B.class), notIf(isPresent(), enableHorizontalClassMerging));
             });
   }
 

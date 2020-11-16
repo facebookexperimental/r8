@@ -251,6 +251,10 @@ public abstract class TestShrinkerBuilder<
     return self();
   }
 
+  public T addPrintSeeds() {
+    return addKeepRules("-printseeds");
+  }
+
   public T allowAccessModification() {
     return allowAccessModification(true);
   }
@@ -273,6 +277,10 @@ public abstract class TestShrinkerBuilder<
 
   public T addKeepAttributeLineNumberTable() {
     return addKeepAttributes(ProguardKeepAttributes.LINE_NUMBER_TABLE);
+  }
+
+  public T addKeepAttributeSignature() {
+    return addKeepAttributes(ProguardKeepAttributes.SIGNATURE);
   }
 
   public T addKeepAttributeSourceFile() {

@@ -5,9 +5,11 @@ package com.android.tools.r8.graph;
 
 import com.android.tools.r8.dex.IndexedItemCollection;
 import com.android.tools.r8.errors.CompilationError;
-import com.android.tools.r8.naming.NamingLens;
 import com.android.tools.r8.references.FieldReference;
 import com.android.tools.r8.references.Reference;
+import com.android.tools.r8.utils.structural.CompareToVisitor;
+import com.android.tools.r8.utils.structural.StructuralAccept;
+import com.android.tools.r8.utils.structural.StructuralSpecification;
 import java.util.Collections;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -26,8 +28,26 @@ public class DexField extends DexMember<DexEncodedField, DexField> {
     }
   }
 
+  private static void accept(StructuralSpecification<DexField, ?> spec) {
+    spec.withItem(DexField::getHolderType).withItem(DexField::getName).withItem(DexField::getType);
+  }
+
+  @Override
+  public DexField self() {
+    return this;
+  }
+
+  @Override
+  public StructuralAccept<DexField> getStructuralAccept() {
+    return DexField::accept;
+  }
+
   public DexType getHolderType() {
     return holder;
+  }
+
+  public DexString getName() {
+    return name;
   }
 
   public DexType getType() {
@@ -122,29 +142,8 @@ public class DexField extends DexMember<DexEncodedField, DexField> {
   }
 
   @Override
-  public int slowCompareTo(DexField other) {
-    int result = holder.slowCompareTo(other.holder);
-    if (result != 0) {
-      return result;
-    }
-    result = name.slowCompareTo(other.name);
-    if (result != 0) {
-      return result;
-    }
-    return type.slowCompareTo(other.type);
-  }
-
-  @Override
-  public int slowCompareTo(DexField other, NamingLens namingLens) {
-    int result = holder.slowCompareTo(other.holder, namingLens);
-    if (result != 0) {
-      return result;
-    }
-    result = namingLens.lookupName(this).slowCompareTo(namingLens.lookupName(other));
-    if (result != 0) {
-      return result;
-    }
-    return type.slowCompareTo(other.type, namingLens);
+  public void acceptCompareTo(DexField other, CompareToVisitor visitor) {
+    visitor.visitDexField(this, other);
   }
 
   @Override

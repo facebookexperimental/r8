@@ -20,14 +20,14 @@ import com.android.tools.r8.ir.desugar.DesugaredLibraryRetargeter;
 import com.android.tools.r8.ir.desugar.NestBasedAccessDesugaring;
 import com.android.tools.r8.ir.desugar.TwrCloseResourceRewriter;
 import com.android.tools.r8.ir.optimize.ServiceLoaderRewriter;
-import com.android.tools.r8.naming.NamingLens;
 import com.android.tools.r8.shaking.AppInfoWithLiveness;
 import com.android.tools.r8.synthesis.SyntheticItems;
 import com.android.tools.r8.utils.DescriptorUtils;
 import com.android.tools.r8.utils.InternalOptions.OutlineOptions;
-import com.google.common.base.Predicates;
+import com.android.tools.r8.utils.structural.CompareToVisitor;
+import com.android.tools.r8.utils.structural.HashingVisitor;
+import com.android.tools.r8.utils.structural.StructuralAccept;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Sets;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
@@ -36,7 +36,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
-public class DexType extends DexReference implements PresortedComparable<DexType> {
+public class DexType extends DexReference implements NamingLensComparable<DexType> {
   public static final DexType[] EMPTY_ARRAY = {};
 
   // Bundletool is merging classes that may originate from a build with an old version of R8.
@@ -50,6 +50,29 @@ public class DexType extends DexReference implements PresortedComparable<DexType
   DexType(DexString descriptor) {
     assert !descriptor.toString().contains(".") : "Malformed descriptor: " + descriptor.toString();
     this.descriptor = descriptor;
+  }
+
+  @Override
+  public DexType self() {
+    return this;
+  }
+
+  @Override
+  public StructuralAccept<DexType> getStructuralAccept() {
+    // Structural accept is never accessed as all accept methods are defined directly.
+    throw new Unreachable();
+  }
+
+  // DexType overrides accept to ensure the visitors always gets a visitDexType callback.
+  @Override
+  public void acceptCompareTo(DexType other, CompareToVisitor visitor) {
+    visitor.visitDexType(this, other);
+  }
+
+  // DexType overrides accept to ensure the visitors always gets a visitDexType callback.
+  @Override
+  public void acceptHashing(HashingVisitor visitor) {
+    visitor.visitDexType(this);
   }
 
   @Override
@@ -74,27 +97,21 @@ public class DexType extends DexReference implements PresortedComparable<DexType
     return false;
   }
 
-  public boolean classInitializationMayHaveSideEffects(AppView<?> appView) {
-    return classInitializationMayHaveSideEffects(
-        appView, Predicates.alwaysFalse(), Sets.newIdentityHashSet());
-  }
-
-  public boolean classInitializationMayHaveSideEffects(
-      AppView<?> appView, Predicate<DexType> ignore, Set<DexType> seen) {
+  public boolean classInitializationMayHaveSideEffectsInContext(
+      AppView<?> appView, ProgramDefinition context) {
     DexClass clazz = appView.definitionFor(this);
-    return clazz == null || clazz.classInitializationMayHaveSideEffects(appView, ignore, seen);
+    return clazz == null || clazz.classInitializationMayHaveSideEffectsInContext(appView, context);
   }
 
-  public boolean initializationOfParentTypesMayHaveSideEffects(AppView<?> appView) {
-    return initializationOfParentTypesMayHaveSideEffects(
-        appView, Predicates.alwaysFalse(), Sets.newIdentityHashSet());
-  }
-
-  public boolean initializationOfParentTypesMayHaveSideEffects(
-      AppView<?> appView, Predicate<DexType> ignore, Set<DexType> seen) {
+  final boolean internalClassOrInterfaceMayHaveInitializationSideEffects(
+      AppView<?> appView,
+      DexClass initialAccessHolder,
+      Predicate<DexType> ignore,
+      Set<DexType> seen) {
     DexClass clazz = appView.definitionFor(this);
     return clazz == null
-        || clazz.initializationOfParentTypesMayHaveSideEffects(appView, ignore, seen);
+        || clazz.internalClassOrInterfaceMayHaveInitializationSideEffects(
+            appView, initialAccessHolder, ignore, seen);
   }
 
   public boolean isAlwaysNull(AppView<AppInfoWithLiveness> appView) {
@@ -207,18 +224,6 @@ public class DexType extends DexReference implements PresortedComparable<DexType
   @Override
   public DexType asDexType() {
     return this;
-  }
-
-  @Override
-  public int slowCompareTo(DexType other) {
-    return descriptor.slowCompareTo(other.descriptor);
-  }
-
-  @Override
-  public int slowCompareTo(DexType other, NamingLens namingLens) {
-    DexString thisDescriptor = namingLens.lookupDescriptor(this);
-    DexString otherDescriptor = namingLens.lookupDescriptor(other);
-    return thisDescriptor.slowCompareTo(otherDescriptor, namingLens);
   }
 
   public boolean isPrimitiveType() {

@@ -42,7 +42,7 @@ public class ObjectToOffsetMapping {
   private DexString firstJumboString;
 
   public ObjectToOffsetMapping(
-      AppInfo appInfo,
+      AppView<?> appView,
       GraphLens graphLens,
       NamingLens namingLens,
       InitClassLens initClassLens,
@@ -54,7 +54,7 @@ public class ObjectToOffsetMapping {
       Collection<DexString> strings,
       Collection<DexCallSite> callSites,
       Collection<DexMethodHandle> methodHandles) {
-    assert appInfo != null;
+    assert appView != null;
     assert graphLens != null;
     assert classes != null;
     assert protos != null;
@@ -68,8 +68,8 @@ public class ObjectToOffsetMapping {
     this.graphLens = graphLens;
     this.namingLens = namingLens;
     this.initClassLens = initClassLens;
-    this.lensCodeRewriter = new LensCodeRewriterUtils(appInfo, graphLens);
-    this.classes = sortClasses(appInfo, classes, namingLens);
+    this.lensCodeRewriter = new LensCodeRewriterUtils(appView);
+    this.classes = sortClasses(appView.appInfo(), classes, namingLens);
     this.protos = createSortedMap(protos, compare(namingLens), this::failOnOverflow);
     this.types = createSortedMap(types, compare(namingLens), this::failOnOverflow);
     this.methods = createSortedMap(methods, compare(namingLens), this::failOnOverflow);
@@ -79,8 +79,8 @@ public class ObjectToOffsetMapping {
     this.methodHandles = createSortedMap(methodHandles, compare(namingLens), this::failOnOverflow);
   }
 
-  private static <T extends PresortedComparable<T>> Comparator<T> compare(NamingLens namingLens) {
-    return (a, b) -> a.slowCompareTo(b, namingLens);
+  private static <T extends NamingLensComparable<T>> Comparator<T> compare(NamingLens namingLens) {
+    return (a, b) -> a.compareToWithNamingLens(b, namingLens);
   }
 
   private void setFirstJumboString(DexString string) {
@@ -168,7 +168,7 @@ public class ObjectToOffsetMapping {
                 (x, y) -> {
                   int dx = classDepths.getDepth(x);
                   int dy = classDepths.getDepth(y);
-                  return dx != dy ? dx - dy : x.type.slowCompareTo(y.type, namingLens);
+                  return dx != dy ? dx - dy : x.type.compareToWithNamingLens(y.type, namingLens);
                 })
             .collect(Collectors.toList());
     return sortedClasses.toArray(DexProgramClass.EMPTY_ARRAY);

@@ -29,6 +29,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -402,6 +403,102 @@ public class DexProgramClass extends DexClass
     this.kotlinInfo = kotlinInfo;
   }
 
+  @Override
+  boolean internalClassOrInterfaceMayHaveInitializationSideEffects(
+      AppView<?> appView,
+      DexClass initialAccessHolder,
+      Predicate<DexType> ignore,
+      Set<DexType> seen) {
+    if (!seen.add(getType()) || ignore.test(getType())) {
+      return false;
+    }
+    return isInterface()
+        ? internalInterfaceMayHaveInitializationSideEffects(
+            appView, initialAccessHolder, ignore, seen)
+        : internalClassMayHaveInitializationSideEffects(appView, initialAccessHolder, ignore, seen);
+  }
+
+  private boolean internalClassMayHaveInitializationSideEffects(
+      AppView<?> appView,
+      DexClass initialAccessHolder,
+      Predicate<DexType> ignore,
+      Set<DexType> seen) {
+    assert !isInterface();
+    assert seen.contains(getType());
+    assert !ignore.test(getType());
+    if (hasClassInitializer()
+        && !getClassInitializer().getOptimizationInfo().classInitializerMayBePostponed()) {
+      return true;
+    }
+    return defaultValuesForStaticFieldsMayTriggerAllocation()
+        || initializationOfParentTypesMayHaveSideEffects(
+            appView, initialAccessHolder, ignore, seen);
+  }
+
+  /**
+   * Interface initialization is described the JVM Specification, section 5.5 Initialization (Java
+   * SE 11 Edition).
+   *
+   * <p>A class or interface C may be initialized only as a result of:
+   *
+   * <ul>
+   *   <li>The execution of any one of the Java Virtual Machine instructions new, getstatic,
+   *       putstatic, or invokestatic that references C.
+   *   <li>...
+   *   <li>If C is an interface that declares a non-abstract, non-static method, the initialization
+   *       of a class that implements C directly or indirectly.
+   * </ul>
+   */
+  private boolean internalInterfaceMayHaveInitializationSideEffects(
+      AppView<?> appView,
+      DexClass initialAccessHolder,
+      Predicate<DexType> ignore,
+      Set<DexType> seen) {
+    assert isInterface();
+    assert seen.contains(getType());
+    assert !ignore.test(getType());
+
+    // If there is a direct access to the interface, then this has side effects if its clinit has
+    // side effects. Parent types are not initialized and thus don't need to be considered.
+    if (this == initialAccessHolder) {
+      if (hasClassInitializer()
+          && !getClassInitializer().getOptimizationInfo().classInitializerMayBePostponed()) {
+        return true;
+      }
+      return defaultValuesForStaticFieldsMayTriggerAllocation();
+    }
+
+    // Otherwise, this interface has side effects if its clinit has side effects and it has at least
+    // one default interface method, or if one of its parent types have observable side effects.
+    if (hasClassInitializer()
+        && !getClassInitializer().getOptimizationInfo().classInitializerMayBePostponed()
+        && getMethodCollection().hasVirtualMethods(DexEncodedMethod::isDefaultMethod)) {
+      return true;
+    }
+
+    return initializationOfParentTypesMayHaveSideEffects(
+        appView, initialAccessHolder, ignore, seen);
+  }
+
+  private boolean initializationOfParentTypesMayHaveSideEffects(
+      AppView<?> appView,
+      DexClass initialAccessHolder,
+      Predicate<DexType> ignore,
+      Set<DexType> seen) {
+    if (superType != null
+        && superType.internalClassOrInterfaceMayHaveInitializationSideEffects(
+            appView, initialAccessHolder, ignore, seen)) {
+      return true;
+    }
+    for (DexType iface : interfaces) {
+      if (iface.internalClassOrInterfaceMayHaveInitializationSideEffects(
+          appView, initialAccessHolder, ignore, seen)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   public boolean hasFields() {
     return instanceFields.length + staticFields.length > 0;
   }
@@ -454,7 +551,7 @@ public class DexProgramClass extends DexClass
       return null;
     }
     DexEncodedField[] fields = staticFields;
-    Arrays.sort(fields, (a, b) -> a.field.slowCompareTo(b.field, namingLens));
+    Arrays.sort(fields, (a, b) -> a.field.compareToWithNamingLens(b.field, namingLens));
     int length = 0;
     List<DexValue> values = new ArrayList<>(fields.length);
     for (int i = 0; i < fields.length; i++) {

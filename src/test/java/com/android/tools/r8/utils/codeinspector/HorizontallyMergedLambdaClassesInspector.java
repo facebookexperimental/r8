@@ -5,10 +5,14 @@
 package com.android.tools.r8.utils.codeinspector;
 
 import static com.android.tools.r8.TestBase.toDexType;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import com.android.tools.r8.graph.DexItemFactory;
+import com.android.tools.r8.graph.DexType;
 import com.android.tools.r8.graph.classmerging.HorizontallyMergedLambdaClasses;
+import java.util.Set;
+import java.util.function.BiConsumer;
 
 public class HorizontallyMergedLambdaClassesInspector {
 
@@ -32,5 +36,14 @@ public class HorizontallyMergedLambdaClassesInspector {
       assertMerged(clazz);
     }
     return this;
+  }
+
+  public HorizontallyMergedLambdaClassesInspector assertClassNotMerged(Class<?> clazz) {
+    assertFalse(horizontallyMergedLambdaClasses.hasBeenMerged(toDexType(clazz, dexItemFactory)));
+    return this;
+  }
+
+  public void forEachMergeGroup(BiConsumer<Set<DexType>, DexType> consumer) {
+    horizontallyMergedLambdaClasses.forEachMergeGroup(consumer);
   }
 }
