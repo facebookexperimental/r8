@@ -5,9 +5,13 @@ package com.android.tools.r8.utils.structural;
 
 import com.android.tools.r8.utils.structural.StructuralItem.CompareToAccept;
 import com.android.tools.r8.utils.structural.StructuralItem.HashingAccept;
+import java.util.Arrays;
+import java.util.Iterator;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.ToDoubleFunction;
 import java.util.function.ToIntFunction;
+import java.util.function.ToLongFunction;
 
 /**
  * Simple hash code implementation.
@@ -21,7 +25,7 @@ public class HashCodeVisitor<T> extends StructuralSpecification<T, HashCodeVisit
 
   public static <T> int run(T item, StructuralAccept<T> visit) {
     HashCodeVisitor<T> visitor = new HashCodeVisitor<>(item);
-    visit.accept(visitor);
+    visit.apply(visitor);
     return visitor.hashCode;
   }
 
@@ -56,6 +60,21 @@ public class HashCodeVisitor<T> extends StructuralSpecification<T, HashCodeVisit
   }
 
   @Override
+  public HashCodeVisitor<T> withLong(ToLongFunction<T> getter) {
+    return amend(Long.hashCode(getter.applyAsLong(item)));
+  }
+
+  @Override
+  public HashCodeVisitor<T> withDouble(ToDoubleFunction<T> getter) {
+    return amend(Double.hashCode(getter.applyAsDouble(item)));
+  }
+
+  @Override
+  public HashCodeVisitor<T> withIntArray(Function<T, int[]> getter) {
+    return amend(Arrays.hashCode(getter.apply(item)));
+  }
+
+  @Override
   protected <S> HashCodeVisitor<T> withConditionalCustomItem(
       Predicate<T> predicate,
       Function<T, S> getter,
@@ -64,9 +83,19 @@ public class HashCodeVisitor<T> extends StructuralSpecification<T, HashCodeVisit
     if (predicate.test(item)) {
       return amend(getter.apply(item).hashCode());
     } else {
-      // Use the value 1 for the failing-predicate case such that a different hash is obtained for
+      // Use the value 1 for the failing-predicate case such that a different hash is obtained for,
       // eg, {null, null} and {null}.
       return amend(1);
     }
+  }
+
+  @Override
+  protected <S> HashCodeVisitor<T> withItemIterator(
+      Function<T, Iterator<S>> getter, CompareToAccept<S> compare, HashingAccept<S> hasher) {
+    Iterator<S> it = getter.apply(item);
+    while (it.hasNext()) {
+      amend(it.next().hashCode());
+    }
+    return this;
   }
 }

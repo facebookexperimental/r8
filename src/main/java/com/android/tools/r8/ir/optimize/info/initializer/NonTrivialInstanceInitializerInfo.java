@@ -38,6 +38,16 @@ public final class NonTrivialInstanceInitializerInfo extends InstanceInitializer
     this.parent = parent;
   }
 
+  @Override
+  public boolean isNonTrivialInstanceInitializerInfo() {
+    return true;
+  }
+
+  @Override
+  public NonTrivialInstanceInitializerInfo asNonTrivialInstanceInitializerInfo() {
+    return this;
+  }
+
   private static boolean verifyNoUnknownBits(int data) {
     int knownBits =
         INSTANCE_FIELD_INITIALIZATION_INDEPENDENT_OF_ENVIRONMENT
@@ -189,8 +199,12 @@ public final class NonTrivialInstanceInitializerInfo extends InstanceInitializer
       return parent != null;
     }
 
+    public DexMethod getParent() {
+      return parent;
+    }
+
     public Builder setParent(DexMethod parent) {
-      assert !hasParent();
+      assert !hasParent() || getParent() == parent;
       this.parent = parent;
       return this;
     }

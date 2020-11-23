@@ -10,8 +10,10 @@ import com.android.tools.r8.graph.DexMethod;
 import com.android.tools.r8.graph.DexType;
 import com.android.tools.r8.graph.GraphLens;
 import com.android.tools.r8.graph.GraphLens.NestedGraphLens;
+import com.android.tools.r8.graph.RewrittenPrototypeDescription;
 import com.android.tools.r8.ir.conversion.ExtraParameter;
 import com.android.tools.r8.utils.IterableUtils;
+import com.android.tools.r8.utils.collections.BidirectionalOneToOneHashMap;
 import com.google.common.collect.BiMap;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -22,7 +24,7 @@ import java.util.Set;
 import java.util.function.Function;
 
 public class HorizontalClassMergerGraphLens extends NestedGraphLens {
-  private final AppView<?> appView;
+
   private final Map<DexMethod, List<ExtraParameter>> methodExtraParameters;
   private final Map<DexMethod, DexMethod> extraOriginalMethodSignatures;
   private final HorizontallyMergedClasses mergedClasses;
@@ -35,7 +37,7 @@ public class HorizontalClassMergerGraphLens extends NestedGraphLens {
       Map<DexField, DexField> fieldMap,
       Map<DexMethod, DexMethod> methodMap,
       BiMap<DexField, DexField> originalFieldSignatures,
-      BiMap<DexMethod, DexMethod> originalMethodSignatures,
+      BidirectionalOneToOneHashMap<DexMethod, DexMethod> originalMethodSignatures,
       Map<DexMethod, DexMethod> extraOriginalMethodSignatures,
       Map<DexField, DexField> extraOriginalFieldSignatures,
       GraphLens previousLens) {
@@ -47,16 +49,28 @@ public class HorizontalClassMergerGraphLens extends NestedGraphLens {
         originalMethodSignatures,
         previousLens,
         appView.dexItemFactory());
-    this.appView = appView;
     this.methodExtraParameters = methodExtraParameters;
     this.extraOriginalFieldSignatures = extraOriginalFieldSignatures;
     this.extraOriginalMethodSignatures = extraOriginalMethodSignatures;
     this.mergedClasses = mergedClasses;
   }
 
+  private boolean isSynthesizedByHorizontalClassMerging(DexMethod method) {
+    return methodExtraParameters.containsKey(method);
+  }
+
   @Override
   protected Iterable<DexType> internalGetOriginalTypes(DexType previous) {
     return IterableUtils.prependSingleton(previous, mergedClasses.getSourcesFor(previous));
+  }
+
+  @Override
+  public RewrittenPrototypeDescription lookupPrototypeChangesForMethodDefinition(DexMethod method) {
+    if (isSynthesizedByHorizontalClassMerging(method)) {
+      // If we are processing the call site, the arguments should be removed.
+      return RewrittenPrototypeDescription.none();
+    }
+    return super.lookupPrototypeChangesForMethodDefinition(method);
   }
 
   @Override
@@ -127,7 +141,7 @@ public class HorizontalClassMergerGraphLens extends NestedGraphLens {
           methodExtraParameters,
           fieldMap.getForwardMap(),
           methodMap.getForwardMap(),
-          inverseFieldMap.getBiMap(),
+          inverseFieldMap.getBiMap().getForwardBacking(),
           inverseMethodMap.getBiMap(),
           inverseMethodMap.getExtraMap(),
           inverseFieldMap.getExtraMap(),

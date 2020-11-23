@@ -649,6 +649,33 @@ public class Enqueuer {
     }
   }
 
+  private void warnIfClassExtendsInterfaceOrImplementsClass(DexProgramClass clazz) {
+    if (clazz.superType != null) {
+      DexClass superClass = definitionFor(clazz.superType);
+      if (superClass != null && superClass.isInterface()) {
+        options.reporter.warning(
+            new StringDiagnostic(
+                "Class "
+                    + clazz.toSourceString()
+                    + " extends "
+                    + superClass.toSourceString()
+                    + " which is an interface"));
+      }
+    }
+    for (DexType iface : clazz.interfaces.values) {
+      DexClass ifaceClass = definitionFor(iface);
+      if (ifaceClass != null && !ifaceClass.isInterface()) {
+        options.reporter.warning(
+            new StringDiagnostic(
+                "Class "
+                    + clazz.toSourceString()
+                    + " implements "
+                    + ifaceClass.toSourceString()
+                    + " which is not an interface"));
+      }
+    }
+  }
+
   private void enqueueRootItems(Map<DexReference, Set<ProguardKeepRuleBase>> items) {
     items.entrySet().forEach(this::enqueueRootItem);
   }
@@ -759,13 +786,13 @@ public class Enqueuer {
       }
     } else if (item.isDexEncodedField()) {
       DexEncodedField field = item.asDexEncodedField();
-      DexProgramClass holder = getProgramClassOrNull(field.holder());
+      DexProgramClass holder = getProgramClassOrNull(field.getHolderType());
       if (holder != null) {
         enqueueRootField(new ProgramField(holder, field), rules, precondition);
       }
     } else if (item.isDexEncodedMethod()) {
       DexEncodedMethod method = item.asDexEncodedMethod();
-      DexProgramClass holder = getProgramClassOrNull(method.holder());
+      DexProgramClass holder = getProgramClassOrNull(method.getHolderType());
       if (holder != null) {
         enqueueRootMethod(new ProgramMethod(holder, method), rules, precondition);
       }
@@ -1459,6 +1486,10 @@ public class Enqueuer {
       // Must mark the field as targeted even if it does not exist.
       markFieldAsTargeted(fieldReference, currentMethod);
       noClassMerging.add(fieldReference.getHolderType());
+
+      // Record field reference for generated extension registry shrinking.
+      appView.withGeneratedExtensionRegistryShrinker(
+          shrinker -> shrinker.handleFailedOrUnknownFieldResolution(fieldReference, currentMethod));
       return;
     }
 
@@ -1477,17 +1508,15 @@ public class Enqueuer {
       Log.verbose(getClass(), "Register Sget `%s`.", fieldReference);
     }
 
-    if (appView.options().protoShrinking().enableGeneratedExtensionRegistryShrinking) {
-      // If it is a dead proto extension field, don't trace onwards.
-      boolean skipTracing =
-          appView.withGeneratedExtensionRegistryShrinker(
-              shrinker ->
-                  shrinker.isDeadProtoExtensionField(field, fieldAccessInfoCollection, keepInfo),
-              false);
-      if (skipTracing) {
-        addDeadProtoTypeCandidate(field.getHolder());
-        return;
-      }
+    // If it is a dead proto extension field, don't trace onwards.
+    boolean skipTracing =
+        appView.withGeneratedExtensionRegistryShrinker(
+            shrinker ->
+                shrinker.isDeadProtoExtensionField(field, fieldAccessInfoCollection, keepInfo),
+            false);
+    if (skipTracing) {
+      addDeadProtoTypeCandidate(field.getHolder());
+      return;
     }
 
     if (field.getReference() != fieldReference) {
@@ -1678,6 +1707,9 @@ public class Enqueuer {
       seen.setParent(seenForSuper);
       markTypeAsLive(holder.superType, reason);
     }
+
+    // Warn if the class extends an interface or implements a class
+    warnIfClassExtendsInterfaceOrImplementsClass(holder);
 
     // If this is an interface that has just become live, then report previously seen but unreported
     // implemented-by edges.
@@ -2385,7 +2417,7 @@ public class Enqueuer {
           && appView.rewritePrefix.hasRewrittenTypeInSignature(method.method.proto, appView)) {
         DexMethod methodToResolve =
             DesugaredLibraryAPIConverter.methodWithVivifiedTypeInSignature(
-                method.method, method.holder(), appView);
+                method.method, method.getHolderType(), appView);
         assert methodToResolve != method.method;
         markLibraryOrClasspathOverrideLive(
             instantiation,
@@ -2787,7 +2819,7 @@ public class Enqueuer {
     failedResolutionTargets.add(symbolicMethod);
     failedResolution.forEachFailureDependency(
         method -> {
-          DexProgramClass clazz = getProgramClassOrNull(method.holder());
+          DexProgramClass clazz = getProgramClassOrNull(method.getHolderType());
           if (clazz != null) {
             failedResolutionTargets.add(method.method);
             markMethodAsTargeted(new ProgramMethod(clazz, method), reason);
@@ -2839,7 +2871,7 @@ public class Enqueuer {
       return;
     }
 
-    DexProgramClass clazz = getProgramClassOrNull(target.holder());
+    DexProgramClass clazz = getProgramClassOrNull(target.getHolderType());
     if (clazz == null) {
       return;
     }
@@ -3672,7 +3704,7 @@ public class Enqueuer {
         } else {
           DexEncodedMethod implementation = definition.getDefaultInterfaceMethodImplementation();
           if (implementation != null) {
-            DexProgramClass companion = getProgramClassOrNull(implementation.holder());
+            DexProgramClass companion = getProgramClassOrNull(implementation.getHolderType());
             markTypeAsLive(companion, graphReporter.reportCompanionClass(holder, companion));
             markVirtualMethodAsLive(
                 new ProgramMethod(companion, implementation),

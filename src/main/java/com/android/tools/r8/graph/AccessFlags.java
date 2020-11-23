@@ -4,12 +4,15 @@
 package com.android.tools.r8.graph;
 
 import com.android.tools.r8.dex.Constants;
+import com.android.tools.r8.utils.structural.StructuralAccept;
+import com.android.tools.r8.utils.structural.StructuralItem;
+import com.android.tools.r8.utils.structural.StructuralSpecification;
 import com.google.common.collect.ImmutableList;
 import java.util.List;
 import java.util.function.BooleanSupplier;
 
 /** Access flags common to classes, methods and fields. */
-public abstract class AccessFlags<T extends AccessFlags<T>> {
+public abstract class AccessFlags<T extends AccessFlags<T>> implements StructuralItem<T> {
 
   protected static final int BASE_FLAGS
       = Constants.ACC_PUBLIC
@@ -53,8 +56,18 @@ public abstract class AccessFlags<T extends AccessFlags<T>> {
     this.modifiedFlags = modifiedFlags;
   }
 
+  protected static <T extends AccessFlags<T>> void specify(StructuralSpecification<T, ?> spec) {
+    spec.withInt(a -> a.originalFlags).withInt(a -> a.modifiedFlags);
+  }
+
+  @Override
+  public StructuralAccept<T> getStructuralAccept() {
+    return AccessFlags::specify;
+  }
+
   public abstract T copy();
 
+  @Override
   public abstract T self();
 
   public int materialize() {

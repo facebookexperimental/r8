@@ -123,7 +123,7 @@ public class GeneratedExtensionRegistryShrinker {
    */
   public void rewriteCode(DexEncodedMethod method, IRCode code) {
     if (method.isClassInitializer()
-        && classesWithRemovedExtensionFields.contains(method.holder())
+        && classesWithRemovedExtensionFields.contains(method.getHolderType())
         && code.metadata().mayHaveStaticPut()) {
       rewriteClassInitializer(code);
     }
@@ -176,10 +176,16 @@ public class GeneratedExtensionRegistryShrinker {
                 clazz.forEachProgramMethodMatching(
                     definition ->
                         references.isFindLiteExtensionByNumberMethod(definition.getReference()),
-                    consumer::accept),
+                    consumer),
             lambda -> {
               assert false;
             });
+  }
+
+  public void handleFailedOrUnknownFieldResolution(DexField fieldReference, ProgramMethod context) {
+    if (references.isFindLiteExtensionByNumberMethod(context)) {
+      removedExtensionFields.add(fieldReference);
+    }
   }
 
   public boolean isDeadProtoExtensionField(DexField fieldReference) {

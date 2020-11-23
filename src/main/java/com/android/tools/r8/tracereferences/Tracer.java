@@ -259,9 +259,9 @@ class Tracer {
     private final TraceReferencesConsumer consumer;
     private DexProgramClass context;
     private final DiagnosticsHandler diagnostics;
-    private final Set<TracedClassImpl> missingClasses = new HashSet<>();
-    private final Set<TracedFieldImpl> missingFields = new HashSet<>();
-    private final Set<TracedMethodImpl> missingMethods = new HashSet<>();
+    private final Set<ClassReference> missingClasses = new HashSet<>();
+    private final Set<FieldReference> missingFields = new HashSet<>();
+    private final Set<MethodReference> missingMethods = new HashSet<>();
 
     UseCollector(
         DexItemFactory factory, TraceReferencesConsumer consumer, DiagnosticsHandler diagnostics) {
@@ -299,7 +299,7 @@ class Tracer {
     private void addField(DexField field) {
       addType(field.type);
       DexEncodedField baseField = appInfo.resolveField(field).getResolvedField();
-      if (baseField != null && baseField.holder() != field.holder) {
+      if (baseField != null && baseField.getHolderType() != field.holder) {
         field = baseField.field;
       }
       addType(field.holder);
@@ -310,7 +310,7 @@ class Tracer {
         if (!tracedField.isMissingDefinition()
             && baseField.accessFlags.isVisibilityDependingOnPackage()) {
           consumer.acceptPackage(
-              Reference.packageFromString(baseField.holder().getPackageName()), diagnostics);
+              Reference.packageFromString(baseField.getHolderType().getPackageName()), diagnostics);
         }
       }
     }
@@ -330,7 +330,8 @@ class Tracer {
         if (!tracedMethod.isMissingDefinition()
             && definition.accessFlags.isVisibilityDependingOnPackage()) {
           consumer.acceptPackage(
-              Reference.packageFromString(definition.holder().getPackageName()), diagnostics);
+              Reference.packageFromString(definition.getHolderType().getPackageName()),
+              diagnostics);
         }
       }
     }
@@ -347,10 +348,10 @@ class Tracer {
       collectMissing(tracedMethod, missingMethods);
     }
 
-    private <T extends TracedReferenceBase<?, ?>> void collectMissing(
-        T tracedReference, Set<T> missingCollection) {
+    private <R, T extends TracedReferenceBase<R, ?>> void collectMissing(
+        T tracedReference, Set<R> missingCollection) {
       if (tracedReference.isMissingDefinition()) {
-        missingCollection.add(tracedReference);
+        missingCollection.add(tracedReference.getReference());
       }
     }
 

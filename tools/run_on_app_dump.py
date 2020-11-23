@@ -319,6 +319,8 @@ APPS = [
     'url': 'https://github.com/chrisbanes/tivi',
     'revision': '8e2ddd8fe2d343264a66aa1ef8acbd4cc587e8ce',
     'folder': 'tivi',
+    # TODO(b/173974110): Enable recompilation.
+    'skip_recompilation': True,
   }),
   App({
     'id': 'com.keylesspalace.tusky',
@@ -348,6 +350,8 @@ APPS = [
     'url': 'https://github.com/android/compose-samples',
     'revision': '779cf9e187b8ee2c6b620b2abb4524719b3f10f8',
     'folder': 'android/compose-samples/crane',
+    # TODO(b/173176042): Fix recompilation
+    'skip_recompilation': True,
   }),
   # TODO(b/173167253): Check if monkey testing works.
   App({
@@ -398,6 +402,8 @@ APPS = [
     'url': 'https://github.com/android/compose-samples',
     'revision': '779cf9e187b8ee2c6b620b2abb4524719b3f10f8',
     'folder': 'android/compose-samples/jetsnack',
+    # TODO(b/173176042): Fix recompilation
+    'skip_recompilation': True,
   }),
   # TODO(b/173167253): Check if monkey testing works.
   App({
@@ -409,6 +415,8 @@ APPS = [
     'url': 'https://github.com/android/compose-samples',
     'revision': '779cf9e187b8ee2c6b620b2abb4524719b3f10f8',
     'folder': 'android/compose-samples/jetsurvey',
+    # TODO(b/173176042): Fix recompilation
+    'skip_recompilation': True,
   }),
   # TODO(b/173167253): Check if monkey testing works.
   App({
@@ -420,6 +428,8 @@ APPS = [
     'url': 'https://github.com/android/compose-samples',
     'revision': '779cf9e187b8ee2c6b620b2abb4524719b3f10f8',
     'folder': 'android/compose-samples/owl',
+    # TODO(b/173176042): Fix recompilation
+    'skip_recompilation': True,
   }),
   # TODO(b/173167253): Check if monkey testing works.
   App({
@@ -431,6 +441,8 @@ APPS = [
     'url': 'https://github.com/android/compose-samples',
     'revision': '779cf9e187b8ee2c6b620b2abb4524719b3f10f8',
     'folder': 'android/compose-samples/rally',
+    # TODO(b/173176042): Fix recompilation
+    'skip_recompilation': True,
   }),
 ]
 
@@ -790,6 +802,8 @@ def log_comparison_results_for_app(app, result_per_shrinker, options):
       print('  {}-#{}:'.format(shrinker, compilation_index))
       dex_size = result.get('dex_size')
       msg = '    dex size: {}'.format(dex_size)
+      if options.print_runtimeraw:
+        print('    run time raw: {} ms'.format(result.get('duration')))
       if dex_size != proguard_dex_size and proguard_dex_size >= 0:
         msg = '{} ({}, {})'.format(
           msg, dex_size - proguard_dex_size,
@@ -887,6 +901,11 @@ def parse_options(argv):
                     help='Print the sizes of individual dex segments as ' +
                          '\'<BENCHMARKNAME>-<APP>-<segment>(CodeSize): '
                          '<bytes>\'')
+  result.add_option('--print-runtimeraw',
+                    metavar='BENCHMARKNAME',
+                    help='Print the line \'<BENCHMARKNAME>(RunTimeRaw):' +
+                        ' <elapsed> ms\' at the end where <elapsed> is' +
+                        ' the elapsed time in milliseconds.')
   result.add_option('--quiet',
                     help='Disable verbose logging',
                     default=False,

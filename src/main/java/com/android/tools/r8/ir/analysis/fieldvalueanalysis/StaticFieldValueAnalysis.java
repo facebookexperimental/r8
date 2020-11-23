@@ -91,7 +91,7 @@ public class StaticFieldValueAnalysis extends FieldValueAnalysis {
   @Override
   boolean isSubjectToOptimization(DexEncodedField field) {
     return field.isStatic()
-        && field.holder() == context.getHolderType()
+        && field.getHolderType() == context.getHolderType()
         && appView.appInfo().isFieldOnlyWrittenInMethod(field, context.getDefinition());
   }
 
@@ -348,7 +348,7 @@ public class StaticFieldValueAnalysis extends FieldValueAnalysis {
         singleTarget
             .getDefinition()
             .getOptimizationInfo()
-            .getInstanceInitializerInfo()
+            .getInstanceInitializerInfo(uniqueConstructorInvoke)
             .fieldInitializationInfos();
     if (initializationInfos.isEmpty()) {
       return ObjectState.empty();

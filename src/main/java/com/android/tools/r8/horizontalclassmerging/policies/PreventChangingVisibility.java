@@ -8,6 +8,7 @@ import com.android.tools.r8.graph.DexEncodedMethod;
 import com.android.tools.r8.graph.DexMethod;
 import com.android.tools.r8.graph.DexProgramClass;
 import com.android.tools.r8.graph.MethodAccessFlags;
+import com.android.tools.r8.horizontalclassmerging.MergeGroup;
 import com.android.tools.r8.horizontalclassmerging.MultiClassPolicy;
 import com.android.tools.r8.utils.MethodSignatureEquivalence;
 import com.google.common.base.Equivalence.Wrapper;
@@ -15,7 +16,6 @@ import com.google.common.collect.Iterables;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
@@ -23,10 +23,10 @@ public class PreventChangingVisibility extends MultiClassPolicy {
   public PreventChangingVisibility() {}
 
   public static class TargetGroup {
-    private final List<DexProgramClass> group = new LinkedList<>();
+    private final MergeGroup group = new MergeGroup();
     private final Map<Wrapper<DexMethod>, MethodAccessFlags> methodMap = new HashMap<>();
 
-    public List<DexProgramClass> getGroup() {
+    public MergeGroup getGroup() {
       return group;
     }
 
@@ -53,7 +53,7 @@ public class PreventChangingVisibility extends MultiClassPolicy {
   }
 
   @Override
-  public Collection<List<DexProgramClass>> apply(List<DexProgramClass> group) {
+  public Collection<MergeGroup> apply(MergeGroup group) {
     List<TargetGroup> groups = new ArrayList<>();
 
     for (DexProgramClass clazz : group) {
@@ -66,13 +66,12 @@ public class PreventChangingVisibility extends MultiClassPolicy {
       }
     }
 
-    Collection<List<DexProgramClass>> newGroups = new ArrayList<>();
+    Collection<MergeGroup> newGroups = new ArrayList<>();
     for (TargetGroup newGroup : groups) {
-      if (!isTrivial(newGroup.getGroup())) {
+      if (!newGroup.getGroup().isTrivial()) {
         newGroups.add(newGroup.getGroup());
       }
     }
-
     return newGroups;
   }
 }

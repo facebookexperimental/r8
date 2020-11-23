@@ -5,14 +5,16 @@ package com.android.tools.r8.utils.structural;
 
 import com.android.tools.r8.graph.DexString;
 import com.android.tools.r8.graph.DexType;
-import com.android.tools.r8.graph.DexTypeList;
 import com.android.tools.r8.utils.structural.StructuralItem.CompareToAccept;
 import com.android.tools.r8.utils.structural.StructuralItem.HashingAccept;
 import com.google.common.hash.Hasher;
+import java.util.Iterator;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.ToDoubleFunction;
 import java.util.function.ToIntFunction;
+import java.util.function.ToLongFunction;
 
 /** Visitor for hashing a structural item under some assumed type equivalence. */
 public class HashingVisitorWithTypeEquivalence extends HashingVisitor {
@@ -24,7 +26,7 @@ public class HashingVisitorWithTypeEquivalence extends HashingVisitor {
 
   public static <T> void run(
       T item, Hasher hasher, RepresentativeMap map, HashingAccept<T> hashingAccept) {
-    hashingAccept.accept(item, new HashingVisitorWithTypeEquivalence(hasher, map));
+    hashingAccept.acceptHashing(item, new HashingVisitorWithTypeEquivalence(hasher, map));
   }
 
   private final Hasher hash;
@@ -46,6 +48,21 @@ public class HashingVisitorWithTypeEquivalence extends HashingVisitor {
   }
 
   @Override
+  public void visitFloat(float value) {
+    hash.putFloat(value);
+  }
+
+  @Override
+  public void visitLong(long value) {
+    hash.putLong(value);
+  }
+
+  @Override
+  public void visitDouble(double value) {
+    hash.putDouble(value);
+  }
+
+  @Override
   public void visitDexString(DexString string) {
     visitInt(string.hashCode());
   }
@@ -56,13 +73,15 @@ public class HashingVisitorWithTypeEquivalence extends HashingVisitor {
   }
 
   @Override
-  public void visitDexTypeList(DexTypeList types) {
-    types.forEach(this::visitDexType);
+  public <S> void visit(S item, StructuralAccept<S> accept) {
+    accept.apply(new ItemSpecification<>(item, this));
   }
 
   @Override
-  public <S> void visit(S item, StructuralAccept<S> accept) {
-    accept.accept(new ItemSpecification<>(item, this));
+  protected <S> void visitItemIterator(Iterator<S> it, HashingAccept<S> hashingAccept) {
+    while (it.hasNext()) {
+      hashingAccept.acceptHashing(it.next(), this);
+    }
   }
 
   @Override
@@ -100,6 +119,27 @@ public class HashingVisitorWithTypeEquivalence extends HashingVisitor {
     }
 
     @Override
+    public ItemSpecification<T> withLong(ToLongFunction<T> getter) {
+      parent.visitLong(getter.applyAsLong(item));
+      return this;
+    }
+
+    @Override
+    public ItemSpecification<T> withDouble(ToDoubleFunction<T> getter) {
+      parent.visitDouble(getter.applyAsDouble(item));
+      return this;
+    }
+
+    @Override
+    public ItemSpecification<T> withIntArray(Function<T, int[]> getter) {
+      int[] ints = getter.apply(item);
+      for (int i = 0; i < ints.length; i++) {
+        parent.visitInt(ints[i]);
+      }
+      return this;
+    }
+
+    @Override
     protected <S> ItemSpecification<T> withConditionalCustomItem(
         Predicate<T> predicate,
         Function<T, S> getter,
@@ -109,8 +149,15 @@ public class HashingVisitorWithTypeEquivalence extends HashingVisitor {
       // Always hash the predicate result to distinguish, eg, {null, null} and {null}.
       parent.visitBool(test);
       if (test) {
-        hasher.accept(getter.apply(item), parent);
+        hasher.acceptHashing(getter.apply(item), parent);
       }
+      return this;
+    }
+
+    @Override
+    protected <S> ItemSpecification<T> withItemIterator(
+        Function<T, Iterator<S>> getter, CompareToAccept<S> compare, HashingAccept<S> hasher) {
+      parent.visitItemIterator(getter.apply(item), hasher);
       return this;
     }
   }

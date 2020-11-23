@@ -87,6 +87,27 @@ public class IteratorUtils {
     throw new Unreachable();
   }
 
+  public static <T> T previousUntilUnsafe(ListIterator<T> iterator, Predicate<T> predicate) {
+    while (iterator.hasPrevious()) {
+      T previous = iterator.previous();
+      if (predicate.test(previous)) {
+        return previous;
+      }
+    }
+    return null;
+  }
+
+  public static <T> T removeFirst(Iterator<T> iterator, Predicate<T> predicate) {
+    while (iterator.hasNext()) {
+      T item = iterator.next();
+      if (predicate.test(item)) {
+        iterator.remove();
+        return item;
+      }
+    }
+    return null;
+  }
+
   public static <T> void removeIf(Iterator<T> iterator, Predicate<T> predicate) {
     while (iterator.hasNext()) {
       T item = iterator.next();

@@ -75,7 +75,9 @@ import com.android.tools.r8.utils.BooleanUtils;
 import com.android.tools.r8.utils.InternalOptions;
 import com.android.tools.r8.utils.OptionalBool;
 import com.android.tools.r8.utils.Pair;
+import com.android.tools.r8.utils.structural.CompareToVisitor;
 import com.android.tools.r8.utils.structural.CompareToVisitorWithTypeEquivalence;
+import com.android.tools.r8.utils.structural.HashingVisitor;
 import com.android.tools.r8.utils.structural.HashingVisitorWithTypeEquivalence;
 import com.android.tools.r8.utils.structural.Ordered;
 import com.android.tools.r8.utils.structural.RepresentativeMap;
@@ -325,17 +327,19 @@ public class DexEncodedMethod extends DexEncodedMember<DexEncodedMethod, DexMeth
   // Visitor specifying the structure of the method with respect to its "synthetic" content.
   // TODO(b/171867022): Generalize this so that it determines any method in full.
   private static void syntheticSpecify(StructuralSpecification<DexEncodedMethod, ?> spec) {
-    spec.withAssert(m1 -> m1.annotations().isEmpty())
-        .withAssert(m1 -> m1.parameterAnnotationsList.isEmpty())
+    spec.withItem(m -> m.method)
+        .withItem(m -> m.accessFlags)
+        .withItem(m -> m.annotations())
+        .withItem(m -> m.parameterAnnotationsList)
+        .withNullableItem(m -> m.classFileVersion)
+        .withBool(m -> m.d8R8Synthesized)
+        // TODO(b/171867022): Make signatures structural and include it in the definition.
+        .withAssert(m -> m.genericSignature.hasNoSignature())
         .withAssert(m1 -> m1.code != null)
-        .withItem(DexEncodedMethod::getHolderType)
-        .withItem(DexEncodedMethod::getName)
-        .withInt(m -> m.getAccessFlags().getAsCfAccessFlags())
-        .withItem(DexEncodedMethod::proto)
         .withCustomItem(
             DexEncodedMethod::getCode,
-            (c1, c2, v) -> v.visit(c1, c2, DexEncodedMethod::compareCodeObject),
-            (c, h) -> h.visit(c, DexEncodedMethod::hashCodeObject));
+            DexEncodedMethod::compareCodeObject,
+            DexEncodedMethod::hashCodeObject);
   }
 
   public void hashSyntheticContent(Hasher hasher, RepresentativeMap map) {
@@ -354,37 +358,28 @@ public class DexEncodedMethod extends DexEncodedMember<DexEncodedMethod, DexMeth
         this, other, map, DexEncodedMethod::syntheticSpecify);
   }
 
-  private static int compareCodeObject(Code code1, Code code2) {
+  private static void compareCodeObject(Code code1, Code code2, CompareToVisitor visitor) {
     if (code1.isCfCode() && code2.isCfCode()) {
-      return code1.asCfCode().compareTo(code2.asCfCode());
-    }
-    if (code1.isDexCode() && code2.isDexCode()) {
-      return code1.asDexCode().compareTo(code2.asDexCode());
-    }
-    throw new Unreachable(
-        "Unexpected attempt to compare incompatible synthetic objects: " + code1 + " and " + code2);
-  }
-
-  private static void hashCodeObject(Code code, Hasher hasher) {
-    // TODO(b/158159959): Implement a more precise hashing on code objects.
-    if (code.isCfCode()) {
-      CfCode cfCode = code.asCfCode();
-      hasher.putInt(cfCode.getInstructions().size());
-      for (CfInstruction instruction : cfCode.getInstructions()) {
-        hasher.putInt(instruction.getClass().hashCode());
-      }
+      code1.asCfCode().acceptCompareTo(code2.asCfCode(), visitor);
+    } else if (code1.isDexCode() && code2.isDexCode()) {
+      visitor.visit(code1.asDexCode(), code2.asDexCode(), DexCode::compareTo);
     } else {
-      assert code.isDexCode();
-      hasher.putInt(code.hashCode());
+      throw new Unreachable(
+          "Unexpected attempt to compare incompatible synthetic objects: "
+              + code1
+              + " and "
+              + code2);
     }
   }
 
-  public DexType getHolderType() {
-    return getReference().holder;
-  }
-
-  public DexString getName() {
-    return getReference().name;
+  private static void hashCodeObject(Code code, HashingVisitor visitor) {
+    if (code.isCfCode()) {
+      code.asCfCode().acceptHashing(visitor);
+    } else {
+      // TODO(b/158159959): Implement a more precise hashing on code objects.
+      assert code.isDexCode();
+      visitor.visitInt(code.hashCode());
+    }
   }
 
   public DexProto getProto() {

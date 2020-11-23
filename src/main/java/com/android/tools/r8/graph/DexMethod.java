@@ -50,14 +50,6 @@ public class DexMethod extends DexMember<DexEncodedMethod, DexMethod> {
     visitor.visitDexMethod(this, other);
   }
 
-  public DexType getHolderType() {
-    return holder;
-  }
-
-  public DexString getName() {
-    return name;
-  }
-
   public DexType getParameter(int index) {
     return proto.getParameter(index);
   }
@@ -274,6 +266,10 @@ public class DexMethod extends DexMember<DexEncodedMethod, DexMethod> {
   }
 
   public DexMethod withName(DexString name, DexItemFactory dexItemFactory) {
+    return dexItemFactory.createMethod(holder, proto, name);
+  }
+
+  public DexMethod withProto(DexProto proto, DexItemFactory dexItemFactory) {
     return dexItemFactory.createMethod(holder, proto, name);
   }
 }
