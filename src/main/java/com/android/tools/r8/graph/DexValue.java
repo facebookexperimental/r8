@@ -25,8 +25,8 @@ import com.android.tools.r8.utils.BooleanUtils;
 import com.android.tools.r8.utils.EncodedValueUtils;
 import com.android.tools.r8.utils.structural.CompareToVisitor;
 import com.android.tools.r8.utils.structural.HashingVisitor;
-import com.android.tools.r8.utils.structural.StructuralAccept;
 import com.android.tools.r8.utils.structural.StructuralItem;
+import com.android.tools.r8.utils.structural.StructuralMapping;
 import java.util.Arrays;
 import java.util.function.Consumer;
 import org.objectweb.asm.Handle;
@@ -114,7 +114,7 @@ public abstract class DexValue extends DexItem implements StructuralItem<DexValu
   }
 
   @Override
-  public final StructuralAccept<DexValue> getStructuralAccept() {
+  public final StructuralMapping<DexValue> getStructuralMapping() {
     // DexValue is not generic at its base type (and can't as we use it as a polymorphic value),
     // so each concrete value must implement polymorphic accept functions. This base class
     // implements (most of) the polymorphic checks and concrete types implement the internal
@@ -123,12 +123,12 @@ public abstract class DexValue extends DexItem implements StructuralItem<DexValu
   }
 
   @Override
-  public final void acceptCompareTo(DexValue other, CompareToVisitor visitor) {
+  public final int acceptCompareTo(DexValue other, CompareToVisitor visitor) {
     // Order first on 'kind', only equal kinds then forward to the 'kind' specific internal compare.
     if (getValueKind() != other.getValueKind()) {
-      visitor.visitInt(getValueKind().toByte(), other.getValueKind().toByte());
+      return visitor.visitInt(getValueKind().toByte(), other.getValueKind().toByte());
     } else {
-      internalAcceptCompareTo(other, visitor);
+      return internalAcceptCompareTo(other, visitor);
     }
   }
 
@@ -139,7 +139,7 @@ public abstract class DexValue extends DexItem implements StructuralItem<DexValu
     internalAcceptHashing(visitor);
   }
 
-  abstract void internalAcceptCompareTo(DexValue other, CompareToVisitor visitor);
+  abstract int internalAcceptCompareTo(DexValue other, CompareToVisitor visitor);
 
   abstract void internalAcceptHashing(HashingVisitor visitor);
 
@@ -478,8 +478,8 @@ public abstract class DexValue extends DexItem implements StructuralItem<DexValu
     }
 
     @Override
-    void internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
-      visitor.visitInt(value, other.asDexValueByte().value);
+    int internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
+      return visitor.visitInt(value, other.asDexValueByte().value);
     }
 
     @Override
@@ -576,8 +576,8 @@ public abstract class DexValue extends DexItem implements StructuralItem<DexValu
     }
 
     @Override
-    void internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
-      visitor.visitInt(value, other.asDexValueShort().getValue());
+    int internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
+      return visitor.visitInt(value, other.asDexValueShort().getValue());
     }
 
     public short getValue() {
@@ -663,8 +663,8 @@ public abstract class DexValue extends DexItem implements StructuralItem<DexValu
     }
 
     @Override
-    void internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
-      visitor.visitInt(value, other.asDexValueChar().value);
+    int internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
+      return visitor.visitInt(value, other.asDexValueChar().value);
     }
 
     @Override
@@ -764,8 +764,8 @@ public abstract class DexValue extends DexItem implements StructuralItem<DexValu
     }
 
     @Override
-    void internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
-      visitor.visitInt(value, other.asDexValueInt().value);
+    int internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
+      return visitor.visitInt(value, other.asDexValueInt().value);
     }
 
     public int getValue() {
@@ -851,8 +851,8 @@ public abstract class DexValue extends DexItem implements StructuralItem<DexValu
     }
 
     @Override
-    void internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
-      visitor.visitLong(value, other.asDexValueLong().value);
+    int internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
+      return visitor.visitLong(value, other.asDexValueLong().value);
     }
 
     @Override
@@ -948,8 +948,8 @@ public abstract class DexValue extends DexItem implements StructuralItem<DexValu
     }
 
     @Override
-    void internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
-      visitor.visitFloat(value, other.asDexValueFloat().value);
+    int internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
+      return visitor.visitFloat(value, other.asDexValueFloat().value);
     }
 
     public float getValue() {
@@ -1041,8 +1041,8 @@ public abstract class DexValue extends DexItem implements StructuralItem<DexValu
     }
 
     @Override
-    void internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
-      visitor.visitDouble(value, other.asDexValueDouble().value);
+    int internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
+      return visitor.visitDouble(value, other.asDexValueDouble().value);
     }
 
     @Override
@@ -1201,10 +1201,12 @@ public abstract class DexValue extends DexItem implements StructuralItem<DexValu
     }
 
     @Override
-    void internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
-      if (DexItemBasedValueString.compareAndCheckValueStrings(this, other, visitor)) {
-        value.acceptCompareTo(other.asDexValueString().value, visitor);
+    int internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
+      int order = DexItemBasedValueString.compareAndCheckValueStrings(this, other, visitor);
+      if (order != 0) {
+        return order;
       }
+      return value.acceptCompareTo(other.asDexValueString().value, visitor);
     }
 
     @Override
@@ -1266,16 +1268,12 @@ public abstract class DexValue extends DexItem implements StructuralItem<DexValu
 
     // Helper to ensure a consistent order on DexValueString and DexItemBasedValueString which are
     // both defined to have kind 'string'.
-    static boolean compareAndCheckValueStrings(DexValue v1, DexValue v2, CompareToVisitor visitor) {
+    static int compareAndCheckValueStrings(DexValue v1, DexValue v2, CompareToVisitor visitor) {
       assert v1.getValueKind() == DexValueKind.STRING;
       assert v2.getValueKind() == DexValueKind.STRING;
       int order1 = v1.isDexItemBasedValueString() ? 1 : 0;
       int order2 = v2.isDexItemBasedValueString() ? 1 : 0;
-      boolean equal = order1 == order2;
-      if (!equal) {
-        visitor.visitInt(order1, order2);
-      }
-      return equal;
+      return visitor.visitInt(order1, order2);
     }
 
     private final NameComputationInfo<?> nameComputationInfo;
@@ -1291,10 +1289,12 @@ public abstract class DexValue extends DexItem implements StructuralItem<DexValu
     }
 
     @Override
-    void internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
-      if (compareAndCheckValueStrings(this, other, visitor)) {
-        visitor.visitDexReference(value, other.asDexItemBasedValueString().value);
+    int internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
+      int order = compareAndCheckValueStrings(this, other, visitor);
+      if (order != 0) {
+        return order;
       }
+      return visitor.visitDexReference(value, other.asDexItemBasedValueString().value);
     }
 
     @Override
@@ -1368,8 +1368,8 @@ public abstract class DexValue extends DexItem implements StructuralItem<DexValu
     }
 
     @Override
-    void internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
-      value.acceptCompareTo(other.asDexValueType().value, visitor);
+    int internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
+      return value.acceptCompareTo(other.asDexValueType().value, visitor);
     }
 
     @Override
@@ -1410,8 +1410,8 @@ public abstract class DexValue extends DexItem implements StructuralItem<DexValu
     }
 
     @Override
-    void internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
-      value.acceptCompareTo(other.asDexValueField().value, visitor);
+    int internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
+      return value.acceptCompareTo(other.asDexValueField().value, visitor);
     }
 
     @Override
@@ -1452,8 +1452,8 @@ public abstract class DexValue extends DexItem implements StructuralItem<DexValu
     }
 
     @Override
-    void internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
-      value.acceptCompareTo(other.asDexValueMethod().value, visitor);
+    int internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
+      return value.acceptCompareTo(other.asDexValueMethod().value, visitor);
     }
 
     @Override
@@ -1494,8 +1494,8 @@ public abstract class DexValue extends DexItem implements StructuralItem<DexValu
     }
 
     @Override
-    void internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
-      value.acceptCompareTo(other.asDexValueEnum().value, visitor);
+    int internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
+      return value.acceptCompareTo(other.asDexValueEnum().value, visitor);
     }
 
     @Override
@@ -1536,8 +1536,8 @@ public abstract class DexValue extends DexItem implements StructuralItem<DexValu
     }
 
     @Override
-    void internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
-      value.acceptCompareTo(other.asDexValueMethodType().value, visitor);
+    int internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
+      return value.acceptCompareTo(other.asDexValueMethodType().value, visitor);
     }
 
     @Override
@@ -1580,8 +1580,8 @@ public abstract class DexValue extends DexItem implements StructuralItem<DexValu
     }
 
     @Override
-    void internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
-      visitor.visitItemArray(values, other.asDexValueArray().values);
+    int internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
+      return visitor.visitItemArray(values, other.asDexValueArray().values);
     }
 
     @Override
@@ -1689,8 +1689,8 @@ public abstract class DexValue extends DexItem implements StructuralItem<DexValu
     }
 
     @Override
-    void internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
-      value.acceptCompareTo(other.asDexValueAnnotation().value, visitor);
+    int internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
+      return value.acceptCompareTo(other.asDexValueAnnotation().value, visitor);
     }
 
     @Override
@@ -1790,9 +1790,10 @@ public abstract class DexValue extends DexItem implements StructuralItem<DexValu
     }
 
     @Override
-    void internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
+    int internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
       assert this == NULL;
       assert other == NULL;
+      return 0;
     }
 
     public Object getValue() {
@@ -1882,8 +1883,8 @@ public abstract class DexValue extends DexItem implements StructuralItem<DexValu
     }
 
     @Override
-    void internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
-      visitor.visitBool(value, other.asDexValueBoolean().value);
+    int internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
+      return visitor.visitBool(value, other.asDexValueBoolean().value);
     }
 
     @Override
@@ -1967,8 +1968,8 @@ public abstract class DexValue extends DexItem implements StructuralItem<DexValu
     }
 
     @Override
-    void internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
-      value.acceptCompareTo(other.asDexValueMethodHandle().value, visitor);
+    int internalAcceptCompareTo(DexValue other, CompareToVisitor visitor) {
+      return value.acceptCompareTo(other.asDexValueMethodHandle().value, visitor);
     }
 
     @Override

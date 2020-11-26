@@ -27,6 +27,8 @@ public class CfPosition extends CfInstruction {
   private final CfLabel label;
   private final Position position;
 
+
+
   public CfPosition(CfLabel label, Position position) {
     this.label = label;
     this.position = position;
@@ -38,9 +40,9 @@ public class CfPosition extends CfInstruction {
   }
 
   @Override
-  public void internalAcceptCompareTo(
+  public int internalAcceptCompareTo(
       CfInstruction other, CompareToVisitor visitor, CfCompareHelper helper) {
-    visitor.visit(
+    return visitor.visit(
         this,
         (CfPosition) other,
         spec ->

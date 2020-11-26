@@ -11,15 +11,14 @@ import com.android.tools.r8.utils.structural.StructuralItem.CompareToAccept;
 
 public class CompareToVisitorWithNamingLens extends CompareToVisitorBase {
 
-  public static <T> int run(T item1, T item2, NamingLens namingLens, StructuralAccept<T> visit) {
+  public static <T> int run(T item1, T item2, NamingLens namingLens, StructuralMapping<T> visit) {
     return run(item1, item2, namingLens, (i1, i2, visitor) -> visitor.visit(i1, i2, visit));
   }
 
   public static <T> int run(
       T item1, T item2, NamingLens namingLens, CompareToAccept<T> compareToAccept) {
     CompareToVisitorWithNamingLens state = new CompareToVisitorWithNamingLens(namingLens);
-    compareToAccept.acceptCompareTo(item1, item2, state);
-    return state.getOrder();
+    return compareToAccept.acceptCompareTo(item1, item2, state);
   }
 
   private final NamingLens namingLens;
@@ -29,35 +28,35 @@ public class CompareToVisitorWithNamingLens extends CompareToVisitorBase {
   }
 
   @Override
-  public void visitDexType(DexType type1, DexType type2) {
-    if (stillEqual()) {
-      namingLens.lookupDescriptor(type1).acceptCompareTo(namingLens.lookupDescriptor(type2), this);
-    }
+  public int visitDexType(DexType type1, DexType type2) {
+    return namingLens
+        .lookupDescriptor(type1)
+        .acceptCompareTo(namingLens.lookupDescriptor(type2), this);
   }
 
   @Override
-  public void visitDexField(DexField field1, DexField field2) {
-    if (stillEqual()) {
-      field1.holder.acceptCompareTo(field2.holder, this);
-      if (stillEqual()) {
-        namingLens.lookupName(field1).acceptCompareTo(namingLens.lookupName(field2), this);
-        if (stillEqual()) {
-          field1.type.acceptCompareTo(field2.type, this);
-        }
-      }
+  public int visitDexField(DexField field1, DexField field2) {
+    int order = field1.holder.acceptCompareTo(field2.holder, this);
+    if (order != 0) {
+      return order;
     }
+    order = namingLens.lookupName(field1).acceptCompareTo(namingLens.lookupName(field2), this);
+    if (order != 0) {
+      return order;
+    }
+    return field1.type.acceptCompareTo(field2.type, this);
   }
 
   @Override
-  public void visitDexMethod(DexMethod method1, DexMethod method2) {
-    if (stillEqual()) {
-      method1.holder.acceptCompareTo(method2.holder, this);
-      if (stillEqual()) {
-        namingLens.lookupName(method1).acceptCompareTo(namingLens.lookupName(method2), this);
-        if (stillEqual()) {
-          method1.proto.acceptCompareTo(method2.proto, this);
-        }
-      }
+  public int visitDexMethod(DexMethod method1, DexMethod method2) {
+    int order = method1.holder.acceptCompareTo(method2.holder, this);
+    if (order != 0) {
+      return order;
     }
+    order = namingLens.lookupName(method1).acceptCompareTo(namingLens.lookupName(method2), this);
+    if (order != 0) {
+      return order;
+    }
+    return method1.proto.acceptCompareTo(method2.proto, this);
   }
 }

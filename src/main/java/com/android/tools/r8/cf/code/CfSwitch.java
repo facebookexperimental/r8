@@ -51,11 +51,10 @@ public class CfSwitch extends CfInstruction {
   }
 
   @Override
-  public void internalAcceptCompareTo(
+  public int internalAcceptCompareTo(
       CfInstruction other, CompareToVisitor visitor, CfCompareHelper helper) {
     assert kind == ((CfSwitch) other).kind;
-
-    visitor.visit(
+    return visitor.visit(
         this,
         (CfSwitch) other,
         spec ->
@@ -156,5 +155,6 @@ public class CfSwitch extends CfInstruction {
     for (CfLabel target : targets) {
       frameBuilder.verifyTarget(target);
     }
+    frameBuilder.setNoFrame();
   }
 }

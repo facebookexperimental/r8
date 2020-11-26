@@ -5,6 +5,7 @@
 package com.android.tools.r8.repackaging;
 
 import com.android.tools.r8.graph.AppView;
+import com.android.tools.r8.graph.DexClass;
 import com.android.tools.r8.graph.DexDefinition;
 import com.android.tools.r8.graph.DexEncodedMember;
 import com.android.tools.r8.graph.DexEncodedMethod;
@@ -41,10 +42,13 @@ public class RepackagingConstraintGraph {
   private final ProgramPackage pkg;
   private final Map<DexDefinition, Node> nodes = new IdentityHashMap<>();
   private final Set<Node> pinnedNodes = Sets.newIdentityHashSet();
+  private final Node libraryBoundaryNode;
 
   public RepackagingConstraintGraph(AppView<AppInfoWithLiveness> appView, ProgramPackage pkg) {
     this.appView = appView;
     this.pkg = pkg;
+    libraryBoundaryNode = createNode(appView.definitionFor(appView.dexItemFactory().objectType));
+    pinnedNodes.add(libraryBoundaryNode);
   }
 
   /** Returns true if all classes in the package can be repackaged. */
@@ -75,6 +79,13 @@ public class RepackagingConstraintGraph {
   }
 
   Node getNode(DexDefinition definition) {
+    if (definition.isNotProgramDefinition(appView)) {
+      String packageDescriptor = definition.getContextType().getPackageDescriptor();
+      if (packageDescriptor.equals(pkg.getPackageDescriptor())) {
+        return libraryBoundaryNode;
+      }
+      return null;
+    }
     return nodes.get(definition);
   }
 
@@ -110,7 +121,11 @@ public class RepackagingConstraintGraph {
     }
 
     // Trace the references to the inner and outer classes.
-    clazz.getInnerClasses().forEach(registry::registerInnerClassAttribute);
+    clazz
+        .getInnerClasses()
+        .forEach(
+            innerClassAttribute ->
+                registry.registerInnerClassAttribute(clazz, innerClassAttribute));
 
     // Trace the references from the enclosing method attribute.
     EnclosingMethodAttribute attr = clazz.getEnclosingMethodAttribute();
@@ -137,8 +152,8 @@ public class RepackagingConstraintGraph {
     definition.getProto().forEachType(registry::registerTypeReference);
 
     // Check if this overrides a package-private method.
-    DexProgramClass superClass =
-        appView.programDefinitionFor(method.getHolder().getSuperType(), method.getHolder());
+    DexClass superClass =
+        appView.definitionFor(method.getHolder().getSuperType(), method.getHolder());
     if (superClass != null) {
       registry.registerMemberAccess(
           appView.appInfo().resolveMethodOn(superClass, method.getReference()));

@@ -263,10 +263,13 @@ public class CfApplicationWriter {
               || options.isDesugaredLibraryCompilation()
               || options.cfToCfDesugar
           : "Expected class file version for " + method.method.toSourceString();
-      // TODO(b/146424042): We may call static methods on interface classes so we have to go for
-      //  Java 8.
-      assert MIN_VERSION_FOR_COMPILER_GENERATED_CODE.isLessThan(CfVersion.V1_8);
-      return options.cfToCfDesugar ? CfVersion.V1_8 : MIN_VERSION_FOR_COMPILER_GENERATED_CODE;
+      assert MIN_VERSION_FOR_COMPILER_GENERATED_CODE.isLessThan(
+          options.classFileVersionAfterDesugaring(InternalOptions.SUPPORTED_CF_VERSION));
+      // Any desugaring rewrites which cannot meet the default class file version after
+      // desugaring must upgrade the class file version during desugaring.
+      return options.cfToCfDesugar
+          ? options.classFileVersionAfterDesugaring(InternalOptions.SUPPORTED_CF_VERSION)
+          : MIN_VERSION_FOR_COMPILER_GENERATED_CODE;
     }
     return method.getClassFileVersion();
   }

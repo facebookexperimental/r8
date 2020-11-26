@@ -43,8 +43,8 @@ import com.android.tools.r8.shaking.AppInfoWithLiveness;
 import com.android.tools.r8.utils.InternalOptions;
 import com.android.tools.r8.utils.structural.CompareToVisitor;
 import com.android.tools.r8.utils.structural.HashingVisitor;
-import com.android.tools.r8.utils.structural.StructuralAccept;
 import com.android.tools.r8.utils.structural.StructuralItem;
+import com.android.tools.r8.utils.structural.StructuralMapping;
 import com.google.common.base.Strings;
 import it.unimi.dsi.fastutil.ints.Int2IntArrayMap;
 import it.unimi.dsi.fastutil.ints.Int2ReferenceAVLTreeMap;
@@ -112,9 +112,9 @@ public class CfCode extends Code implements StructuralItem<CfCode> {
       return end;
     }
 
-    public void acceptCompareTo(
+    public int acceptCompareTo(
         LocalVariableInfo other, CompareToVisitor visitor, CfCompareHelper helper) {
-      visitor.visit(
+      return visitor.visit(
           this,
           other,
           spec ->
@@ -164,7 +164,7 @@ public class CfCode extends Code implements StructuralItem<CfCode> {
   }
 
   @Override
-  public StructuralAccept<CfCode> getStructuralAccept() {
+  public StructuralMapping<CfCode> getStructuralMapping() {
     throw new Unreachable();
   }
 
@@ -254,9 +254,9 @@ public class CfCode extends Code implements StructuralItem<CfCode> {
   }
 
   @Override
-  public void acceptCompareTo(CfCode other, CompareToVisitor visitor) {
+  public int acceptCompareTo(CfCode other, CompareToVisitor visitor) {
     CfCompareHelper helper = new CfCompareHelper(this, other);
-    visitor.visit(
+    return visitor.visit(
         this,
         other,
         spec ->
@@ -695,7 +695,7 @@ public class CfCode extends Code implements StructuralItem<CfCode> {
 
   public boolean verifyFrames(
       DexEncodedMethod method, AppView<?> appView, Origin origin, boolean applyProtoTypeChanges) {
-    if (!appView.options().testing.readInputStackMaps
+    if (!appView.options().canUseInputStackMaps()
         || appView.options().testing.disableStackMapVerification) {
       stackMapStatus = StackMapStatus.INVALID_OR_NOT_PRESENT;
       return true;
