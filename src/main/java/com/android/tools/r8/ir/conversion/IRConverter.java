@@ -22,7 +22,6 @@ import com.android.tools.r8.graph.DexProgramClass;
 import com.android.tools.r8.graph.DexString;
 import com.android.tools.r8.graph.DexType;
 import com.android.tools.r8.graph.DexTypeList;
-import com.android.tools.r8.graph.EnumValueInfoMapCollection;
 import com.android.tools.r8.graph.GraphLens;
 import com.android.tools.r8.graph.ProgramMethod;
 import com.android.tools.r8.graph.classmerging.HorizontallyMergedLambdaClasses;
@@ -33,6 +32,7 @@ import com.android.tools.r8.ir.analysis.fieldaccess.FieldAccessAnalysis;
 import com.android.tools.r8.ir.analysis.fieldaccess.TrivialFieldAccessReprocessor;
 import com.android.tools.r8.ir.analysis.fieldvalueanalysis.InstanceFieldValueAnalysis;
 import com.android.tools.r8.ir.analysis.fieldvalueanalysis.StaticFieldValueAnalysis;
+import com.android.tools.r8.ir.analysis.fieldvalueanalysis.StaticFieldValues;
 import com.android.tools.r8.ir.analysis.type.TypeElement;
 import com.android.tools.r8.ir.code.AlwaysMaterializingDefinition;
 import com.android.tools.r8.ir.code.AlwaysMaterializingUser;
@@ -73,6 +73,7 @@ import com.android.tools.r8.ir.optimize.RedundantFieldLoadElimination;
 import com.android.tools.r8.ir.optimize.ReflectionOptimizer;
 import com.android.tools.r8.ir.optimize.ServiceLoaderRewriter;
 import com.android.tools.r8.ir.optimize.classinliner.ClassInliner;
+import com.android.tools.r8.ir.optimize.enums.EnumDataMap;
 import com.android.tools.r8.ir.optimize.enums.EnumUnboxer;
 import com.android.tools.r8.ir.optimize.enums.EnumValueOptimizer;
 import com.android.tools.r8.ir.optimize.info.MethodOptimizationInfoCollector;
@@ -487,13 +488,13 @@ public class IRConverter {
       // Classes which has already been through library desugaring will not go through IR
       // processing again.
       LibraryDesugaredChecker libraryDesugaredChecker = new LibraryDesugaredChecker(appView);
-      Set<DexProgramClass> alreadyLibraryDesugared = Sets.newConcurrentHashSet();
+      Set<DexType> alreadyLibraryDesugared = Sets.newConcurrentHashSet();
       ThreadUtils.processItems(
           application.classes(),
           clazz -> {
             if (libraryDesugaredChecker.isClassLibraryDesugared(clazz)) {
               if (appView.options().desugarSpecificOptions().allowAllDesugaredInput) {
-                alreadyLibraryDesugared.add(clazz);
+                alreadyLibraryDesugared.add(clazz.getType());
               } else {
                 throw new CompilationError(
                     "Code for "
@@ -752,7 +753,7 @@ public class IRConverter {
     if (enumUnboxer != null) {
       enumUnboxer.unboxEnums(postMethodProcessorBuilder, executorService, feedback);
     } else {
-      appView.setUnboxedEnums(EnumValueInfoMapCollection.empty());
+      appView.setUnboxedEnums(EnumDataMap.empty());
     }
     if (!options.debug) {
       new TrivialFieldAccessReprocessor(appView.withLiveness(), postMethodProcessorBuilder)
@@ -1708,15 +1709,20 @@ public class IRConverter {
     }
 
     InstanceFieldInitializationInfoCollection instanceFieldInitializationInfos = null;
+    StaticFieldValues staticFieldValues = null;
     if (method.getDefinition().isInitializer()) {
       if (method.getDefinition().isClassInitializer()) {
-        StaticFieldValueAnalysis.run(
-            appView, code, classInitializerDefaultsResult, feedback, timing);
+        staticFieldValues =
+            StaticFieldValueAnalysis.run(
+                appView, code, classInitializerDefaultsResult, feedback, timing);
       } else {
         instanceFieldInitializationInfos =
             InstanceFieldValueAnalysis.run(
                 appView, code, classInitializerDefaultsResult, feedback, timing);
       }
+    }
+    if (enumUnboxer != null) {
+      enumUnboxer.recordEnumState(method.getHolder(), staticFieldValues);
     }
     methodOptimizationInfoCollector.collectMethodOptimizationInfo(
         method, code, feedback, dynamicTypeOptimization, instanceFieldInitializationInfos, timing);

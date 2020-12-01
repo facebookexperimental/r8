@@ -6,6 +6,8 @@ package com.android.tools.r8.code;
 import com.android.tools.r8.dex.Constants;
 import com.android.tools.r8.graph.IndexedDexItem;
 import com.android.tools.r8.naming.ClassNameMapper;
+import com.android.tools.r8.utils.structural.CompareToVisitor;
+import com.android.tools.r8.utils.structural.StructuralSpecification;
 import java.util.function.BiPredicate;
 
 abstract class Format21c<T extends IndexedDexItem> extends Base2Format {
@@ -31,14 +33,16 @@ abstract class Format21c<T extends IndexedDexItem> extends Base2Format {
     return ((BBBB.hashCode() << 8) | AA) ^ getClass().hashCode();
   }
 
+  @SuppressWarnings("unchecked")
   @Override
-  final int internalCompareTo(Instruction other) {
-    Format21c<?> o = (Format21c<?>) other;
-    int aaDiff = Short.compare(AA, o.AA);
-    return aaDiff != 0 ? aaDiff : internalCompareBBBB(o);
+  final int internalAcceptCompareTo(Instruction other, CompareToVisitor visitor) {
+    return visitor.visit(
+        this,
+        (Format21c<T>) other,
+        spec -> spec.withInt(i -> i.AA).withSpec(this::internalSubSpecify));
   }
 
-  abstract int internalCompareBBBB(Format21c<?> other);
+  abstract void internalSubSpecify(StructuralSpecification<Format21c<T>, ?> spec);
 
   @Override
   public String toString(ClassNameMapper naming) {

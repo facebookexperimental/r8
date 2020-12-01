@@ -25,8 +25,6 @@ import com.android.tools.r8.graph.DexProgramClass;
 import com.android.tools.r8.graph.DexReference;
 import com.android.tools.r8.graph.DexType;
 import com.android.tools.r8.graph.DirectMappedDexApplication;
-import com.android.tools.r8.graph.EnumValueInfoMapCollection;
-import com.android.tools.r8.graph.EnumValueInfoMapCollection.EnumValueInfoMap;
 import com.android.tools.r8.graph.FieldAccessInfo;
 import com.android.tools.r8.graph.FieldAccessInfoCollection;
 import com.android.tools.r8.graph.FieldAccessInfoCollectionImpl;
@@ -40,6 +38,7 @@ import com.android.tools.r8.graph.ObjectAllocationInfoCollection;
 import com.android.tools.r8.graph.ObjectAllocationInfoCollectionImpl;
 import com.android.tools.r8.graph.ProgramField;
 import com.android.tools.r8.graph.ProgramMethod;
+import com.android.tools.r8.graph.PrunedItems;
 import com.android.tools.r8.graph.ResolutionResult.SingleResolutionResult;
 import com.android.tools.r8.graph.SubtypingInfo;
 import com.android.tools.r8.ir.analysis.type.ClassTypeElement;
@@ -181,8 +180,6 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
   final Set<DexType> prunedTypes;
   /** A map from switchmap class types to their corresponding switchmaps. */
   final Map<DexField, Int2ReferenceMap<DexField>> switchMaps;
-  /** A map from enum types to their value types and ordinals. */
-  final EnumValueInfoMapCollection enumValueInfoMaps;
 
   /* A cache to improve the lookup performance of lookupSingleVirtualTarget */
   private final SingleTargetLookupCache singleTargetLookupCache = new SingleTargetLookupCache();
@@ -227,7 +224,6 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
       Object2BooleanMap<DexReference> identifierNameStrings,
       Set<DexType> prunedTypes,
       Map<DexField, Int2ReferenceMap<DexField>> switchMaps,
-      EnumValueInfoMapCollection enumValueInfoMaps,
       Set<DexType> lockCandidates,
       Map<DexType, Visibility> initClassReferences) {
     super(syntheticItems, classToFeatureSplitMap, mainDexClasses);
@@ -266,9 +262,9 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
     this.identifierNameStrings = identifierNameStrings;
     this.prunedTypes = prunedTypes;
     this.switchMaps = switchMaps;
-    this.enumValueInfoMaps = enumValueInfoMaps;
     this.lockCandidates = lockCandidates;
     this.initClassReferences = initClassReferences;
+    verify();
   }
 
   private AppInfoWithLiveness(
@@ -313,25 +309,20 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
         previous.identifierNameStrings,
         previous.prunedTypes,
         previous.switchMaps,
-        previous.enumValueInfoMaps,
         previous.lockCandidates,
         previous.initClassReferences);
   }
 
-  private AppInfoWithLiveness(
-      AppInfoWithLiveness previous,
-      DirectMappedDexApplication application,
-      Set<DexType> removedClasses,
-      Collection<? extends DexReference> additionalPinnedItems) {
+  private AppInfoWithLiveness(AppInfoWithLiveness previous, PrunedItems prunedItems) {
     this(
-        previous.getSyntheticItems().commitPrunedClasses(application, removedClasses),
-        previous.getClassToFeatureSplitMap().withoutPrunedClasses(removedClasses),
-        previous.getMainDexClasses().withoutPrunedClasses(removedClasses),
+        previous.getSyntheticItems().commitPrunedItems(prunedItems),
+        previous.getClassToFeatureSplitMap().withoutPrunedItems(prunedItems),
+        previous.getMainDexClasses().withoutPrunedItems(prunedItems),
         previous.deadProtoTypes,
         previous.missingTypes,
-        removedClasses == null
-            ? previous.liveTypes
-            : Sets.difference(previous.liveTypes, removedClasses),
+        prunedItems.hasRemovedClasses()
+            ? Sets.difference(previous.liveTypes, prunedItems.getRemovedClasses())
+            : previous.liveTypes,
         previous.targetedMethods,
         previous.failedResolutionTargets,
         previous.bootstrapMethods,
@@ -342,7 +333,7 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
         previous.methodAccessInfoCollection,
         previous.objectAllocationInfoCollection,
         previous.callSites,
-        extendPinnedItems(previous, additionalPinnedItems),
+        extendPinnedItems(previous, prunedItems.getAdditionalPinnedItems()),
         previous.mayHaveSideEffects,
         previous.noSideEffects,
         previous.assumedValues,
@@ -362,14 +353,17 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
         previous.noStaticClassMerging,
         previous.neverPropagateValue,
         previous.identifierNameStrings,
-        removedClasses == null
-            ? previous.prunedTypes
-            : CollectionUtils.mergeSets(previous.prunedTypes, removedClasses),
+        prunedItems.hasRemovedClasses()
+            ? CollectionUtils.mergeSets(previous.prunedTypes, prunedItems.getRemovedClasses())
+            : previous.prunedTypes,
         previous.switchMaps,
-        previous.enumValueInfoMaps,
         previous.lockCandidates,
         previous.initClassReferences);
-    assert keepInfo.verifyNoneArePinned(removedClasses, previous);
+  }
+
+  private void verify() {
+    assert keepInfo.verifyPinnedTypesAreLive(liveTypes);
+    assert objectAllocationInfoCollection.verifyAllocatedTypesAreLive(liveTypes, this);
   }
 
   private static KeepInfoCollection extendPinnedItems(
@@ -410,9 +404,7 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
   }
 
   public AppInfoWithLiveness(
-      AppInfoWithLiveness previous,
-      Map<DexField, Int2ReferenceMap<DexField>> switchMaps,
-      EnumValueInfoMapCollection enumValueInfoMaps) {
+      AppInfoWithLiveness previous, Map<DexField, Int2ReferenceMap<DexField>> switchMaps) {
     super(
         previous.getSyntheticItems().commit(previous.app()),
         previous.getClassToFeatureSplitMap(),
@@ -452,10 +444,10 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
     this.identifierNameStrings = previous.identifierNameStrings;
     this.prunedTypes = previous.prunedTypes;
     this.switchMaps = switchMaps;
-    this.enumValueInfoMaps = enumValueInfoMaps;
     this.lockCandidates = previous.lockCandidates;
     this.initClassReferences = previous.initClassReferences;
     previous.markObsolete();
+    verify();
   }
 
   public static AppInfoWithLivenessModifier modifier() {
@@ -693,16 +685,6 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
     return missingTypes;
   }
 
-  public EnumValueInfoMapCollection getEnumValueInfoMapCollection() {
-    assert checkIfObsolete();
-    return enumValueInfoMaps;
-  }
-
-  public EnumValueInfoMap getEnumValueInfoMap(DexType enumType) {
-    assert checkIfObsolete();
-    return enumValueInfoMaps.getEnumValueInfoMap(enumType);
-  }
-
   public Int2ReferenceMap<DexField> getSwitchMap(DexField field) {
     assert checkIfObsolete();
     return switchMaps.get(field);
@@ -803,6 +785,13 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
     if (isPinned(field.field)) {
       return false;
     }
+    return isFieldOnlyWrittenInMethodIgnoringPinning(field, method);
+  }
+
+  public boolean isFieldOnlyWrittenInMethodIgnoringPinning(
+      DexEncodedField field, DexEncodedMethod method) {
+    assert checkIfObsolete();
+    assert isFieldWritten(field) : "Expected field `" + field.toSourceString() + "` to be written";
     FieldAccessInfo fieldAccessInfo = getFieldAccessInfoCollection().get(field.field);
     return fieldAccessInfo != null
         && fieldAccessInfo.isWritten()
@@ -822,7 +811,10 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
     DexType holder = field.getHolderType();
     return fieldAccessInfo.isWrittenOnlyInMethodSatisfying(
         method ->
-            method.getDefinition().isInstanceInitializer() && method.getHolderType() == holder);
+            method.getHolderType() == holder
+                && method
+                    .getDefinition()
+                    .isOrWillBeInlinedIntoInstanceInitializer(dexItemFactory()));
   }
 
   public boolean isStaticFieldWrittenOnlyInEnclosingStaticInitializer(DexEncodedField field) {
@@ -933,17 +925,16 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
    * Returns a copy of this AppInfoWithLiveness where the set of classes is pruned using the given
    * DexApplication object.
    */
-  public AppInfoWithLiveness prunedCopyFrom(
-      DirectMappedDexApplication application,
-      Set<DexType> removedClasses,
-      Collection<? extends DexReference> additionalPinnedItems) {
+  public AppInfoWithLiveness prunedCopyFrom(PrunedItems prunedItems) {
     assert checkIfObsolete();
-    if (!removedClasses.isEmpty()) {
+    if (prunedItems.hasRemovedClasses()) {
       // Rebuild the hierarchy.
-      objectAllocationInfoCollection.mutate(mutator -> {}, this);
-      keepInfo.mutate(keepInfo -> keepInfo.removeKeepInfoForPrunedItems(removedClasses));
+      objectAllocationInfoCollection.mutate(
+          mutator -> mutator.removeAllocationsForPrunedItems(prunedItems), this);
+      keepInfo.mutate(
+          keepInfo -> keepInfo.removeKeepInfoForPrunedItems(prunedItems.getRemovedClasses()));
     }
-    return new AppInfoWithLiveness(this, application, removedClasses, additionalPinnedItems);
+    return new AppInfoWithLiveness(this, prunedItems);
   }
 
   public AppInfoWithLiveness rebuildWithLiveness(
@@ -1005,7 +996,6 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
         // Don't rewrite pruned types - the removed types are identified by their original name.
         prunedTypes,
         lens.rewriteFieldKeys(switchMaps),
-        enumValueInfoMaps.rewrittenWithLens(lens),
         lens.rewriteTypes(lockCandidates),
         lens.rewriteTypeKeys(initClassReferences));
   }
@@ -1210,13 +1200,7 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
   public AppInfoWithLiveness withSwitchMaps(Map<DexField, Int2ReferenceMap<DexField>> switchMaps) {
     assert checkIfObsolete();
     assert this.switchMaps.isEmpty();
-    return new AppInfoWithLiveness(this, switchMaps, enumValueInfoMaps);
-  }
-
-  public AppInfoWithLiveness withEnumValueInfoMaps(EnumValueInfoMapCollection enumValueInfoMaps) {
-    assert checkIfObsolete();
-    assert this.enumValueInfoMaps.isEmpty();
-    return new AppInfoWithLiveness(this, switchMaps, enumValueInfoMaps);
+    return new AppInfoWithLiveness(this, switchMaps);
   }
 
   /**

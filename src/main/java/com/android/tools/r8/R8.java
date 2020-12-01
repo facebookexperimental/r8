@@ -33,10 +33,10 @@ import com.android.tools.r8.graph.DexReference;
 import com.android.tools.r8.graph.DexType;
 import com.android.tools.r8.graph.DirectMappedDexApplication;
 import com.android.tools.r8.graph.DirectMappedDexApplication.Builder;
-import com.android.tools.r8.graph.EnumValueInfoMapCollection;
 import com.android.tools.r8.graph.GraphLens;
 import com.android.tools.r8.graph.GraphLens.NestedGraphLens;
 import com.android.tools.r8.graph.InitClassLens;
+import com.android.tools.r8.graph.PrunedItems;
 import com.android.tools.r8.graph.SubtypingInfo;
 import com.android.tools.r8.graph.analysis.ClassInitializerAssertionEnablingAnalysis;
 import com.android.tools.r8.graph.analysis.InitializedClassesInInstanceMethodsAnalysis;
@@ -61,7 +61,6 @@ import com.android.tools.r8.ir.optimize.UninstantiatedTypeOptimization.Uninstant
 import com.android.tools.r8.ir.optimize.UnusedArgumentsCollector;
 import com.android.tools.r8.ir.optimize.UnusedArgumentsCollector.UnusedArgumentsGraphLens;
 import com.android.tools.r8.ir.optimize.enums.EnumUnboxingCfMethods;
-import com.android.tools.r8.ir.optimize.enums.EnumValueInfoMapCollector;
 import com.android.tools.r8.ir.optimize.info.OptimizationFeedbackSimple;
 import com.android.tools.r8.ir.optimize.templates.CfUtilityMethodsForCodeOptimizations;
 import com.android.tools.r8.jar.CfApplicationWriter;
@@ -419,8 +418,12 @@ public class R8 {
 
           // Recompute the subtyping information.
           Set<DexType> removedClasses = pruner.getRemovedClasses();
-          appView.removePrunedClasses(
-              prunedApp, removedClasses, pruner.getMethodsToKeepForConfigurationDebugging());
+          appView.pruneItems(
+              PrunedItems.builder()
+                  .setPrunedApp(prunedApp)
+                  .addRemovedClasses(removedClasses)
+                  .addAdditionalPinnedItems(pruner.getMethodsToKeepForConfigurationDebugging())
+                  .build());
           new AbstractMethodRemover(
                   appViewWithLiveness, appViewWithLiveness.appInfo().computeSubtypingInfo())
               .run();
@@ -578,7 +581,9 @@ public class R8 {
             timing.end();
           }
         }
-        if (options.enableHorizontalClassMerging && options.enableInlining) {
+        if (options.horizontalClassMergerOptions().isEnabled()
+            && options.enableInlining
+            && options.isShrinking()) {
           timing.begin("HorizontalClassMerger");
           HorizontalClassMerger merger = new HorizontalClassMerger(appViewWithLiveness);
           DirectMappedDexApplication.Builder appBuilder =
@@ -587,7 +592,12 @@ public class R8 {
               merger.run(appBuilder, mainDexTracingResult, runtimeTypeCheckInfo);
           if (lens != null) {
             DirectMappedDexApplication app = appBuilder.build();
-            appView.removePrunedClasses(app, appView.horizontallyMergedClasses().getSources());
+            appView.pruneItems(
+                PrunedItems.builder()
+                    .setPrunedApp(app)
+                    .addRemovedClasses(appView.horizontallyMergedClasses().getSources())
+                    .addNoLongerSyntheticItems(appView.horizontallyMergedClasses().getTargets())
+                    .build());
             appView.rewriteWithLens(lens);
 
             // Only required for class merging, clear instance to save memory.
@@ -606,17 +616,10 @@ public class R8 {
       if (options.enableEnumSwitchMapRemoval) {
         appViewWithLiveness.setAppInfo(new SwitchMapCollector(appViewWithLiveness).run());
       }
-      if (options.enableEnumValueOptimization || options.enableEnumUnboxing) {
-        appViewWithLiveness.setAppInfo(new EnumValueInfoMapCollector(appViewWithLiveness).run());
-      }
 
       // Collect the already pruned types before creating a new app info without liveness.
       // TODO: we should avoid removing liveness.
       Set<DexType> prunedTypes = appView.withLiveness().appInfo().getPrunedTypes();
-
-      // TODO: move to appview.
-      EnumValueInfoMapCollection enumValueInfoMapCollection =
-          appViewWithLiveness.appInfo().getEnumValueInfoMapCollection();
 
       timing.begin("Create IR");
       CfgPrinter printer = options.printCfg ? new CfgPrinter() : null;
@@ -717,13 +720,11 @@ public class R8 {
                   missingClasses,
                   prunedTypes);
           appView.setAppInfo(
-              enqueuer
-                  .traceApplication(
-                      appView.rootSet(),
-                      options.getProguardConfiguration().getDontWarnPatterns(),
-                      executorService,
-                      timing)
-                  .withEnumValueInfoMaps(enumValueInfoMapCollection));
+              enqueuer.traceApplication(
+                  appView.rootSet(),
+                  options.getProguardConfiguration().getDontWarnPatterns(),
+                  executorService,
+                  timing));
           // Rerunning the enqueuer should not give rise to any method rewritings.
           assert enqueuer.buildGraphLens() == null;
           appView.withGeneratedMessageLiteBuilderShrinker(
@@ -748,10 +749,12 @@ public class R8 {
                   options.reporter, options.usageInformationConsumer);
             }
 
-            appView.removePrunedClasses(
-                application,
-                CollectionUtils.mergeSets(prunedTypes, removedClasses),
-                pruner.getMethodsToKeepForConfigurationDebugging());
+            appView.pruneItems(
+                PrunedItems.builder()
+                    .setPrunedApp(application)
+                    .addRemovedClasses(CollectionUtils.mergeSets(prunedTypes, removedClasses))
+                    .addAdditionalPinnedItems(pruner.getMethodsToKeepForConfigurationDebugging())
+                    .build());
 
             new BridgeHoisting(appViewWithLiveness).run();
 

@@ -3,6 +3,7 @@
 // BSD-style license that can be found in the LICENSE file.
 package com.android.tools.r8.shaking;
 
+import static com.android.tools.r8.dex.Constants.TEMPORARY_INSTANCE_INITIALIZER_PREFIX;
 import static com.android.tools.r8.graph.DexProgramClass.asProgramClassOrNull;
 import static com.android.tools.r8.ir.code.Invoke.Type.DIRECT;
 import static com.android.tools.r8.ir.code.Invoke.Type.STATIC;
@@ -58,7 +59,8 @@ import com.android.tools.r8.utils.MethodSignatureEquivalence;
 import com.android.tools.r8.utils.OptionalBool;
 import com.android.tools.r8.utils.Timing;
 import com.android.tools.r8.utils.TraversalContinuation;
-import com.android.tools.r8.utils.collections.BidirectionalManyToOneMap;
+import com.android.tools.r8.utils.collections.BidirectionalManyToOneHashMap;
+import com.android.tools.r8.utils.collections.MutableBidirectionalManyToOneMap;
 import com.google.common.base.Equivalence;
 import com.google.common.base.Equivalence.Wrapper;
 import com.google.common.collect.Iterables;
@@ -206,8 +208,8 @@ public class VerticalClassMerger {
   private final Set<DexProgramClass> mergeCandidates = new LinkedHashSet<>();
 
   // Map from source class to target class.
-  private final BidirectionalManyToOneMap<DexType, DexType> mergedClasses =
-      new BidirectionalManyToOneMap<>();
+  private final MutableBidirectionalManyToOneMap<DexType, DexType> mergedClasses =
+      new BidirectionalManyToOneHashMap<>();
 
   // Set of types that must not be merged into their subtype.
   private final Set<DexType> pinnedTypes = Sets.newIdentityHashSet();
@@ -901,8 +903,6 @@ public class VerticalClassMerger {
 
   private class ClassMerger {
 
-    private static final String CONSTRUCTOR_NAME = "constructor";
-
     private final DexProgramClass source;
     private final DexProgramClass target;
     private final VerticalClassMergerGraphLens.Builder deferredRenamings =
@@ -1365,7 +1365,7 @@ public class VerticalClassMerger {
       DexMethod newSignature;
       int count = 1;
       do {
-        DexString newName = getFreshName(CONSTRUCTOR_NAME, count, oldHolder);
+        DexString newName = getFreshName(TEMPORARY_INSTANCE_INITIALIZER_PREFIX, count, oldHolder);
         newSignature =
             application.dexItemFactory.createMethod(target.type, method.method.proto, newName);
         count++;

@@ -4,9 +4,11 @@
 package com.android.tools.r8.graph;
 
 import static com.android.tools.r8.graph.DexProgramClass.asProgramClassOrNull;
+import static com.android.tools.r8.horizontalclassmerging.ClassMerger.CLASS_ID_FIELD_NAME;
+import static com.android.tools.r8.ir.desugar.LambdaRewriter.LAMBDA_CLASS_NAME_PREFIX;
+import static com.android.tools.r8.ir.desugar.LambdaRewriter.LAMBDA_INSTANCE_FIELD_NAME;
 
 import com.android.tools.r8.errors.Unreachable;
-import com.android.tools.r8.horizontalclassmerging.ClassMerger;
 import com.android.tools.r8.ir.code.Invoke.Type;
 import com.android.tools.r8.ir.conversion.LensCodeRewriterUtils;
 import com.android.tools.r8.ir.desugar.InterfaceProcessor.InterfaceProcessorNestedGraphLens;
@@ -15,10 +17,12 @@ import com.android.tools.r8.utils.Action;
 import com.android.tools.r8.utils.IterableUtils;
 import com.android.tools.r8.utils.SetUtils;
 import com.android.tools.r8.utils.collections.BidirectionalManyToManyRepresentativeMap;
+import com.android.tools.r8.utils.collections.BidirectionalManyToOneRepresentativeHashMap;
+import com.android.tools.r8.utils.collections.BidirectionalManyToOneRepresentativeMap;
 import com.android.tools.r8.utils.collections.BidirectionalOneToOneHashMap;
+import com.android.tools.r8.utils.collections.MutableBidirectionalManyToOneRepresentativeMap;
+import com.android.tools.r8.utils.collections.MutableBidirectionalOneToOneMap;
 import com.android.tools.r8.utils.collections.ProgramMethodSet;
-import com.google.common.collect.BiMap;
-import com.google.common.collect.HashBiMap;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
@@ -32,6 +36,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 /**
  * A GraphLens implements a virtual view on top of the graph, used to delay global rewrites until
@@ -65,6 +70,10 @@ public abstract class GraphLens {
       return reference;
     }
 
+    public R getRewrittenReference(BidirectionalManyToOneRepresentativeMap<R, R> rewritings) {
+      return rewritings.getOrDefault(reference, reference);
+    }
+
     public R getRewrittenReference(Map<R, R> rewritings) {
       return rewritings.getOrDefault(reference, reference);
     }
@@ -75,6 +84,11 @@ public abstract class GraphLens {
 
     public R getReboundReference() {
       return reboundReference;
+    }
+
+    public R getRewrittenReboundReference(
+        BidirectionalManyToOneRepresentativeMap<R, R> rewritings) {
+      return rewritings.getOrDefault(reboundReference, reboundReference);
     }
 
     public R getRewrittenReboundReference(Map<R, R> rewritings) {
@@ -228,10 +242,10 @@ public abstract class GraphLens {
 
     protected final Map<DexType, DexType> typeMap = new IdentityHashMap<>();
     protected final Map<DexMethod, DexMethod> methodMap = new IdentityHashMap<>();
-    protected final Map<DexField, DexField> fieldMap = new IdentityHashMap<>();
+    protected final MutableBidirectionalManyToOneRepresentativeMap<DexField, DexField> fieldMap =
+        new BidirectionalManyToOneRepresentativeHashMap<>();
 
-    protected final BiMap<DexField, DexField> originalFieldSignatures = HashBiMap.create();
-    protected final BidirectionalOneToOneHashMap<DexMethod, DexMethod> originalMethodSignatures =
+    protected final MutableBidirectionalOneToOneMap<DexMethod, DexMethod> originalMethodSignatures =
         new BidirectionalOneToOneHashMap<>();
 
     public void map(DexType from, DexType to) {
@@ -248,13 +262,6 @@ public abstract class GraphLens {
       methodMap.put(from, to);
     }
 
-    public void map(DexField from, DexField to) {
-      if (from == to) {
-        return;
-      }
-      fieldMap.put(from, to);
-    }
-
     public void move(DexMethod from, DexMethod to) {
       if (from == to) {
         return;
@@ -268,7 +275,6 @@ public abstract class GraphLens {
         return;
       }
       fieldMap.put(from, to);
-      originalFieldSignatures.put(to, from);
     }
 
     public GraphLens build(DexItemFactory dexItemFactory) {
@@ -283,7 +289,6 @@ public abstract class GraphLens {
           typeMap,
           methodMap,
           fieldMap,
-          originalFieldSignatures,
           originalMethodSignatures,
           previousLens,
           dexItemFactory);
@@ -611,21 +616,14 @@ public abstract class GraphLens {
         continue;
       }
       for (DexEncodedField field : clazz.fields()) {
-        // The field $r8$clinitField may be synthesized by R8 in order to trigger the initialization
-        // of the enclosing class. It is not present in the input, and therefore we do not require
-        // that it can be mapped back to the original program.
-        if (field.field.match(dexItemFactory.objectMembers.clinitField)) {
-          continue;
-        }
-
-        // TODO(b/167947782): Should be a general check to see if the field is D8/R8 synthesized.
-        if (field.getReference().name.toSourceString().equals(ClassMerger.CLASS_ID_FIELD_NAME)) {
-          continue;
-        }
-
-        DexField originalField = getOriginalFieldSignature(field.field);
+        // Fields synthesized by R8 are not present in the input, and therefore we do not require
+        // that they can be mapped back to the original program.
+        DexField originalField = getOriginalFieldSignature(field.getReference());
         assert originalFields.contains(originalField)
-            : "Unable to map field `" + field.field.toSourceString() + "` back to original program";
+                || isD8R8SynthesizedField(originalField, dexItemFactory)
+            : "Unable to map field `"
+                + field.getReference().toSourceString()
+                + "` back to original program";
       }
       for (DexEncodedMethod method : clazz.methods()) {
         if (method.isD8R8Synthesized()) {
@@ -638,6 +636,22 @@ public abstract class GraphLens {
     }
 
     return true;
+  }
+
+  private boolean isD8R8SynthesizedField(DexField field, DexItemFactory dexItemFactory) {
+    // TODO(b/167947782): Should be a general check to see if the field is D8/R8 synthesized
+    //  instead of relying on field names.
+    if (field.match(dexItemFactory.objectMembers.clinitField)) {
+      return true;
+    }
+    if (field.getName().toSourceString().equals(CLASS_ID_FIELD_NAME)) {
+      return true;
+    }
+    if (field.getHolderType().toSourceString().contains(LAMBDA_CLASS_NAME_PREFIX)
+        && field.getName().toSourceString().equals(LAMBDA_INSTANCE_FIELD_NAME)) {
+      return true;
+    }
+    return false;
   }
 
   public abstract static class NonIdentityGraphLens extends GraphLens {
@@ -963,11 +977,10 @@ public abstract class GraphLens {
 
     protected final Map<DexType, DexType> typeMap;
     protected final Map<DexMethod, DexMethod> methodMap;
-    protected final Map<DexField, DexField> fieldMap;
+    protected final BidirectionalManyToOneRepresentativeMap<DexField, DexField> fieldMap;
 
-    // Maps that store the original signature of fields and methods that have been affected, for
-    // example, by vertical class merging. Needed to generate a correct Proguard map in the end.
-    protected final BiMap<DexField, DexField> originalFieldSignatures;
+    // Map that store the original signature of methods that have been affected, for example, by
+    // vertical class merging. Needed to generate a correct Proguard map in the end.
     protected BidirectionalManyToManyRepresentativeMap<DexMethod, DexMethod>
         originalMethodSignatures;
 
@@ -980,8 +993,7 @@ public abstract class GraphLens {
     public NestedGraphLens(
         Map<DexType, DexType> typeMap,
         Map<DexMethod, DexMethod> methodMap,
-        Map<DexField, DexField> fieldMap,
-        BiMap<DexField, DexField> originalFieldSignatures,
+        BidirectionalManyToOneRepresentativeMap<DexField, DexField> fieldMap,
         BidirectionalManyToManyRepresentativeMap<DexMethod, DexMethod> originalMethodSignatures,
         GraphLens previousLens,
         DexItemFactory dexItemFactory) {
@@ -993,7 +1005,6 @@ public abstract class GraphLens {
       this.typeMap = typeMap.isEmpty() ? null : typeMap;
       this.methodMap = methodMap;
       this.fieldMap = fieldMap;
-      this.originalFieldSignatures = originalFieldSignatures;
       this.originalMethodSignatures = originalMethodSignatures;
       this.dexItemFactory = dexItemFactory;
     }
@@ -1022,10 +1033,7 @@ public abstract class GraphLens {
 
     @Override
     public DexField getOriginalFieldSignature(DexField field) {
-      DexField originalField =
-          originalFieldSignatures != null
-              ? originalFieldSignatures.getOrDefault(field, field)
-              : field;
+      DexField originalField = fieldMap.getRepresentativeKeyOrDefault(field, field);
       return getPrevious().getOriginalFieldSignature(originalField);
     }
 
@@ -1038,9 +1046,7 @@ public abstract class GraphLens {
     @Override
     public DexField getRenamedFieldSignature(DexField originalField) {
       DexField renamedField = getPrevious().getRenamedFieldSignature(originalField);
-      return originalFieldSignatures != null
-          ? originalFieldSignatures.inverse().getOrDefault(renamedField, renamedField)
-          : renamedField;
+      return fieldMap.getOrDefault(renamedField, renamedField);
     }
 
     @Override
@@ -1221,10 +1227,15 @@ public abstract class GraphLens {
         builder.append(entry.getKey().toSourceString()).append(" -> ");
         builder.append(entry.getValue().toSourceString()).append(System.lineSeparator());
       }
-      for (Map.Entry<DexField, DexField> entry : fieldMap.entrySet()) {
-        builder.append(entry.getKey().toSourceString()).append(" -> ");
-        builder.append(entry.getValue().toSourceString()).append(System.lineSeparator());
-      }
+      fieldMap.forEachManyToOneMapping(
+          (keys, value) -> {
+            builder.append(
+                keys.stream()
+                    .map(DexField::toSourceString)
+                    .collect(Collectors.joining("," + System.lineSeparator())));
+            builder.append(" -> ");
+            builder.append(value.toSourceString()).append(System.lineSeparator());
+          });
       builder.append(getPrevious().toString());
       return builder.toString();
     }

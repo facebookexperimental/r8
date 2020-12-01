@@ -21,6 +21,7 @@ import com.android.tools.r8.dex.Marker;
 import com.android.tools.r8.dex.Marker.Backend;
 import com.android.tools.r8.dex.Marker.Tool;
 import com.android.tools.r8.errors.CompilationError;
+import com.android.tools.r8.errors.ExperimentalClassFileVersionDiagnostic;
 import com.android.tools.r8.errors.IncompleteNestNestDesugarDiagnosic;
 import com.android.tools.r8.errors.InterfaceDesugarMissingTypeDiagnostic;
 import com.android.tools.r8.errors.InvalidDebugInfoException;
@@ -38,7 +39,6 @@ import com.android.tools.r8.graph.DexItemFactory;
 import com.android.tools.r8.graph.DexMethod;
 import com.android.tools.r8.graph.DexProgramClass;
 import com.android.tools.r8.graph.DexType;
-import com.android.tools.r8.graph.EnumValueInfoMapCollection;
 import com.android.tools.r8.graph.ProgramMethod;
 import com.android.tools.r8.graph.classmerging.HorizontallyMergedLambdaClasses;
 import com.android.tools.r8.graph.classmerging.StaticallyMergedClasses;
@@ -49,6 +49,7 @@ import com.android.tools.r8.ir.code.IRCode;
 import com.android.tools.r8.ir.conversion.MethodProcessingId;
 import com.android.tools.r8.ir.desugar.DesugaredLibraryConfiguration;
 import com.android.tools.r8.ir.optimize.Inliner;
+import com.android.tools.r8.ir.optimize.enums.EnumDataMap;
 import com.android.tools.r8.ir.optimize.lambda.kotlin.KotlinLambdaGroupIdFactory;
 import com.android.tools.r8.origin.Origin;
 import com.android.tools.r8.position.Position;
@@ -108,11 +109,13 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     ON
   }
 
-  public static final CfVersion SUPPORTED_CF_VERSION = CfVersion.V11;
+  public static final CfVersion SUPPORTED_CF_VERSION = CfVersion.V15;
+  public static final CfVersion EXPERIMENTAL_CF_VERSION = CfVersion.V12;
+
   public static final int SUPPORTED_DEX_VERSION =
       AndroidApiLevel.LATEST.getDexVersion().getIntValue();
 
-  public static final int ASM_VERSION = Opcodes.ASM7;
+  public static final int ASM_VERSION = Opcodes.ASM9;
 
   public final DexItemFactory itemFactory;
 
@@ -202,7 +205,7 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     enableClassStaticizer = false;
     enableDevirtualization = false;
     enableLambdaMerging = false;
-    enableHorizontalClassMerging = false;
+    horizontalClassMergerOptions.disable();
     enableStaticClassMerging = false;
     enableVerticalClassMerging = false;
     enableEnumUnboxing = false;
@@ -238,11 +241,6 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
   public boolean enableFieldBitAccessAnalysis =
       System.getProperty("com.android.tools.r8.fieldBitAccessAnalysis") != null;
   public boolean enableStaticClassMerging = true;
-  public boolean enableHorizontalClassMerging = true;
-  public boolean enableHorizontalClassMergingConstructorMerging = true;
-  public int horizontalClassMergingMaxGroupSize = 30;
-  public int horizontalClassMergingSyntheticArgumentCount = 3;
-  public boolean enableHorizontalClassMergingOfKotlinLambdas = true;
   public boolean enableVerticalClassMerging = true;
   public boolean enableArgumentRemoval = true;
   public boolean enableUnusedInterfaceRemoval = true;
@@ -582,7 +580,7 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
    * and check cast instructions needs to be collected.
    */
   public boolean isClassMergingExtensionRequired() {
-    return enableHorizontalClassMerging || enableVerticalClassMerging;
+    return horizontalClassMergerOptions.isEnabled() || enableVerticalClassMerging;
   }
 
   @Override
@@ -615,6 +613,8 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
 
   private final CallSiteOptimizationOptions callSiteOptimizationOptions =
       new CallSiteOptimizationOptions();
+  private final HorizontalClassMergerOptions horizontalClassMergerOptions =
+      new HorizontalClassMergerOptions();
   private final ProtoShrinkingOptions protoShrinking = new ProtoShrinkingOptions();
   private final KotlinOptimizationOptions kotlinOptimizationOptions =
       new KotlinOptimizationOptions();
@@ -636,6 +636,10 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
 
   public CallSiteOptimizationOptions callSiteOptimizationOptions() {
     return callSiteOptimizationOptions;
+  }
+
+  public HorizontalClassMergerOptions horizontalClassMergerOptions() {
+    return horizontalClassMergerOptions;
   }
 
   public ProtoShrinkingOptions protoShrinking() {
@@ -1043,6 +1047,23 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     reporter.warning(new StringDiagnostic(message.toString(), origin));
   }
 
+  private final Box<Boolean> reportedExperimentClassFileVersion = new Box<>(false);
+
+  public void warningExperimentalClassFileVersion(Origin origin) {
+    synchronized (reportedExperimentClassFileVersion) {
+      if (reportedExperimentClassFileVersion.get()) {
+        return;
+      }
+      reportedExperimentClassFileVersion.set(true);
+      reporter.warning(
+          new ExperimentalClassFileVersionDiagnostic(
+              origin,
+              "One or more classes has class file version >= "
+                  + EXPERIMENTAL_CF_VERSION.major()
+                  + " which is not officially supported."));
+    }
+  }
+
   public boolean printWarnings() {
     boolean printed = false;
     boolean printOutdatedToolchain = false;
@@ -1243,6 +1264,70 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     }
   }
 
+  public static class HorizontalClassMergerOptions {
+
+    public boolean enable = true;
+    public boolean enableConstructorMerging = true;
+    public boolean enableJavaLambdaMerging = false;
+    public boolean enableKotlinLambdaMerging = true;
+
+    public int syntheticArgumentCount = 3;
+    public int maxGroupSize = 30;
+
+    public void disable() {
+      enable = false;
+    }
+
+    @Deprecated
+    public void disableKotlinLambdaMerging() {
+      enableKotlinLambdaMerging = false;
+    }
+
+    public void enable() {
+      enable = true;
+    }
+
+    public void enableIf(boolean enable) {
+      this.enable = enable;
+    }
+
+    public void enableJavaLambdaMerging() {
+      enableJavaLambdaMerging = true;
+    }
+
+    public void enableKotlinLambdaMergingIf(boolean enableKotlinLambdaMerging) {
+      this.enableKotlinLambdaMerging = enableKotlinLambdaMerging;
+    }
+
+    public int getMaxGroupSize() {
+      return maxGroupSize;
+    }
+
+    public int getSyntheticArgumentCount() {
+      return syntheticArgumentCount;
+    }
+
+    public boolean isConstructorMergingEnabled() {
+      return enableConstructorMerging;
+    }
+
+    public boolean isDisabled() {
+      return !isEnabled();
+    }
+
+    public boolean isEnabled() {
+      return enable;
+    }
+
+    public boolean isJavaLambdaMergingEnabled() {
+      return enableJavaLambdaMerging;
+    }
+
+    public boolean isKotlinLambdaMergingEnabled() {
+      return enableKotlinLambdaMerging;
+    }
+  }
+
   public static class ProtoShrinkingOptions {
 
     public boolean enableGeneratedExtensionRegistryShrinking = false;
@@ -1297,7 +1382,7 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     public BiConsumer<DexItemFactory, StaticallyMergedClasses> staticallyMergedClassesConsumer =
         ConsumerUtils.emptyBiConsumer();
 
-    public BiConsumer<DexItemFactory, EnumValueInfoMapCollection> unboxedEnumsConsumer =
+    public BiConsumer<DexItemFactory, EnumDataMap> unboxedEnumsConsumer =
         ConsumerUtils.emptyBiConsumer();
 
     public BiConsumer<DexItemFactory, VerticallyMergedClasses> verticallyMergedClassesConsumer =
@@ -1520,6 +1605,10 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
   public boolean canUseMultidex() {
     assert isGeneratingDex();
     return intermediate || hasMinApi(AndroidApiLevel.L);
+  }
+
+  public boolean canUseJavaUtilObjects() {
+    return (isGeneratingClassFiles() && !cfToCfDesugar) || hasMinApi(AndroidApiLevel.K);
   }
 
   public boolean canUseRequireNonNull() {

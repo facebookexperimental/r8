@@ -96,6 +96,14 @@ public interface InstructionListIterator
 
   void replaceCurrentInstructionWithConstInt(IRCode code, int value);
 
+  void replaceCurrentInstructionWithConstString(AppView<?> appView, IRCode code, DexString value);
+
+  default void replaceCurrentInstructionWithConstString(
+      AppView<?> appView, IRCode code, String value) {
+    replaceCurrentInstructionWithConstString(
+        appView, code, appView.dexItemFactory().createString(value));
+  }
+
   void replaceCurrentInstructionWithStaticGet(
       AppView<?> appView, IRCode code, DexField field, Set<Value> affectedValues);
 
@@ -145,6 +153,9 @@ public interface InstructionListIterator
   default BasicBlock split(IRCode code) {
     return split(code, null);
   }
+
+  BasicBlock splitCopyCatchHandlers(
+      IRCode code, ListIterator<BasicBlock> blockIterator, InternalOptions options);
 
   /**
    * Split the block into three blocks. The first split is at the point of the {@link ListIterator}

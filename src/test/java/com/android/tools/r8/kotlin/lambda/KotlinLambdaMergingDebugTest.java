@@ -3,13 +3,15 @@
 // BSD-style license that can be found in the LICENSE file.
 package com.android.tools.r8.kotlin.lambda;
 
+import static com.android.tools.r8.ToolHelper.getKotlinCompilers;
 import static org.hamcrest.CoreMatchers.equalTo;
 
 import com.android.tools.r8.CompilationMode;
+import com.android.tools.r8.KotlinCompilerTool.KotlinCompiler;
 import com.android.tools.r8.TestParameters;
-import com.android.tools.r8.TestParametersCollection;
 import com.android.tools.r8.ToolHelper.KotlinTargetVersion;
 import com.android.tools.r8.kotlin.AbstractR8KotlinTestBase;
+import java.util.List;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -23,20 +25,25 @@ public class KotlinLambdaMergingDebugTest extends AbstractR8KotlinTestBase {
   private static final String MAIN_CLASS = "reprocess_merged_lambdas_kstyle.MainKt";
 
   @Parameters(name = "{0}")
-  public static TestParametersCollection data() {
-    return getTestParameters().withDexRuntimes().withAllApiLevels().build();
+  public static List<Object[]> data() {
+    return buildParameters(
+        getTestParameters().withDexRuntimes().withAllApiLevels().build(), getKotlinCompilers());
   }
 
-  public KotlinLambdaMergingDebugTest(TestParameters parameters) {
-    super(KotlinTargetVersion.JAVA_6);
+  public KotlinLambdaMergingDebugTest(TestParameters parameters, KotlinCompiler kotlinc) {
+    super(KotlinTargetVersion.JAVA_6, kotlinc);
     this.parameters = parameters;
   }
+
+  private static final KotlinCompileMemoizer compiledJars =
+      getCompileMemoizer(getKotlinFilesInResource(FOLDER), FOLDER)
+          .configure(kotlinCompilerTool -> kotlinCompilerTool.includeRuntime().noReflect());
 
   @Test
   public void testMergingKStyleLambdasAndReprocessingInDebug() throws Exception {
     testForR8(parameters.getBackend())
         .setMode(CompilationMode.DEBUG)
-        .addProgramFiles(getKotlinJarFile(FOLDER))
+        .addProgramFiles(compiledJars.getForConfiguration(kotlinc, KotlinTargetVersion.JAVA_6))
         .addProgramFiles(getJavaJarFile(FOLDER))
         .setMinApi(parameters.getApiLevel())
         .addKeepMainRule(MAIN_CLASS)

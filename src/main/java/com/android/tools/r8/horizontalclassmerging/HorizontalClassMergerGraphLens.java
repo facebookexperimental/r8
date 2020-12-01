@@ -8,87 +8,49 @@ import com.android.tools.r8.graph.AppView;
 import com.android.tools.r8.graph.DexField;
 import com.android.tools.r8.graph.DexMethod;
 import com.android.tools.r8.graph.DexType;
-import com.android.tools.r8.graph.GraphLens;
 import com.android.tools.r8.graph.GraphLens.NestedGraphLens;
-import com.android.tools.r8.graph.RewrittenPrototypeDescription;
 import com.android.tools.r8.ir.conversion.ExtraParameter;
 import com.android.tools.r8.utils.IterableUtils;
-import com.android.tools.r8.utils.collections.BidirectionalOneToOneHashMap;
-import com.google.common.collect.BiMap;
+import com.android.tools.r8.utils.collections.BidirectionalManyToOneHashMap;
+import com.android.tools.r8.utils.collections.BidirectionalManyToOneRepresentativeHashMap;
+import com.android.tools.r8.utils.collections.BidirectionalManyToOneRepresentativeMap;
+import com.android.tools.r8.utils.collections.BidirectionalOneToManyRepresentativeHashMap;
+import com.android.tools.r8.utils.collections.BidirectionalOneToManyRepresentativeMap;
+import com.android.tools.r8.utils.collections.MutableBidirectionalManyToOneRepresentativeMap;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Streams;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Function;
 
 public class HorizontalClassMergerGraphLens extends NestedGraphLens {
 
   private final Map<DexMethod, List<ExtraParameter>> methodExtraParameters;
-  private final Map<DexMethod, DexMethod> extraOriginalMethodSignatures;
   private final HorizontallyMergedClasses mergedClasses;
-  private final Map<DexField, DexField> extraOriginalFieldSignatures;
 
   private HorizontalClassMergerGraphLens(
       AppView<?> appView,
       HorizontallyMergedClasses mergedClasses,
       Map<DexMethod, List<ExtraParameter>> methodExtraParameters,
-      Map<DexField, DexField> fieldMap,
+      BidirectionalManyToOneRepresentativeMap<DexField, DexField> fieldMap,
       Map<DexMethod, DexMethod> methodMap,
-      BiMap<DexField, DexField> originalFieldSignatures,
-      BidirectionalOneToOneHashMap<DexMethod, DexMethod> originalMethodSignatures,
-      Map<DexMethod, DexMethod> extraOriginalMethodSignatures,
-      Map<DexField, DexField> extraOriginalFieldSignatures,
-      GraphLens previousLens) {
+      BidirectionalOneToManyRepresentativeMap<DexMethod, DexMethod> originalMethodSignatures) {
     super(
         mergedClasses.getForwardMap(),
         methodMap,
         fieldMap,
-        originalFieldSignatures,
         originalMethodSignatures,
-        previousLens,
+        appView.graphLens(),
         appView.dexItemFactory());
     this.methodExtraParameters = methodExtraParameters;
-    this.extraOriginalFieldSignatures = extraOriginalFieldSignatures;
-    this.extraOriginalMethodSignatures = extraOriginalMethodSignatures;
     this.mergedClasses = mergedClasses;
-  }
-
-  private boolean isSynthesizedByHorizontalClassMerging(DexMethod method) {
-    return methodExtraParameters.containsKey(method);
   }
 
   @Override
   protected Iterable<DexType> internalGetOriginalTypes(DexType previous) {
     return IterableUtils.prependSingleton(previous, mergedClasses.getSourcesFor(previous));
-  }
-
-  @Override
-  public RewrittenPrototypeDescription lookupPrototypeChangesForMethodDefinition(DexMethod method) {
-    if (isSynthesizedByHorizontalClassMerging(method)) {
-      // If we are processing the call site, the arguments should be removed.
-      return RewrittenPrototypeDescription.none();
-    }
-    return super.lookupPrototypeChangesForMethodDefinition(method);
-  }
-
-  @Override
-  public DexMethod getOriginalMethodSignature(DexMethod method) {
-    DexMethod originalConstructor = extraOriginalMethodSignatures.get(method);
-    if (originalConstructor == null) {
-      return super.getOriginalMethodSignature(method);
-    }
-    return getPrevious().getOriginalMethodSignature(originalConstructor);
-  }
-
-  @Override
-  public DexField getOriginalFieldSignature(DexField field) {
-    DexField originalField = extraOriginalFieldSignatures.get(field);
-    if (originalField == null) {
-      return super.getOriginalFieldSignature(field);
-    }
-    return getPrevious().getOriginalFieldSignature(originalField);
   }
 
   /**
@@ -111,87 +73,121 @@ public class HorizontalClassMergerGraphLens extends NestedGraphLens {
   }
 
   public static class Builder {
-    private ManyToOneMap<DexField, DexField> fieldMap = new ManyToOneMap<>();
-    private ManyToOneMap<DexMethod, DexMethod> methodMap = new ManyToOneMap<>();
+
+    private final MutableBidirectionalManyToOneRepresentativeMap<DexField, DexField> fieldMap =
+        new BidirectionalManyToOneRepresentativeHashMap<>();
+    private final BidirectionalManyToOneHashMap<DexMethod, DexMethod> methodMap =
+        new BidirectionalManyToOneHashMap<>();
+    private final BidirectionalOneToManyRepresentativeHashMap<DexMethod, DexMethod>
+        originalMethodSignatures = new BidirectionalOneToManyRepresentativeHashMap<>();
     private final Map<DexMethod, List<ExtraParameter>> methodExtraParameters =
         new IdentityHashMap<>();
 
+    private final BidirectionalManyToOneHashMap<DexMethod, DexMethod> pendingMethodMapUpdates =
+        new BidirectionalManyToOneHashMap<>();
+    private final BidirectionalOneToManyRepresentativeHashMap<DexMethod, DexMethod>
+        pendingOriginalMethodSignatureUpdates = new BidirectionalOneToManyRepresentativeHashMap<>();
+
     Builder() {}
 
-    public HorizontalClassMergerGraphLens build(
+    HorizontalClassMergerGraphLens build(
         AppView<?> appView, HorizontallyMergedClasses mergedClasses) {
-      ManyToOneInverseMap<DexMethod, DexMethod> inverseMethodMap =
-          methodMap.inverse(
-              group -> {
-                // Every group should have a representative. Fail in debug mode.
-                assert false;
-                return group.iterator().next();
-              });
-      ManyToOneInverseMap<DexField, DexField> inverseFieldMap =
-          fieldMap.inverse(
-              group -> {
-                // Every group should have a representative. Fail in debug mode.
-                assert false;
-                return group.iterator().next();
-              });
-
+      assert pendingMethodMapUpdates.isEmpty();
+      assert pendingOriginalMethodSignatureUpdates.isEmpty();
       return new HorizontalClassMergerGraphLens(
           appView,
           mergedClasses,
           methodExtraParameters,
-          fieldMap.getForwardMap(),
+          fieldMap,
           methodMap.getForwardMap(),
-          inverseFieldMap.getBiMap().getForwardBacking(),
-          inverseMethodMap.getBiMap(),
-          inverseMethodMap.getExtraMap(),
-          inverseFieldMap.getExtraMap(),
-          appView.graphLens());
+          originalMethodSignatures);
     }
 
-    public void remapMethods(BiMap<DexMethod, DexMethod> remapMethods) {
-      methodMap = methodMap.remap(remapMethods, Function.identity(), Function.identity());
+    void recordNewFieldSignature(DexField oldFieldSignature, DexField newFieldSignature) {
+      fieldMap.put(oldFieldSignature, newFieldSignature);
     }
 
-    public void remapFields(BiMap<DexField, DexField> remapFields) {
-      fieldMap = fieldMap.remap(remapFields, Function.identity(), Function.identity());
+    void recordNewFieldSignature(
+        Iterable<DexField> oldFieldSignatures,
+        DexField newFieldSignature,
+        DexField representative) {
+      assert Streams.stream(oldFieldSignatures)
+          .anyMatch(oldFieldSignature -> oldFieldSignature != newFieldSignature);
+      assert Streams.stream(oldFieldSignatures).noneMatch(fieldMap::containsValue);
+      assert Iterables.contains(oldFieldSignatures, representative);
+      for (DexField oldFieldSignature : oldFieldSignatures) {
+        recordNewFieldSignature(oldFieldSignature, newFieldSignature);
+      }
+      fieldMap.setRepresentative(newFieldSignature, representative);
     }
 
-    public Builder moveField(DexField from, DexField to) {
-      fieldMap.put(from, to);
-      fieldMap.putInverse(from, to);
-      return this;
+    void fixupField(DexField oldFieldSignature, DexField newFieldSignature) {
+      Set<DexField> originalFieldSignatures = fieldMap.removeValue(oldFieldSignature);
+      if (originalFieldSignatures.isEmpty()) {
+        fieldMap.put(oldFieldSignature, newFieldSignature);
+      } else if (originalFieldSignatures.size() == 1) {
+        fieldMap.put(originalFieldSignatures.iterator().next(), newFieldSignature);
+      } else {
+        for (DexField originalFieldSignature : originalFieldSignatures) {
+          fieldMap.put(originalFieldSignature, newFieldSignature);
+        }
+        DexField representative = fieldMap.removeRepresentativeFor(oldFieldSignature);
+        assert representative != null;
+        fieldMap.setRepresentative(newFieldSignature, representative);
+      }
     }
 
-    public Builder setRepresentativeField(DexField from, DexField to) {
-      fieldMap.setRepresentative(from, to);
-      return this;
+    void mapMethod(DexMethod oldMethodSignature, DexMethod newMethodSignature) {
+      methodMap.put(oldMethodSignature, newMethodSignature);
     }
 
-    /** Unidirectional mapping from one method to another. */
-    public Builder recordExtraOriginalSignature(DexMethod from, DexMethod to) {
-      methodMap.setRepresentative(from, to);
-
-      return this;
-    }
-
-    /** Unidirectional mapping from one method to another. */
-    public Builder mapMethod(DexMethod from, DexMethod to) {
-      methodMap.put(from, to);
-
-      return this;
-    }
-
-    /** Unidirectional mapping from one method to another. */
-    public Builder mapMethodInverse(DexMethod from, DexMethod to) {
-      methodMap.putInverse(from, to);
-
-      return this;
-    }
-
-    public Builder moveMethod(DexMethod from, DexMethod to) {
+    void moveMethod(DexMethod from, DexMethod to) {
       mapMethod(from, to);
-      mapMethodInverse(from, to);
-      return this;
+      recordNewMethodSignature(from, to);
+    }
+
+    void recordNewMethodSignature(DexMethod oldMethodSignature, DexMethod newMethodSignature) {
+      originalMethodSignatures.put(newMethodSignature, oldMethodSignature);
+    }
+
+    void fixupMethod(DexMethod oldMethodSignature, DexMethod newMethodSignature) {
+      fixupMethodMap(oldMethodSignature, newMethodSignature);
+      fixupOriginalMethodSignatures(oldMethodSignature, newMethodSignature);
+    }
+
+    private void fixupMethodMap(DexMethod oldMethodSignature, DexMethod newMethodSignature) {
+      Set<DexMethod> originalMethodSignatures = methodMap.getKeys(oldMethodSignature);
+      if (originalMethodSignatures.isEmpty()) {
+        pendingMethodMapUpdates.put(oldMethodSignature, newMethodSignature);
+      } else {
+        for (DexMethod originalMethodSignature : originalMethodSignatures) {
+          pendingMethodMapUpdates.put(originalMethodSignature, newMethodSignature);
+        }
+      }
+    }
+
+    private void fixupOriginalMethodSignatures(
+        DexMethod oldMethodSignature, DexMethod newMethodSignature) {
+      Set<DexMethod> oldMethodSignatures = originalMethodSignatures.getValues(oldMethodSignature);
+      if (oldMethodSignatures.isEmpty()) {
+        pendingOriginalMethodSignatureUpdates.put(newMethodSignature, oldMethodSignature);
+      } else {
+        for (DexMethod originalMethodSignature : oldMethodSignatures) {
+          pendingOriginalMethodSignatureUpdates.put(newMethodSignature, originalMethodSignature);
+        }
+      }
+    }
+
+    void commitPendingUpdates() {
+      // Commit pending method map updates.
+      methodMap.removeAll(pendingMethodMapUpdates.keySet());
+      pendingMethodMapUpdates.forEachManyToOneMapping(methodMap::put);
+      pendingMethodMapUpdates.clear();
+
+      // Commit pending original method signatures updates.
+      originalMethodSignatures.removeAll(pendingOriginalMethodSignatureUpdates.keySet());
+      pendingOriginalMethodSignatureUpdates.forEachOneToManyMapping(originalMethodSignatures::put);
+      pendingOriginalMethodSignatureUpdates.clear();
     }
 
     /**
@@ -199,24 +195,27 @@ public class HorizontalClassMergerGraphLens extends NestedGraphLens {
      * where many constructors are merged into a single constructor. The synthesized constructor
      * therefore does not have a unique reverse constructor.
      */
-    public Builder moveMergedConstructor(
-        DexMethod from, DexMethod to, List<ExtraParameter> extraParameters) {
-      moveMethod(from, to);
-      methodExtraParameters.put(from, extraParameters);
-      return this;
+    void mapMergedConstructor(DexMethod from, DexMethod to, List<ExtraParameter> extraParameters) {
+      mapMethod(from, to);
+      if (extraParameters.size() > 0) {
+        methodExtraParameters.put(from, extraParameters);
+      }
     }
 
-    public Builder addExtraParameters(DexMethod to, List<ExtraParameter> extraParameters) {
-      Set<DexMethod> mapsFrom = methodMap.lookupReverse(to);
-      if (mapsFrom == null) {
-        mapsFrom = Collections.singleton(to);
+    void addExtraParameters(DexMethod methodSignature, List<ExtraParameter> extraParameters) {
+      Set<DexMethod> originalMethodSignatures = methodMap.getKeys(methodSignature);
+      if (originalMethodSignatures.isEmpty()) {
+        methodExtraParameters
+            .computeIfAbsent(methodSignature, ignore -> new ArrayList<>(extraParameters.size()))
+            .addAll(extraParameters);
+      } else {
+        for (DexMethod originalMethodSignature : originalMethodSignatures) {
+          methodExtraParameters
+              .computeIfAbsent(
+                  originalMethodSignature, ignore -> new ArrayList<>(extraParameters.size()))
+              .addAll(extraParameters);
+        }
       }
-      mapsFrom.forEach(
-          originalFrom ->
-              methodExtraParameters
-                  .computeIfAbsent(originalFrom, ignore -> new ArrayList<>(extraParameters.size()))
-                  .addAll(extraParameters));
-      return this;
     }
   }
 }

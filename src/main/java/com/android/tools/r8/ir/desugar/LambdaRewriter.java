@@ -18,7 +18,6 @@ import com.android.tools.r8.graph.AppView;
 import com.android.tools.r8.graph.CfCode;
 import com.android.tools.r8.graph.DexApplication.Builder;
 import com.android.tools.r8.graph.DexCallSite;
-import com.android.tools.r8.graph.DexEncodedMethod;
 import com.android.tools.r8.graph.DexField;
 import com.android.tools.r8.graph.DexItemFactory;
 import com.android.tools.r8.graph.DexMethod;
@@ -42,10 +41,10 @@ import com.android.tools.r8.ir.code.Value;
 import com.android.tools.r8.ir.code.ValueType;
 import com.android.tools.r8.ir.conversion.IRConverter;
 import com.android.tools.r8.utils.DescriptorUtils;
-import com.android.tools.r8.utils.collections.BidirectionalOneToOneHashMap;
+import com.android.tools.r8.utils.collections.BidirectionalManyToOneRepresentativeMap;
+import com.android.tools.r8.utils.collections.BidirectionalOneToOneMap;
 import com.android.tools.r8.utils.collections.SortedProgramMethodSet;
 import com.google.common.base.Suppliers;
-import com.google.common.collect.BiMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import java.util.ArrayList;
@@ -73,7 +72,7 @@ public class LambdaRewriter {
   public static final String LAMBDA_CLASS_NAME_PREFIX = "-$$Lambda$";
   public static final String LAMBDA_GROUP_CLASS_NAME_PREFIX = "-$$LambdaGroup$";
   static final String EXPECTED_LAMBDA_METHOD_PREFIX = "lambda$";
-  private static final String LAMBDA_INSTANCE_FIELD_NAME = "INSTANCE";
+  public static final String LAMBDA_INSTANCE_FIELD_NAME = "INSTANCE";
 
   private final AppView<?> appView;
 
@@ -133,7 +132,7 @@ public class LambdaRewriter {
    */
   public int desugarLambdas(ProgramMethod method, AppInfoWithClassHierarchy appInfo) {
     return desugarLambdas(
-        method.getDefinition(),
+        method,
         callsite -> {
           LambdaDescriptor descriptor = LambdaDescriptor.tryInfer(callsite, appInfo, method);
           if (descriptor == null) {
@@ -145,8 +144,8 @@ public class LambdaRewriter {
 
   // Same as above, but where lambdas are always known to exist for the call sites.
   public static int desugarLambdas(
-      DexEncodedMethod method, Function<DexCallSite, LambdaClass> callSites) {
-    CfCode code = method.getCode().asCfCode();
+      ProgramMethod method, Function<DexCallSite, LambdaClass> callSites) {
+    CfCode code = method.getDefinition().getCode().asCfCode();
     List<CfInstruction> instructions = code.getInstructions();
     Supplier<List<CfInstruction>> lazyNewInstructions =
         Suppliers.memoize(() -> new ArrayList<>(instructions));
@@ -439,16 +438,14 @@ public class LambdaRewriter {
     LambdaRewriterLens(
         Map<DexType, DexType> typeMap,
         Map<DexMethod, DexMethod> methodMap,
-        Map<DexField, DexField> fieldMap,
-        BiMap<DexField, DexField> originalFieldSignatures,
-        BidirectionalOneToOneHashMap<DexMethod, DexMethod> originalMethodSignatures,
+        BidirectionalManyToOneRepresentativeMap<DexField, DexField> fieldMap,
+        BidirectionalOneToOneMap<DexMethod, DexMethod> originalMethodSignatures,
         GraphLens previousLens,
         DexItemFactory dexItemFactory) {
       super(
           typeMap,
           methodMap,
           fieldMap,
-          originalFieldSignatures,
           originalMethodSignatures,
           previousLens,
           dexItemFactory);
@@ -479,7 +476,6 @@ public class LambdaRewriter {
             typeMap,
             methodMap,
             fieldMap,
-            originalFieldSignatures,
             originalMethodSignatures,
             previousLens,
             dexItemFactory);

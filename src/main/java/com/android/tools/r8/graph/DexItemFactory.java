@@ -188,7 +188,6 @@ public class DexItemFactory {
 
   public final DexString convertMethodName = createString("convert");
   public final DexString wrapperFieldName = createString("wrappedValue");
-  public final DexString initMethodName = createString("<init>");
 
   public final DexString getClassMethodName = createString("getClass");
   public final DexString finalizeMethodName = createString("finalize");
@@ -290,6 +289,8 @@ public class DexItemFactory {
   public final DexString constructorMethodName = createString(Constants.INSTANCE_INITIALIZER_NAME);
   public final DexString classConstructorMethodName =
       createString(Constants.CLASS_INITIALIZER_NAME);
+  public final DexString temporaryConstructorMethodPrefix =
+      createString(Constants.TEMPORARY_INSTANCE_INITIALIZER_PREFIX);
 
   public final DexString thisName = createString("this");
   public final DexString enumValuesFieldName = createString("$VALUES");
@@ -1134,6 +1135,8 @@ public class DexItemFactory {
     public final DexMethod requireNonNull;
     public final DexMethod requireNonNullWithMessage;
     public final DexMethod requireNonNullWithMessageSupplier;
+    public final DexMethod toStringWithObject =
+        createMethod(objectsType, createProto(stringType, objectType), "toString");
 
     private ObjectsMethods() {
       DexString requireNonNullMethodName = createString("requireNonNull");
@@ -1357,7 +1360,7 @@ public class DexItemFactory {
 
     public final DexMethod initWithMessage =
         createMethod(
-            illegalArgumentExceptionType, createProto(voidType, stringType), initMethodName);
+            illegalArgumentExceptionType, createProto(voidType, stringType), constructorMethodName);
   }
 
   /**
@@ -1548,6 +1551,8 @@ public class DexItemFactory {
     public final DexMethod toString;
 
     private final Set<DexMethod> appendMethods;
+    private final Set<DexMethod> appendPrimitiveMethods;
+
     private StringBuildingMethods(DexType receiver) {
       DexString append = createString("append");
 
@@ -1566,7 +1571,6 @@ public class DexItemFactory {
       appendObject = createMethod(receiver, createProto(receiver, objectType), append);
       appendString = createMethod(receiver, createProto(receiver, stringType), append);
       appendStringBuffer = createMethod(receiver, createProto(receiver, stringBufferType), append);
-
       charSequenceConstructor =
           createMethod(receiver, createProto(voidType, charSequenceType), constructorMethodName);
       defaultConstructor = createMethod(receiver, createProto(voidType), constructorMethodName);
@@ -1591,6 +1595,9 @@ public class DexItemFactory {
               appendObject,
               appendString,
               appendStringBuffer);
+      appendPrimitiveMethods =
+          ImmutableSet.of(
+              appendBoolean, appendChar, appendInt, appendDouble, appendFloat, appendLong);
       constructorMethods =
           ImmutableSet.of(
               charSequenceConstructor, defaultConstructor, intConstructor, stringConstructor);
@@ -1602,12 +1609,29 @@ public class DexItemFactory {
       return appendMethods.contains(method);
     }
 
+    public boolean isAppendObjectMethod(DexMethod method) {
+      return method == appendObject;
+    }
+
+    public boolean isAppendPrimitiveMethod(DexMethod method) {
+      return appendPrimitiveMethods.contains(method);
+    }
+
+    public boolean isAppendStringMethod(DexMethod method) {
+      return method == appendString;
+    }
+
+    public boolean isConstructorMethod(DexMethod method) {
+      return constructorMethods.contains(method);
+    }
+
     public boolean constructorInvokeIsSideEffectFree(InvokeMethod invoke) {
       DexMethod invokedMethod = invoke.getInvokedMethod();
       if (invokedMethod == charSequenceConstructor) {
-        // NullPointerException - if seq is null.
-        Value seqValue = invoke.inValues().get(1);
-        return !seqValue.getType().isNullable();
+        // Performs callbacks on the given CharSequence, which may have side effects.
+        TypeElement charSequenceType = invoke.getArgument(1).getType();
+        return charSequenceType.isClassType()
+            && charSequenceType.asClassType().getClassType() == stringType;
       }
 
       if (invokedMethod == defaultConstructor) {
@@ -1924,6 +1948,10 @@ public class DexItemFactory {
         name -> Optional.of(template.withName(name, this)).filter(isFresh),
         template.name.toSourceString(),
         holder);
+  }
+
+  public DexMethod createClassInitializer(DexType holder) {
+    return createMethod(holder, createProto(voidType), classConstructorMethodName);
   }
 
   public DexMethod createInstanceInitializerWithFreshProto(

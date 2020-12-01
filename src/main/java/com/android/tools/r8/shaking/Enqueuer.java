@@ -47,7 +47,6 @@ import com.android.tools.r8.graph.DexType;
 import com.android.tools.r8.graph.DirectMappedDexApplication;
 import com.android.tools.r8.graph.DirectMappedDexApplication.Builder;
 import com.android.tools.r8.graph.EnclosingMethodAttribute;
-import com.android.tools.r8.graph.EnumValueInfoMapCollection;
 import com.android.tools.r8.graph.FieldAccessInfoCollectionImpl;
 import com.android.tools.r8.graph.FieldAccessInfoImpl;
 import com.android.tools.r8.graph.FieldResolutionResult;
@@ -115,6 +114,7 @@ import com.android.tools.r8.utils.Timing;
 import com.android.tools.r8.utils.Visibility;
 import com.android.tools.r8.utils.WorkList;
 import com.android.tools.r8.utils.collections.ProgramFieldSet;
+import com.android.tools.r8.utils.collections.ProgramMethodMap;
 import com.android.tools.r8.utils.collections.ProgramMethodSet;
 import com.google.common.base.Equivalence.Wrapper;
 import com.google.common.collect.ImmutableSet;
@@ -364,8 +364,8 @@ public class Enqueuer {
   private final DesugaredLibraryConversionWrapperAnalysis desugaredLibraryWrapperAnalysis;
   private final Map<DexType, Pair<LambdaClass, ProgramMethod>> lambdaClasses =
       new IdentityHashMap<>();
-  private final Map<DexEncodedMethod, Map<DexCallSite, LambdaClass>> lambdaCallSites =
-      new IdentityHashMap<>();
+  private final ProgramMethodMap<Map<DexCallSite, LambdaClass>> lambdaCallSites =
+      ProgramMethodMap.create();
   private final Map<DexMethod, ProgramMethod> methodsWithBackports = new IdentityHashMap<>();
   private final Set<DexProgramClass> classesWithSerializableLambdas = Sets.newIdentityHashSet();
 
@@ -821,6 +821,7 @@ public class Enqueuer {
   // Utility to avoid adding to the worklist if already live.
   private boolean enqueueMarkMethodLiveAction(ProgramMethod method, KeepReason reason) {
     if (liveMethods.add(method, reason)) {
+      assert !method.getDefinition().getOptimizationInfo().forceInline();
       workList.enqueueMarkMethodLiveAction(method, reason);
       return true;
     }
@@ -929,7 +930,7 @@ public class Enqueuer {
         LambdaClass lambdaClass = lambdaRewriter.getOrCreateLambdaClass(descriptor, context);
         lambdaClasses.put(lambdaClass.type, new Pair<>(lambdaClass, context));
         lambdaCallSites
-            .computeIfAbsent(contextMethod, k -> new IdentityHashMap<>())
+            .computeIfAbsent(context, k -> new IdentityHashMap<>())
             .put(callSite, lambdaClass);
         if (lambdaClass.descriptor.interfaces.contains(appView.dexItemFactory().serializableType)) {
           classesWithSerializableLambdas.add(context.getHolder());
@@ -3023,6 +3024,9 @@ public class Enqueuer {
     Map<DexType, Pair<DexProgramClass, ProgramMethod>> syntheticInstantiations =
         new IdentityHashMap<>();
 
+    ProgramMethodMap<Set<DexField>> syntheticStaticFieldReadsByContext =
+        ProgramMethodMap.createLinked();
+
     Map<DexMethod, ProgramMethod> liveMethods = new IdentityHashMap<>();
 
     Map<DexType, DexClasspathClass> syntheticClasspathClasses = new IdentityHashMap<>();
@@ -3099,12 +3103,36 @@ public class Enqueuer {
             InstantiationReason.SYNTHESIZED_CLASS,
             fakeReason);
       }
+      syntheticStaticFieldReadsByContext.forEach(
+          (context, fields) ->
+              fields.forEach(
+                  field -> enqueuer.workList.enqueueTraceStaticFieldRead(field, context)));
       for (ProgramMethod liveMethod : liveMethods.values()) {
         assert !enqueuer.targetedMethods.contains(liveMethod.getDefinition());
         enqueuer.markMethodAsTargeted(liveMethod, fakeReason);
         enqueuer.enqueueMarkMethodLiveAction(liveMethod, fakeReason);
       }
       enqueuer.liveNonProgramTypes.addAll(syntheticClasspathClasses.values());
+    }
+
+    void registerStatelessLambdaInstanceFieldReads(
+        ProgramMethodMap<Map<DexCallSite, LambdaClass>> lambdaCallSites) {
+      lambdaCallSites.forEach(this::registerStatelessLambdaInstanceFieldReads);
+    }
+
+    private void registerStatelessLambdaInstanceFieldReads(
+        ProgramMethod context, Map<DexCallSite, LambdaClass> callSites) {
+      Set<DexField> syntheticStaticFieldReadsInContext = null;
+      for (LambdaClass lambdaClass : callSites.values()) {
+        if (lambdaClass.isStateless()) {
+          if (syntheticStaticFieldReadsInContext == null) {
+            syntheticStaticFieldReadsInContext =
+                syntheticStaticFieldReadsByContext.computeIfAbsent(
+                    context, ignore -> Sets.newLinkedHashSet());
+          }
+          syntheticStaticFieldReadsInContext.add(lambdaClass.lambdaField);
+        }
+      }
     }
   }
 
@@ -3179,6 +3207,7 @@ public class Enqueuer {
 
     // Rewrite all of the invoke-dynamic instructions to lambda class instantiations.
     lambdaCallSites.forEach(this::rewriteLambdaCallSites);
+    additions.registerStatelessLambdaInstanceFieldReads(lambdaCallSites);
 
     // Remove all '$deserializeLambda$' methods which are not supported by desugaring.
     for (DexProgramClass clazz : classesWithSerializableLambdas) {
@@ -3307,7 +3336,6 @@ public class Enqueuer {
             joinIdentifierNameStrings(rootSet.identifierNameStrings, identifierNameStrings),
             Collections.emptySet(),
             Collections.emptyMap(),
-            EnumValueInfoMapCollection.empty(),
             lockCandidates,
             initClassReferences);
     appInfo.markObsolete();
@@ -3441,9 +3469,9 @@ public class Enqueuer {
   }
 
   private void rewriteLambdaCallSites(
-      DexEncodedMethod method, Map<DexCallSite, LambdaClass> callSites) {
+      ProgramMethod context, Map<DexCallSite, LambdaClass> callSites) {
     assert !callSites.isEmpty();
-    int replaced = LambdaRewriter.desugarLambdas(method, callSites::get);
+    int replaced = LambdaRewriter.desugarLambdas(context, callSites::get);
     assert replaced == callSites.size();
   }
 

@@ -20,7 +20,6 @@ import com.android.tools.r8.graph.DexMethod;
 import com.android.tools.r8.graph.DexProgramClass;
 import com.android.tools.r8.graph.DexType;
 import com.android.tools.r8.graph.DirectMappedDexApplication;
-import com.android.tools.r8.graph.EnumValueInfoMapCollection;
 import com.android.tools.r8.graph.FieldResolutionResult;
 import com.android.tools.r8.graph.GraphLens;
 import com.android.tools.r8.graph.GraphLens.NestedGraphLens;
@@ -28,10 +27,13 @@ import com.android.tools.r8.graph.ProgramMethod;
 import com.android.tools.r8.graph.ProgramPackageCollection;
 import com.android.tools.r8.graph.ResolutionResult;
 import com.android.tools.r8.graph.UseRegistry;
+import com.android.tools.r8.ir.analysis.fieldvalueanalysis.StaticFieldValues;
+import com.android.tools.r8.ir.analysis.fieldvalueanalysis.StaticFieldValues.EnumStaticFieldValues;
 import com.android.tools.r8.ir.analysis.type.ArrayTypeElement;
 import com.android.tools.r8.ir.analysis.type.ClassTypeElement;
 import com.android.tools.r8.ir.analysis.type.TypeElement;
 import com.android.tools.r8.ir.analysis.value.AbstractValue;
+import com.android.tools.r8.ir.analysis.value.EnumValuesObjectState;
 import com.android.tools.r8.ir.analysis.value.ObjectState;
 import com.android.tools.r8.ir.code.ArrayPut;
 import com.android.tools.r8.ir.code.BasicBlock;
@@ -51,6 +53,7 @@ import com.android.tools.r8.ir.code.Value;
 import com.android.tools.r8.ir.conversion.IRConverter;
 import com.android.tools.r8.ir.conversion.PostMethodProcessor;
 import com.android.tools.r8.ir.optimize.Inliner.Constraint;
+import com.android.tools.r8.ir.optimize.enums.EnumDataMap.EnumData;
 import com.android.tools.r8.ir.optimize.enums.EnumInstanceFieldData.EnumInstanceFieldKnownData;
 import com.android.tools.r8.ir.optimize.enums.EnumInstanceFieldData.EnumInstanceFieldMappingData;
 import com.android.tools.r8.ir.optimize.enums.EnumInstanceFieldData.EnumInstanceFieldOrdinalData;
@@ -64,13 +67,16 @@ import com.android.tools.r8.shaking.KeepInfoCollection;
 import com.android.tools.r8.utils.BooleanUtils;
 import com.android.tools.r8.utils.Reporter;
 import com.android.tools.r8.utils.StringDiagnostic;
+import com.android.tools.r8.utils.collections.ImmutableInt2ReferenceSortedMap;
 import com.android.tools.r8.utils.collections.ProgramMethodSet;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
+import it.unimi.dsi.fastutil.ints.Int2ReferenceArrayMap;
+import it.unimi.dsi.fastutil.ints.Int2ReferenceMap;
 import java.util.Arrays;
-import java.util.IdentityHashMap;
 import java.util.Map;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
@@ -86,6 +92,10 @@ public class EnumUnboxer {
   private final EnumUnboxingCandidateInfoCollection enumUnboxingCandidatesInfo;
   private final ProgramPackageCollection enumsToUnboxWithPackageRequirement =
       ProgramPackageCollection.createEmpty();
+  private final Map<DexType, EnumStaticFieldValues> staticFieldValuesMap =
+      new ConcurrentHashMap<>();
+
+  private final DexEncodedField ordinalField;
 
   private EnumUnboxingRewriter enumUnboxerRewriter;
 
@@ -104,6 +114,18 @@ public class EnumUnboxer {
     }
     assert !appView.options().debug;
     enumUnboxingCandidatesInfo = new EnumUnboxingCandidateAnalysis(appView, this).findCandidates();
+
+    ordinalField =
+        appView.appInfo().resolveField(factory.enumMembers.ordinalField).getResolvedField();
+    if (ordinalField == null) {
+      // This can happen when compiling for non standard libraries, in that case, this effectively
+      // disables the enum unboxer.
+      enumUnboxingCandidatesInfo.clear();
+    }
+  }
+
+  public static int ordinalToUnboxedInt(int ordinal) {
+    return ordinal + 1;
   }
 
   private void markEnumAsUnboxable(Reason reason, DexProgramClass enumClass) {
@@ -351,7 +373,7 @@ public class EnumUnboxer {
       ExecutorService executorService,
       OptimizationFeedbackDelayed feedback)
       throws ExecutionException {
-    EnumInstanceFieldDataMap enumInstanceFieldDataMap = finishAnalysis();
+    EnumDataMap enumDataMap = finishAnalysis();
     // At this point the enum unboxing candidates are no longer candidates, they will all be
     // unboxed. We extract the now immutable enums to unbox information and clear the candidate
     // info.
@@ -371,13 +393,12 @@ public class EnumUnboxer {
             .synthesizeEnumUnboxingUtilityClasses(
                 enumClassesToUnbox, enumsToUnboxWithPackageRequirement, appBuilder)
             .build();
-    enumUnboxerRewriter =
-        new EnumUnboxingRewriter(appView, enumsToUnbox, enumInstanceFieldDataMap, relocator);
+    enumUnboxerRewriter = new EnumUnboxingRewriter(appView, enumDataMap, relocator);
     NestedGraphLens enumUnboxingLens =
         new EnumUnboxingTreeFixer(appView, enumsToUnbox, relocator, enumUnboxerRewriter)
             .fixupTypeReferences();
     enumUnboxerRewriter.setEnumUnboxingLens(enumUnboxingLens);
-    appView.setUnboxedEnums(enumUnboxerRewriter.getEnumsToUnbox());
+    appView.setUnboxedEnums(enumDataMap);
     GraphLens previousLens = appView.graphLens();
     appView.rewriteWithLensAndApplication(enumUnboxingLens, appBuilder.build());
     updateOptimizationInfos(executorService, feedback);
@@ -426,34 +447,159 @@ public class EnumUnboxer {
     keepInfo.mutate(mutator -> mutator.removeKeepInfoForPrunedItems(enumsToUnbox));
   }
 
-  public EnumInstanceFieldDataMap finishAnalysis() {
+  public EnumDataMap finishAnalysis() {
     analyzeInitializers();
     analyzeAccessibility();
-    EnumInstanceFieldDataMap enumInstanceFieldDataMap = analyzeFields();
+    EnumDataMap enumDataMap = analyzeEnumInstances();
+    assert enumDataMap.getUnboxedEnums().size() == enumUnboxingCandidatesInfo.candidates().size();
     if (debugLogEnabled) {
       reportEnumsAnalysis();
     }
-    return enumInstanceFieldDataMap;
+    return enumDataMap;
   }
 
-  private EnumInstanceFieldDataMap analyzeFields() {
-    ImmutableMap.Builder<DexType, ImmutableMap<DexField, EnumInstanceFieldKnownData>> builder =
-        ImmutableMap.builder();
+  private EnumDataMap analyzeEnumInstances() {
+    ImmutableMap.Builder<DexType, EnumData> builder = ImmutableMap.builder();
     enumUnboxingCandidatesInfo.forEachCandidateAndRequiredInstanceFieldData(
         (enumClass, fields) -> {
-          ImmutableMap.Builder<DexField, EnumInstanceFieldKnownData> typeBuilder =
-              ImmutableMap.builder();
-          for (DexField field : fields) {
-            EnumInstanceFieldData enumInstanceFieldData = computeEnumFieldData(field, enumClass);
-            if (enumInstanceFieldData.isUnknown()) {
-              markEnumAsUnboxable(Reason.MISSING_INSTANCE_FIELD_DATA, enumClass);
-              return;
-            }
-            typeBuilder.put(field, enumInstanceFieldData.asEnumFieldKnownData());
+          EnumData data = buildData(enumClass, fields);
+          if (data == null) {
+            markEnumAsUnboxable(Reason.MISSING_INSTANCE_FIELD_DATA, enumClass);
+            return;
           }
-          builder.put(enumClass.type, typeBuilder.build());
+          builder.put(enumClass.type, data);
         });
-    return new EnumInstanceFieldDataMap(builder.build());
+    staticFieldValuesMap.clear();
+    return new EnumDataMap(builder.build());
+  }
+
+  private EnumData buildData(DexProgramClass enumClass, Set<DexField> fields) {
+    // This map holds all the accessible fields to their unboxed value, so we can remap the field
+    // read to the unboxed value.
+    ImmutableMap.Builder<DexField, Integer> unboxedValues = ImmutableMap.builder();
+    // This maps the ordinal to the object state, note that some fields may have been removed,
+    // hence the entry is in this map but not the enumToOrdinalMap.
+    Int2ReferenceMap<ObjectState> ordinalToObjectState = new Int2ReferenceArrayMap<>();
+    // Any fields matching the expected $VALUES content can be recorded here, they have however
+    // all the same content.
+    ImmutableSet.Builder<DexField> valuesField = ImmutableSet.builder();
+    EnumValuesObjectState valuesContents = null;
+
+    EnumStaticFieldValues enumStaticFieldValues = staticFieldValuesMap.get(enumClass.type);
+
+    // Step 1: We iterate over the field to find direct enum instance information and the values
+    // fields.
+    for (DexEncodedField staticField : enumClass.staticFields()) {
+      if (EnumUnboxingCandidateAnalysis.isEnumField(staticField, enumClass.type)) {
+        ObjectState enumState =
+            enumStaticFieldValues.getObjectStateForPossiblyPinnedField(staticField.field);
+        if (enumState != null) {
+          OptionalInt optionalOrdinal = getOrdinal(enumState);
+          if (!optionalOrdinal.isPresent()) {
+            return null;
+          }
+          int ordinal = optionalOrdinal.getAsInt();
+          unboxedValues.put(staticField.field, ordinalToUnboxedInt(ordinal));
+          ordinalToObjectState.put(ordinal, enumState);
+        }
+      } else if (EnumUnboxingCandidateAnalysis.matchesValuesField(
+          staticField, enumClass.type, factory)) {
+        AbstractValue valuesValue =
+            enumStaticFieldValues.getValuesAbstractValueForPossiblyPinnedField(staticField.field);
+        if (valuesValue == null || valuesValue.isZero()) {
+          // Unused field
+          continue;
+        }
+        if (valuesValue.isUnknown()) {
+          return null;
+        }
+        assert valuesValue.isSingleFieldValue();
+        ObjectState valuesState = valuesValue.asSingleFieldValue().getState();
+        if (!valuesState.isEnumValuesObjectState()) {
+          return null;
+        }
+        assert valuesContents == null
+            || valuesContents.equals(valuesState.asEnumValuesObjectState());
+        valuesContents = valuesState.asEnumValuesObjectState();
+        valuesField.add(staticField.field);
+      }
+    }
+
+    // Step 2: We complete the information based on the values content, since some enum instances
+    // may be reachable only though the $VALUES field.
+    if (valuesContents != null) {
+      for (int ordinal = 0; ordinal < valuesContents.getEnumValuesSize(); ordinal++) {
+        if (!ordinalToObjectState.containsKey(ordinal)) {
+          ObjectState enumState = valuesContents.getObjectStateForOrdinal(ordinal);
+          if (enumState.isEmpty()) {
+            // If $VALUES is used, we need data for all enums, at least the ordinal.
+            return null;
+          }
+          assert getOrdinal(enumState).isPresent();
+          assert getOrdinal(enumState).getAsInt() == ordinal;
+          ordinalToObjectState.put(ordinal, enumState);
+        }
+      }
+    }
+
+    // The ordinalToObjectState map may have holes at this point, if some enum instances are never
+    // used ($VALUES unused or removed, and enum instance field unused or removed), it contains
+    // only data for reachable enum instance, that is what we're interested in.
+    ImmutableMap.Builder<DexField, EnumInstanceFieldKnownData> instanceFieldBuilder =
+        ImmutableMap.builder();
+    for (DexField instanceField : fields) {
+      EnumInstanceFieldData fieldData =
+          computeEnumFieldData(instanceField, enumClass, ordinalToObjectState);
+      if (fieldData.isUnknown()) {
+        return null;
+      }
+      instanceFieldBuilder.put(instanceField, fieldData.asEnumFieldKnownData());
+    }
+
+    return new EnumData(
+        instanceFieldBuilder.build(),
+        unboxedValues.build(),
+        valuesField.build(),
+        valuesContents == null ? EnumData.INVALID_VALUES_SIZE : valuesContents.getEnumValuesSize());
+  }
+
+  private EnumInstanceFieldData computeEnumFieldData(
+      DexField instanceField,
+      DexProgramClass enumClass,
+      Int2ReferenceMap<ObjectState> ordinalToObjectState) {
+    DexEncodedField encodedInstanceField =
+        appView.appInfo().resolveFieldOn(enumClass, instanceField).getResolvedField();
+    assert encodedInstanceField != null;
+    boolean canBeOrdinal = instanceField.type.isIntType();
+    ImmutableInt2ReferenceSortedMap.Builder<AbstractValue> data =
+        ImmutableInt2ReferenceSortedMap.builder();
+    for (Integer ordinal : ordinalToObjectState.keySet()) {
+      ObjectState state = ordinalToObjectState.get(ordinal);
+      AbstractValue fieldValue = state.getAbstractFieldValue(encodedInstanceField);
+      if (!(fieldValue.isSingleNumberValue() || fieldValue.isSingleStringValue())) {
+        return EnumInstanceFieldUnknownData.getInstance();
+      }
+      data.put(ordinalToUnboxedInt(ordinal), fieldValue);
+      if (canBeOrdinal) {
+        assert fieldValue.isSingleNumberValue();
+        int computedValue = fieldValue.asSingleNumberValue().getIntValue();
+        if (computedValue != ordinal) {
+          canBeOrdinal = false;
+        }
+      }
+    }
+    if (canBeOrdinal) {
+      return new EnumInstanceFieldOrdinalData();
+    }
+    return new EnumInstanceFieldMappingData(data.build());
+  }
+
+  private OptionalInt getOrdinal(ObjectState state) {
+    AbstractValue field = state.getAbstractFieldValue(ordinalField);
+    if (field.isSingleNumberValue()) {
+      return OptionalInt.of(field.asSingleNumberValue().getIntValue());
+    }
+    return OptionalInt.empty();
   }
 
   private void analyzeAccessibility() {
@@ -492,6 +638,17 @@ public class EnumUnboxer {
   public Constraint constraintForEnumUnboxing(
       DexEncodedMethod method, EnumAccessibilityUseRegistry useRegistry) {
     return useRegistry.computeConstraint(method.asProgramMethod(appView));
+  }
+
+  public void recordEnumState(DexProgramClass clazz, StaticFieldValues staticFieldValues) {
+    if (staticFieldValues == null || !staticFieldValues.isEnumStaticFieldValues()) {
+      return;
+    }
+    assert clazz.isEnum();
+    EnumStaticFieldValues enumStaticFieldValues = staticFieldValues.asEnumStaticFieldValues();
+    if (getEnumUnboxingCandidateOrNull(clazz.type) != null) {
+      staticFieldValuesMap.put(clazz.type, enumStaticFieldValues);
+    }
   }
 
   private class EnumAccessibilityUseRegistry extends UseRegistry {
@@ -929,89 +1086,6 @@ public class EnumUnboxer {
     return Reason.OTHER_UNSUPPORTED_INSTRUCTION;
   }
 
-  private EnumInstanceFieldData computeEnumFieldData(
-      DexField instanceField, DexProgramClass enumClass) {
-    DexEncodedField encodedInstanceField =
-        appView.appInfo().resolveFieldOn(enumClass, instanceField).getResolvedField();
-    assert encodedInstanceField != null;
-    boolean canBeOrdinal = instanceField.type.isIntType();
-    Map<DexField, AbstractValue> data = new IdentityHashMap<>();
-    EnumValueInfoMapCollection.EnumValueInfoMap enumValueInfoMap =
-        appView.appInfo().getEnumValueInfoMap(enumClass.type);
-    for (DexField staticField : enumValueInfoMap.enumValues()) {
-      ObjectState enumInstanceState =
-          computeEnumInstanceObjectState(enumClass, staticField, enumValueInfoMap);
-      if (enumInstanceState == null) {
-        // The enum instance is effectively unused. No need to generate anything for it, the path
-        // will never be taken.
-      } else {
-        AbstractValue fieldValue = enumInstanceState.getAbstractFieldValue(encodedInstanceField);
-        if (!(fieldValue.isSingleNumberValue() || fieldValue.isSingleStringValue())) {
-          return EnumInstanceFieldUnknownData.getInstance();
-        }
-        data.put(staticField, fieldValue);
-        if (canBeOrdinal) {
-          int ordinalValue = enumValueInfoMap.getEnumValueInfo(staticField).ordinal;
-          assert fieldValue.isSingleNumberValue();
-          int computedValue = fieldValue.asSingleNumberValue().getIntValue();
-          if (computedValue != ordinalValue) {
-            canBeOrdinal = false;
-          }
-        }
-      }
-    }
-    if (canBeOrdinal) {
-      return new EnumInstanceFieldOrdinalData();
-    }
-    return new EnumInstanceFieldMappingData(data);
-  }
-
-  // We need to access the enum instance object state to figure out if it contains known constant
-  // field values. The enum instance may be accessed in two ways, directly through the enum
-  // static field, or through the enum $VALUES field. If none of them are kept, the instance is
-  // effectively unused. The object state may be stored in the enum static field optimization
-  // info, if kept, or in the $VALUES optimization info, if kept.
-  // If the enum instance is unused, this method answers null.
-  private ObjectState computeEnumInstanceObjectState(
-      DexProgramClass enumClass,
-      DexField staticField,
-      EnumValueInfoMapCollection.EnumValueInfoMap enumValueInfoMap) {
-    // Attempt 1: Get object state from the instance field's optimization info.
-    DexEncodedField encodedStaticField = enumClass.lookupStaticField(staticField);
-    AbstractValue enumInstanceValue = encodedStaticField.getOptimizationInfo().getAbstractValue();
-    if (enumInstanceValue.isSingleFieldValue()) {
-      return enumInstanceValue.asSingleFieldValue().getState();
-    }
-    if (enumInstanceValue.isUnknown()) {
-      return ObjectState.empty();
-    }
-    assert enumInstanceValue.isZero();
-
-    // Attempt 2: Get object state from the values field's optimization info.
-    DexEncodedField valuesField =
-        enumClass.lookupStaticField(
-            factory.createField(
-                enumClass.type,
-                factory.createArrayType(1, enumClass.type),
-                factory.enumValuesFieldName));
-    AbstractValue valuesValue = valuesField.getOptimizationInfo().getAbstractValue();
-    if (valuesValue.isZero()) {
-      // Unused enum instance.
-      return null;
-    }
-    if (valuesValue.isUnknown()) {
-      return ObjectState.empty();
-    }
-    assert valuesValue.isSingleFieldValue();
-    ObjectState valuesState = valuesValue.asSingleFieldValue().getState();
-    if (valuesState.isEnumValuesObjectState()) {
-      return valuesState
-          .asEnumValuesObjectState()
-          .getObjectStateForOrdinal(enumValueInfoMap.getEnumValueInfo(staticField).ordinal);
-    }
-    return ObjectState.empty();
-  }
-
   private void reportEnumsAnalysis() {
     assert debugLogEnabled;
     Reporter reporter = appView.options().reporter;
@@ -1081,7 +1155,6 @@ public class EnumUnboxer {
     VALUES_INVOKE,
     COMPARE_TO_INVOKE,
     UNSUPPORTED_LIBRARY_CALL,
-    MISSING_INFO_MAP,
     MISSING_INSTANCE_FIELD_DATA,
     INVALID_FIELD_READ,
     INVALID_FIELD_PUT,

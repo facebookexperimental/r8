@@ -3,6 +3,7 @@
 // BSD-style license that can be found in the LICENSE file.
 package com.android.tools.r8.shaking.annotations;
 
+import static com.android.tools.r8.ToolHelper.getKotlinCompilers;
 import static com.android.tools.r8.utils.codeinspector.Matchers.isPresent;
 import static com.android.tools.r8.utils.codeinspector.Matchers.isPresentAndNotRenamed;
 import static org.hamcrest.CoreMatchers.containsString;
@@ -12,6 +13,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assume.assumeTrue;
 
+import com.android.tools.r8.KotlinCompilerTool.KotlinCompiler;
 import com.android.tools.r8.KotlinTestBase;
 import com.android.tools.r8.TestParameters;
 import com.android.tools.r8.ToolHelper.KotlinTargetVersion;
@@ -60,28 +62,37 @@ public class ReflectiveAnnotationUseTest extends KotlinTestBase {
   private final TestParameters parameters;
   private final boolean minify;
 
-  @Parameterized.Parameters(name = "{0} target: {1} minify: {2}")
+  @Parameterized.Parameters(name = "{0}, target: {1}, kotlinc: {2}, minify: {3}")
   public static Collection<Object[]> data() {
     return buildParameters(
         getTestParameters().withAllRuntimesAndApiLevels().build(),
         KotlinTargetVersion.values(),
+        getKotlinCompilers(),
         BooleanUtils.values());
   }
 
   public ReflectiveAnnotationUseTest(
-      TestParameters parameters, KotlinTargetVersion targetVersion, boolean minify) {
-    super(targetVersion);
+      TestParameters parameters,
+      KotlinTargetVersion targetVersion,
+      KotlinCompiler kotlinc,
+      boolean minify) {
+    super(targetVersion, kotlinc);
     this.parameters = parameters;
     this.minify = minify;
   }
 
+  private static final KotlinCompileMemoizer compiledJars =
+      getCompileMemoizer(getKotlinFilesInResource(FOLDER), FOLDER)
+          .configure(kotlinCompilerTool -> kotlinCompilerTool.includeRuntime().noReflect());
+
   @Test
   public void b120951621_JVMOutput() throws Exception {
     assumeTrue("Only run JVM reference on CF runtimes", parameters.isCfRuntime());
-    AndroidApp app = AndroidApp.builder()
-        .addProgramFile(getKotlinJarFile(FOLDER))
-        .addProgramFile(getJavaJarFile(FOLDER))
-        .build();
+    AndroidApp app =
+        AndroidApp.builder()
+            .addProgramFile(compiledJars.getForConfiguration(kotlinc, targetVersion))
+            .addProgramFile(getJavaJarFile(FOLDER))
+            .build();
     String result = runOnJava(app, MAIN_CLASS_NAME);
     assertEquals(JAVA_OUTPUT, result);
   }
@@ -90,7 +101,7 @@ public class ReflectiveAnnotationUseTest extends KotlinTestBase {
   public void b120951621_keepAll() throws Exception {
     CodeInspector inspector =
         testForR8(parameters.getBackend())
-            .addProgramFiles(getKotlinJarFile(FOLDER))
+            .addProgramFiles(compiledJars.getForConfiguration(kotlinc, targetVersion))
             .addProgramFiles(getJavaJarFile(FOLDER))
             .addKeepMainRule(MAIN_CLASS_NAME)
             .addKeepRules(KEEP_ANNOTATIONS)
@@ -126,7 +137,7 @@ public class ReflectiveAnnotationUseTest extends KotlinTestBase {
   public void b120951621_partiallyKeep() throws Exception {
     CodeInspector inspector =
         testForR8(parameters.getBackend())
-            .addProgramFiles(getKotlinJarFile(FOLDER))
+            .addProgramFiles(compiledJars.getForConfiguration(kotlinc, targetVersion))
             .addProgramFiles(getJavaJarFile(FOLDER))
             .addKeepMainRule(MAIN_CLASS_NAME)
             .addKeepRules(KEEP_ANNOTATIONS)
@@ -166,7 +177,7 @@ public class ReflectiveAnnotationUseTest extends KotlinTestBase {
   public void b120951621_keepAnnotation() throws Exception {
     CodeInspector inspector =
         testForR8(parameters.getBackend())
-            .addProgramFiles(getKotlinJarFile(FOLDER))
+            .addProgramFiles(compiledJars.getForConfiguration(kotlinc, targetVersion))
             .addProgramFiles(getJavaJarFile(FOLDER))
             .addKeepMainRule(MAIN_CLASS_NAME)
             .addKeepRules(KEEP_ANNOTATIONS)
@@ -202,7 +213,7 @@ public class ReflectiveAnnotationUseTest extends KotlinTestBase {
   public void b120951621_noKeep() throws Exception {
     CodeInspector inspector =
         testForR8(parameters.getBackend())
-            .addProgramFiles(getKotlinJarFile(FOLDER))
+            .addProgramFiles(compiledJars.getForConfiguration(kotlinc, targetVersion))
             .addProgramFiles(getJavaJarFile(FOLDER))
             .addKeepMainRule(MAIN_CLASS_NAME)
             .allowDiagnosticWarningMessages()

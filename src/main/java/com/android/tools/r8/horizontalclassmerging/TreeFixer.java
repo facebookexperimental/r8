@@ -45,8 +45,6 @@ class TreeFixer {
   private final FieldAccessInfoCollectionModifier.Builder fieldAccessChangesBuilder;
   private final AppView<AppInfoWithLiveness> appView;
   private final DexItemFactory dexItemFactory;
-  private final BiMap<DexMethod, DexMethod> movedMethods = HashBiMap.create();
-  private final BiMap<DexField, DexField> movedFields = HashBiMap.create();
   private final SyntheticArgumentClass syntheticArgumentClass;
   private final BiMap<DexMethodSignature, DexMethodSignature> reservedInterfaceSignatures =
       HashBiMap.create();
@@ -128,10 +126,6 @@ class TreeFixer {
     for (DexProgramClass root : subtypingForrest.getProgramRoots()) {
       subtypingForrest.traverseNodeDepthFirst(root, HashBiMap.create(), this::fixupProgramClass);
     }
-
-    lensBuilder.remapMethods(movedMethods);
-    lensBuilder.remapFields(movedFields);
-
     HorizontalClassMergerGraphLens lens = lensBuilder.build(appView, mergedClasses);
     fieldAccessChangesBuilder.build(this::fixupMethodReference).modify(appView);
     new AnnotationFixer(lens).run(appView.appInfo().classes());
@@ -164,6 +158,8 @@ class TreeFixer {
     fixupFields(clazz.staticFields(), clazz::setStaticField);
     fixupFields(clazz.instanceFields(), clazz::setInstanceField);
 
+    lensBuilder.commitPendingUpdates();
+
     return remappedClassVirtualMethods;
   }
 
@@ -173,7 +169,7 @@ class TreeFixer {
     // Don't process this method if it does not refer to a merge class type.
     boolean referencesMergeClass =
         Iterables.any(
-            originalMethodReference.proto.getBaseTypes(dexItemFactory),
+            originalMethodReference.getProto().getBaseTypes(dexItemFactory),
             mergedClasses::hasBeenMergedOrIsMergeTarget);
     if (!referencesMergeClass) {
       return method;
@@ -200,8 +196,7 @@ class TreeFixer {
 
     DexMethod newMethodReference =
         newMethodSignature.withHolder(originalMethodReference, dexItemFactory);
-    movedMethods.put(originalMethodReference, newMethodReference);
-
+    lensBuilder.fixupMethod(originalMethodReference, newMethodReference);
     return method.toTypeSubstitutedMethod(newMethodReference);
   }
 
@@ -217,17 +212,17 @@ class TreeFixer {
     iface.getMethodCollection().replaceVirtualMethods(this::fixupVirtualInterfaceMethod);
     fixupFields(iface.staticFields(), iface::setStaticField);
     fixupFields(iface.instanceFields(), iface::setInstanceField);
+    lensBuilder.commitPendingUpdates();
   }
 
   private DexEncodedMethod fixupProgramMethod(
       DexMethod newMethodReference, DexEncodedMethod method) {
     DexMethod originalMethodReference = method.getReference();
-
     if (newMethodReference == originalMethodReference) {
       return method;
     }
 
-    movedMethods.put(originalMethodReference, newMethodReference);
+    lensBuilder.fixupMethod(originalMethodReference, newMethodReference);
 
     DexEncodedMethod newMethod = method.toTypeSubstitutedMethod(newMethodReference);
     if (newMethod.isNonPrivateVirtualMethod()) {
@@ -365,26 +360,26 @@ class TreeFixer {
     Set<DexField> existingFields = Sets.newIdentityHashSet();
 
     for (int i = 0; i < fields.size(); i++) {
-      DexEncodedField encodedField = fields.get(i);
-      DexField field = encodedField.field;
-      DexField newField = fixupFieldReference(field);
+      DexEncodedField oldField = fields.get(i);
+      DexField oldFieldReference = oldField.getReference();
+      DexField newFieldReference = fixupFieldReference(oldFieldReference);
 
       // Rename the field if it already exists.
-      if (!existingFields.add(newField)) {
-        DexField template = newField;
-        newField =
+      if (!existingFields.add(newFieldReference)) {
+        DexField template = newFieldReference;
+        newFieldReference =
             dexItemFactory.createFreshMember(
                 tryName ->
                     Optional.of(template.withName(tryName, dexItemFactory))
                         .filter(tryMethod -> !existingFields.contains(tryMethod)),
-                newField.name.toSourceString());
-        boolean added = existingFields.add(newField);
+                newFieldReference.name.toSourceString());
+        boolean added = existingFields.add(newFieldReference);
         assert added;
       }
 
-      if (newField != encodedField.field) {
-        movedFields.put(field, newField);
-        setter.setField(i, encodedField.toTypeSubstitutedField(newField));
+      if (newFieldReference != oldFieldReference) {
+        lensBuilder.fixupField(oldFieldReference, newFieldReference);
+        setter.setField(i, oldField.toTypeSubstitutedField(newFieldReference));
       }
     }
   }

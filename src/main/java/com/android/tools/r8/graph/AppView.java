@@ -22,6 +22,7 @@ import com.android.tools.r8.ir.analysis.value.AbstractValueFactory;
 import com.android.tools.r8.ir.conversion.MethodProcessingId;
 import com.android.tools.r8.ir.desugar.PrefixRewritingMapper;
 import com.android.tools.r8.ir.optimize.CallSiteOptimizationInfoPropagator;
+import com.android.tools.r8.ir.optimize.enums.EnumDataMap;
 import com.android.tools.r8.ir.optimize.info.field.InstanceFieldInitializationInfoFactory;
 import com.android.tools.r8.ir.optimize.library.LibraryMemberOptimizer;
 import com.android.tools.r8.ir.optimize.library.LibraryMethodSideEffectModelCollection;
@@ -38,8 +39,6 @@ import com.android.tools.r8.utils.OptionalBool;
 import com.android.tools.r8.utils.ThrowingConsumer;
 import com.google.common.base.Predicates;
 import com.google.common.collect.ImmutableSet;
-import java.util.Collection;
-import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -87,7 +86,7 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
   private HorizontallyMergedClasses horizontallyMergedClasses;
   private StaticallyMergedClasses staticallyMergedClasses;
   private VerticallyMergedClasses verticallyMergedClasses;
-  private EnumValueInfoMapCollection unboxedEnums = EnumValueInfoMapCollection.empty();
+  private EnumDataMap unboxedEnums = EnumDataMap.empty();
   // TODO(b/169115389): Remove
   private Set<DexMethod> cfByteCodePassThrough = ImmutableSet.of();
 
@@ -95,7 +94,7 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
 
   // When input has been (partially) desugared these are the classes which has been library
   // desugared. This information is populated in the IR converter.
-  private Set<DexProgramClass> alreadyLibraryDesugared = null;
+  private Set<DexType> alreadyLibraryDesugared = null;
 
   private AppView(
       T appInfo,
@@ -512,18 +511,18 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
     testing().verticallyMergedClassesConsumer.accept(dexItemFactory(), verticallyMergedClasses);
   }
 
-  public EnumValueInfoMapCollection unboxedEnums() {
+  public EnumDataMap unboxedEnums() {
     return unboxedEnums;
   }
 
-  public void setUnboxedEnums(EnumValueInfoMapCollection unboxedEnums) {
+  public void setUnboxedEnums(EnumDataMap unboxedEnums) {
     assert this.unboxedEnums.isEmpty();
     this.unboxedEnums = unboxedEnums;
     testing().unboxedEnumsConsumer.accept(dexItemFactory(), unboxedEnums);
   }
 
   public boolean validateUnboxedEnumsHaveBeenPruned() {
-    for (DexType unboxedEnum : unboxedEnums.enumSet()) {
+    for (DexType unboxedEnum : unboxedEnums.getUnboxedEnums()) {
       assert appInfo.definitionForWithoutExistenceAssert(unboxedEnum) == null
           : "Enum " + unboxedEnum + " has been unboxed but is still in the program.";
       assert appInfo().withLiveness().wasPruned(unboxedEnum)
@@ -569,35 +568,17 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
     return !cfByteCodePassThrough.isEmpty();
   }
 
-  public void removePrunedClasses(
-      DirectMappedDexApplication prunedApp, Set<DexType> removedClasses) {
-    removePrunedClasses(prunedApp, removedClasses, Collections.emptySet());
+  public void pruneItems(PrunedItems prunedItems) {
+    pruneItems(prunedItems, withLiveness());
   }
 
-  public void removePrunedClasses(
-      DirectMappedDexApplication prunedApp,
-      Set<DexType> removedClasses,
-      Collection<DexMethod> methodsToKeepForConfigurationDebugging) {
-    assert enableWholeProgramOptimizations();
-    assert appInfo().hasLiveness();
-    removePrunedClasses(
-        prunedApp, removedClasses, methodsToKeepForConfigurationDebugging, withLiveness());
-  }
-
-  private static void removePrunedClasses(
-      DirectMappedDexApplication prunedApp,
-      Set<DexType> removedClasses,
-      Collection<DexMethod> methodsToKeepForConfigurationDebugging,
-      AppView<AppInfoWithLiveness> appView) {
-    if (removedClasses.isEmpty() && !appView.options().configurationDebugging) {
-      assert appView.appInfo.app() == prunedApp;
+  private static void pruneItems(PrunedItems prunedItems, AppView<AppInfoWithLiveness> appView) {
+    if (!prunedItems.hasRemovedClasses() && !appView.options().configurationDebugging) {
+      assert appView.appInfo().app() == prunedItems.getPrunedApp();
       return;
     }
-    appView.setAppInfo(
-        appView
-            .appInfo()
-            .prunedCopyFrom(prunedApp, removedClasses, methodsToKeepForConfigurationDebugging));
-    appView.setAppServices(appView.appServices().prunedCopy(removedClasses));
+    appView.setAppInfo(appView.appInfo().prunedCopyFrom(prunedItems));
+    appView.setAppServices(appView.appServices().prunedCopy(prunedItems));
   }
 
   public void rewriteWithLens(NonIdentityGraphLens lens) {
@@ -661,7 +642,7 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
         });
   }
 
-  public void setAlreadyLibraryDesugared(Set<DexProgramClass> alreadyLibraryDesugared) {
+  public void setAlreadyLibraryDesugared(Set<DexType> alreadyLibraryDesugared) {
     assert this.alreadyLibraryDesugared == null;
     this.alreadyLibraryDesugared = alreadyLibraryDesugared;
   }
@@ -671,6 +652,6 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
       return false;
     }
     assert alreadyLibraryDesugared != null;
-    return alreadyLibraryDesugared.contains(clazz);
+    return alreadyLibraryDesugared.contains(clazz.getType());
   }
 }

@@ -53,6 +53,12 @@ public class IRCodeInstructionListIterator implements InstructionListIterator {
   }
 
   @Override
+  public void replaceCurrentInstructionWithConstString(
+      AppView<?> appView, IRCode code, DexString value) {
+    instructionIterator.replaceCurrentInstructionWithConstString(appView, code, value);
+  }
+
+  @Override
   public void replaceCurrentInstructionWithStaticGet(
       AppView<?> appView, IRCode code, DexField field, Set<Value> affectedValues) {
     instructionIterator.replaceCurrentInstructionWithStaticGet(
@@ -82,6 +88,12 @@ public class IRCodeInstructionListIterator implements InstructionListIterator {
 
   @Override
   public BasicBlock split(IRCode code, int instructions, ListIterator<BasicBlock> blockIterator) {
+    throw new Unimplemented();
+  }
+
+  @Override
+  public BasicBlock splitCopyCatchHandlers(
+      IRCode code, ListIterator<BasicBlock> blockIterator, InternalOptions options) {
     throw new Unimplemented();
   }
 

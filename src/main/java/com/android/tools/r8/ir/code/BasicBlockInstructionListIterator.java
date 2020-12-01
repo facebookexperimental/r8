@@ -275,6 +275,18 @@ public class BasicBlockInstructionListIterator implements InstructionListIterato
   }
 
   @Override
+  public void replaceCurrentInstructionWithConstString(
+      AppView<?> appView, IRCode code, DexString value) {
+    if (current == null) {
+      throw new IllegalStateException();
+    }
+
+    // Replace the instruction by const-string.
+    ConstString constString = code.createStringConstant(appView, value, current.getLocalInfo());
+    replaceCurrentInstruction(constString);
+  }
+
+  @Override
   public void replaceCurrentInstructionWithStaticGet(
       AppView<?> appView, IRCode code, DexField field, Set<Value> affectedValues) {
     if (current == null) {
@@ -449,6 +461,16 @@ public class BasicBlockInstructionListIterator implements InstructionListIterato
     iterator.split(code, blocksIterator);
     // Return the first split block.
     return newBlock;
+  }
+
+  @Override
+  public BasicBlock splitCopyCatchHandlers(
+      IRCode code, ListIterator<BasicBlock> blockIterator, InternalOptions options) {
+    BasicBlock splitBlock = split(code, blockIterator, false);
+    assert !block.hasCatchHandlers();
+    assert splitBlock.hasCatchHandlers();
+    block.copyCatchHandlers(code, blockIterator, splitBlock, options);
+    return splitBlock;
   }
 
   private boolean canThrow(IRCode code) {

@@ -14,6 +14,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import com.android.tools.r8.KotlinCompilerTool.KotlinCompiler;
 import com.android.tools.r8.KotlinTestBase;
 import com.android.tools.r8.R8FullTestBuilder;
 import com.android.tools.r8.R8TestRunResult;
@@ -51,13 +52,16 @@ public abstract class AbstractR8KotlinTestBase extends KotlinTestBase {
   private final List<Path> extraClasspath = new ArrayList<>();
 
   // Some tests defined in subclasses, e.g., Metadata tests, don't care about access relaxation.
-  protected AbstractR8KotlinTestBase(KotlinTargetVersion kotlinTargetVersion) {
-    this(kotlinTargetVersion, false);
+  protected AbstractR8KotlinTestBase(
+      KotlinTargetVersion kotlinTargetVersion, KotlinCompiler kotlinc) {
+    this(kotlinTargetVersion, kotlinc, false);
   }
 
   protected AbstractR8KotlinTestBase(
-      KotlinTargetVersion kotlinTargetVersion, boolean allowAccessModification) {
-    super(kotlinTargetVersion);
+      KotlinTargetVersion kotlinTargetVersion,
+      KotlinCompiler kotlinc,
+      boolean allowAccessModification) {
+    super(kotlinTargetVersion, kotlinc);
     this.allowAccessModification = allowAccessModification;
   }
 
@@ -238,9 +242,14 @@ public abstract class AbstractR8KotlinTestBase extends KotlinTestBase {
       throws Exception {
     Assume.assumeTrue(ToolHelper.artSupported() || ToolHelper.compareAgaintsGoldenFiles());
 
+    Path kotlinJarFile =
+        getCompileMemoizer(getKotlinFilesInResource(folder), folder)
+            .configure(kotlinCompilerTool -> kotlinCompilerTool.includeRuntime().noReflect())
+            .getForConfiguration(kotlinc, targetVersion);
+
     // Build classpath for compilation (and java execution)
     classpath.clear();
-    classpath.add(getKotlinJarFile(folder));
+    classpath.add(kotlinJarFile);
     classpath.add(getJavaJarFile(folder));
     classpath.addAll(extraClasspath);
 

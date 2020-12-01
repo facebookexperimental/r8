@@ -73,6 +73,12 @@ public class LinearFlowInstructionListIterator implements InstructionListIterato
   }
 
   @Override
+  public void replaceCurrentInstructionWithConstString(
+      AppView<?> appView, IRCode code, DexString value) {
+    currentBlockIterator.replaceCurrentInstructionWithConstString(appView, code, value);
+  }
+
+  @Override
   public void replaceCurrentInstructionWithStaticGet(
       AppView<?> appView, IRCode code, DexField field, Set<Value> affectedValues) {
     currentBlockIterator.replaceCurrentInstructionWithStaticGet(
@@ -99,6 +105,12 @@ public class LinearFlowInstructionListIterator implements InstructionListIterato
   @Override
   public BasicBlock split(IRCode code, int instructions, ListIterator<BasicBlock> blockIterator) {
     return currentBlockIterator.split(code, instructions, blockIterator);
+  }
+
+  @Override
+  public BasicBlock splitCopyCatchHandlers(
+      IRCode code, ListIterator<BasicBlock> blockIterator, InternalOptions options) {
+    return currentBlockIterator.splitCopyCatchHandlers(code, blockIterator, options);
   }
 
   @Override

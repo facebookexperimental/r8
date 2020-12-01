@@ -3,12 +3,14 @@
 // BSD-style license that can be found in the LICENSE file.
 package com.android.tools.r8.naming;
 
+import static com.android.tools.r8.ToolHelper.getKotlinCompilers;
 import static com.android.tools.r8.utils.codeinspector.Matchers.isPresent;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import com.android.tools.r8.KotlinCompilerTool.KotlinCompiler;
 import com.android.tools.r8.SingleTestRunResult;
 import com.android.tools.r8.TestCompileResult;
 import com.android.tools.r8.ToolHelper.KotlinTargetVersion;
@@ -38,16 +40,26 @@ import org.junit.runners.Parameterized.Parameters;
 public class KotlinIntrinsicsIdentifierTest extends AbstractR8KotlinNamingTestBase {
   private static final String FOLDER = "intrinsics_identifiers";
 
-  @Parameters(name = "target: {0}, allowAccessModification: {1}, minification: {2}")
+  @Parameters(name = "target: {0}, kotlinc: {1}, allowAccessModification: {2}, minification: {3}")
   public static Collection<Object[]> data() {
     return buildParameters(
-        KotlinTargetVersion.values(), BooleanUtils.values(), BooleanUtils.values());
+        KotlinTargetVersion.values(),
+        getKotlinCompilers(),
+        BooleanUtils.values(),
+        BooleanUtils.values());
   }
 
   public KotlinIntrinsicsIdentifierTest(
-      KotlinTargetVersion targetVersion, boolean allowAccessModification, boolean minification) {
-    super(targetVersion, allowAccessModification, minification);
+      KotlinTargetVersion targetVersion,
+      KotlinCompiler kotlinc,
+      boolean allowAccessModification,
+      boolean minification) {
+    super(targetVersion, kotlinc, allowAccessModification, minification);
   }
+
+  private static final KotlinCompileMemoizer compiledJars =
+      getCompileMemoizer(getKotlinFilesInResource(FOLDER), FOLDER)
+          .configure(kotlinCompilerTool -> kotlinCompilerTool.includeRuntime().noReflect());
 
   @Test
   public void test_example1() throws Exception {
@@ -71,9 +83,9 @@ public class KotlinIntrinsicsIdentifierTest extends AbstractR8KotlinNamingTestBa
   public void test_example3() throws Exception {
     TestKotlinClass ex3 = new TestKotlinClass("intrinsics_identifiers.Example3Kt");
     String mainClassName = ex3.getClassName();
-    TestCompileResult result =
+    TestCompileResult<?, ?> result =
         testForR8(Backend.DEX)
-            .addProgramFiles(getKotlinJarFile(FOLDER))
+            .addProgramFiles(compiledJars.getForConfiguration(kotlinc, targetVersion))
             .addProgramFiles(getJavaJarFile(FOLDER))
             .addKeepMainRule(mainClassName)
             .allowDiagnosticWarningMessages()
@@ -124,9 +136,9 @@ public class KotlinIntrinsicsIdentifierTest extends AbstractR8KotlinNamingTestBa
       String targetFieldName,
       String targetMethodName) throws Exception {
     String mainClassName = testMain.getClassName();
-    SingleTestRunResult result =
+    SingleTestRunResult<?> result =
         testForR8(Backend.DEX)
-            .addProgramFiles(getKotlinJarFile(FOLDER))
+            .addProgramFiles(compiledJars.getForConfiguration(kotlinc, targetVersion))
             .addProgramFiles(getJavaJarFile(FOLDER))
             .enableProguardTestOptions()
             .addKeepMainRule(mainClassName)
