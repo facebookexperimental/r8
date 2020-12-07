@@ -90,7 +90,7 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
   // TODO(b/169115389): Remove
   private Set<DexMethod> cfByteCodePassThrough = ImmutableSet.of();
 
-  private Map<DexClass, DexValueString> sourceDebugExtensions = new IdentityHashMap<>();
+  private Map<DexType, DexValueString> sourceDebugExtensions = new IdentityHashMap<>();
 
   // When input has been (partially) desugared these are the classes which has been library
   // desugared. This information is populated in the IR converter.
@@ -251,11 +251,11 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
   }
 
   public void setSourceDebugExtensionForType(DexClass clazz, DexValueString sourceDebugExtension) {
-    this.sourceDebugExtensions.put(clazz, sourceDebugExtension);
+    sourceDebugExtensions.put(clazz.type, sourceDebugExtension);
   }
 
   public DexValueString getSourceDebugExtensionForType(DexClass clazz) {
-    return this.sourceDebugExtensions.get(clazz);
+    return sourceDebugExtensions.get(clazz.type);
   }
 
   @Override
@@ -321,8 +321,8 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
   }
 
   public <U> U withProtoEnumShrinker(Function<EnumLiteProtoShrinker, U> fn, U defaultValue) {
-    if (protoShrinker != null && options().protoShrinking().isProtoEnumShrinkingEnabled()) {
-      return fn.apply(protoShrinker.enumProtoShrinker);
+    if (protoShrinker != null && options().protoShrinking().isEnumLiteProtoShrinkingEnabled()) {
+      return fn.apply(protoShrinker.enumLiteProtoShrinker);
     }
     return defaultValue;
   }
@@ -569,16 +569,27 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
   }
 
   public void pruneItems(PrunedItems prunedItems) {
-    pruneItems(prunedItems, withLiveness());
-  }
-
-  private static void pruneItems(PrunedItems prunedItems, AppView<AppInfoWithLiveness> appView) {
-    if (!prunedItems.hasRemovedClasses() && !appView.options().configurationDebugging) {
-      assert appView.appInfo().app() == prunedItems.getPrunedApp();
+    if (prunedItems.isEmpty()) {
+      assert appInfo().app() == prunedItems.getPrunedApp();
       return;
     }
-    appView.setAppInfo(appView.appInfo().prunedCopyFrom(prunedItems));
-    appView.setAppServices(appView.appServices().prunedCopy(prunedItems));
+    if (appInfo.hasLiveness()) {
+      AppView<AppInfoWithLiveness> self = withLiveness();
+      self.setAppInfo(self.appInfo().prunedCopyFrom(prunedItems));
+    } else if (appInfo.hasClassHierarchy()) {
+      AppView<AppInfoWithClassHierarchy> self = withClassHierarchy();
+      self.setAppInfo(self.appInfo().prunedCopyFrom(prunedItems));
+    } else {
+      pruneAppInfo(prunedItems, this);
+    }
+    if (appServices() != null) {
+      setAppServices(appServices().prunedCopy(prunedItems));
+    }
+  }
+
+  @SuppressWarnings("unchecked")
+  private static void pruneAppInfo(PrunedItems prunedItems, AppView<?> appView) {
+    ((AppView<AppInfo>) appView).setAppInfo(appView.appInfo().prunedCopyFrom(prunedItems));
   }
 
   public void rewriteWithLens(NonIdentityGraphLens lens) {

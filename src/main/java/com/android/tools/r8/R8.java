@@ -428,8 +428,8 @@ public class R8 {
                   appViewWithLiveness, appViewWithLiveness.appInfo().computeSubtypingInfo())
               .run();
 
-          if (appView.options().protoShrinking().isProtoEnumShrinkingEnabled()) {
-            appView.protoShrinker().enumProtoShrinker.clearDeadEnumLiteMaps();
+          if (appView.options().protoShrinking().isEnumLiteProtoShrinkingEnabled()) {
+            appView.protoShrinker().enumLiteProtoShrinker.clearDeadEnumLiteMaps();
           }
 
           AnnotationRemover annotationRemover =
@@ -795,8 +795,8 @@ public class R8 {
         }
 
         if (appView.options().protoShrinking().isProtoShrinkingEnabled()) {
-          if (appView.options().protoShrinking().isProtoEnumShrinkingEnabled()) {
-            appView.protoShrinker().enumProtoShrinker.verifyDeadEnumLiteMapsAreDead();
+          if (appView.options().protoShrinking().isEnumLiteProtoShrinkingEnabled()) {
+            appView.protoShrinker().enumLiteProtoShrinker.verifyDeadEnumLiteMapsAreDead();
           }
 
           IRConverter converter = new IRConverter(appView, timing, null, mainDexTracingResult);
@@ -849,6 +849,7 @@ public class R8 {
               lens, appBuilder.build(), memberRebindingLens.getPrevious());
         }
       }
+      assert Repackaging.verifyIdentityRepackaging(appView);
 
       // Add automatic main dex classes to an eventual manual list of classes.
       if (!options.mainDexKeepRules.isEmpty()) {
@@ -860,12 +861,11 @@ public class R8 {
       if (result != null) {
         if (appView.appInfo().hasLiveness()) {
           appViewWithLiveness.setAppInfo(
-              appViewWithLiveness
-                  .appInfo()
-                  .rebuildWithLiveness(result.commit, result.removedSyntheticClasses));
+              appViewWithLiveness.appInfo().rebuildWithLiveness(result.commit));
         } else {
           appView.setAppInfo(appView.appInfo().rebuildWithClassHierarchy(result.commit));
         }
+        appViewWithLiveness.pruneItems(result.prunedItems);
       }
 
       // Perform minification.

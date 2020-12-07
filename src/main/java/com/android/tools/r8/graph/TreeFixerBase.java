@@ -2,64 +2,67 @@
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
 
-package com.android.tools.r8.repackaging;
+package com.android.tools.r8.graph;
 
-import com.android.tools.r8.graph.AppView;
-import com.android.tools.r8.graph.DexEncodedField;
-import com.android.tools.r8.graph.DexEncodedMethod;
-import com.android.tools.r8.graph.DexField;
-import com.android.tools.r8.graph.DexItemFactory;
-import com.android.tools.r8.graph.DexMethod;
-import com.android.tools.r8.graph.DexProgramClass;
-import com.android.tools.r8.graph.DexProto;
-import com.android.tools.r8.graph.DexType;
-import com.android.tools.r8.graph.DexTypeList;
-import com.android.tools.r8.graph.DirectMappedDexApplication;
-import com.android.tools.r8.graph.EnclosingMethodAttribute;
-import com.android.tools.r8.graph.InnerClassAttribute;
-import com.android.tools.r8.graph.NestHostClassAttribute;
-import com.android.tools.r8.graph.NestMemberClassAttribute;
-import com.android.tools.r8.shaking.AnnotationFixer;
-import com.android.tools.r8.shaking.AppInfoWithLiveness;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 
-public class RepackagingTreeFixer {
+public abstract class TreeFixerBase {
 
-  private final DirectMappedDexApplication.Builder appBuilder;
-  private final AppView<AppInfoWithLiveness> appView;
+  private final AppView<?> appView;
   private final DexItemFactory dexItemFactory;
-  private final RepackagingLens.Builder lensBuilder = new RepackagingLens.Builder();
-  private final Map<DexType, DexType> repackagedClasses;
 
-  private final Map<DexType, DexProgramClass> newProgramClasses = new IdentityHashMap<>();
+  private Map<DexType, DexProgramClass> newProgramClasses = null;
   private final Map<DexType, DexProgramClass> synthesizedFromClasses = new IdentityHashMap<>();
   private final Map<DexProto, DexProto> protoFixupCache = new IdentityHashMap<>();
 
-  public RepackagingTreeFixer(
-      DirectMappedDexApplication.Builder appBuilder,
-      AppView<AppInfoWithLiveness> appView,
-      Map<DexType, DexType> repackagedClasses) {
-    this.appBuilder = appBuilder;
+  public TreeFixerBase(AppView<?> appView) {
     this.appView = appView;
     this.dexItemFactory = appView.dexItemFactory();
-    this.repackagedClasses = repackagedClasses;
   }
 
-  public RepackagingLens run() {
-    // Globally substitute repackaged class types.
-    for (DexProgramClass clazz : appView.appInfo().classesWithDeterministicOrder()) {
+  /** Mapping of a class type to a potentially new class type. */
+  public abstract DexType mapClassType(DexType type);
+
+  /** Callback invoked each time an encoded field changes field reference. */
+  public abstract void recordFieldChange(DexField from, DexField to);
+
+  /** Callback invoked each time an encoded method changes method reference. */
+  public abstract void recordMethodChange(DexMethod from, DexMethod to);
+
+  /** Callback invoked each time a program class definition changes type reference. */
+  public abstract void recordClassChange(DexType from, DexType to);
+
+  private DexProgramClass recordClassChange(DexProgramClass from, DexProgramClass to) {
+    recordClassChange(from.getType(), to.getType());
+    return to;
+  }
+
+  private DexEncodedField recordFieldChange(DexEncodedField from, DexEncodedField to) {
+    recordFieldChange(from.field, to.field);
+    return to;
+  }
+
+  /** Callback to allow custom handling when an encoded method changes. */
+  public DexEncodedMethod recordMethodChange(DexEncodedMethod from, DexEncodedMethod to) {
+    recordMethodChange(from.method, to.method);
+    return to;
+  }
+
+  /** Fixup a collection of classes. */
+  public Collection<DexProgramClass> fixupClasses(Collection<DexProgramClass> classes) {
+    assert newProgramClasses == null;
+    newProgramClasses = new IdentityHashMap<>();
+    for (DexProgramClass clazz : classes) {
       newProgramClasses.computeIfAbsent(clazz.getType(), ignore -> fixupClass(clazz));
     }
-    appBuilder.replaceProgramClasses(new ArrayList<>(newProgramClasses.values()));
-    RepackagingLens lens = lensBuilder.build(appView);
-    new AnnotationFixer(lens).run(newProgramClasses.values());
-    return lens;
+    return newProgramClasses.values();
   }
 
+  // Should remain private as the correctness of the fixup requires the lazy 'newProgramClasses'.
   private DexProgramClass fixupClass(DexProgramClass clazz) {
     DexProgramClass newClass =
         new DexProgramClass(
@@ -93,8 +96,19 @@ public class RepackagingTreeFixer {
         fixupMethods(
             clazz.getMethodCollection().virtualMethods(),
             clazz.getMethodCollection().numberOfVirtualMethods()));
+    // Transfer properties that are not passed to the constructor.
+    if (clazz.hasClassFileVersion()) {
+      newClass.setInitialClassFileVersion(clazz.getInitialClassFileVersion());
+    }
+    if (clazz.isDeprecated()) {
+      newClass.setDeprecated();
+    }
+    if (clazz.getKotlinInfo() != null) {
+      newClass.setKotlinInfo(clazz.getKotlinInfo());
+    }
+    // If the class type changed, record the move in the lens.
     if (newClass.getType() != clazz.getType()) {
-      lensBuilder.recordMove(clazz.getType(), newClass.getType());
+      return recordClassChange(clazz, newClass);
     }
     return newClass;
   }
@@ -120,7 +134,8 @@ public class RepackagingTreeFixer {
         : enclosingMethodAttribute;
   }
 
-  private DexEncodedField[] fixupFields(List<DexEncodedField> fields) {
+  /** Fixup a list of fields. */
+  public DexEncodedField[] fixupFields(List<DexEncodedField> fields) {
     if (fields == null) {
       return DexEncodedField.EMPTY_ARRAY;
     }
@@ -135,13 +150,13 @@ public class RepackagingTreeFixer {
     DexField fieldReference = field.getReference();
     DexField newFieldReference = fixupFieldReference(fieldReference);
     if (newFieldReference != fieldReference) {
-      lensBuilder.recordMove(fieldReference, newFieldReference);
-      return field.toTypeSubstitutedField(newFieldReference);
+      return recordFieldChange(field, field.toTypeSubstitutedField(newFieldReference));
     }
     return field;
   }
 
-  private DexField fixupFieldReference(DexField field) {
+  /** Fixup a field reference. */
+  public DexField fixupFieldReference(DexField field) {
     DexType newType = fixupType(field.type);
     DexType newHolder = fixupType(field.holder);
     return dexItemFactory.createField(newHolder, newType, field.name);
@@ -181,21 +196,20 @@ public class RepackagingTreeFixer {
     }
     return newMethods;
   }
-
-  private DexEncodedMethod fixupMethod(DexEncodedMethod method) {
+  /** Fixup a method definition. */
+  public DexEncodedMethod fixupMethod(DexEncodedMethod method) {
     DexMethod methodReference = method.getReference();
     DexMethod newMethodReference = fixupMethodReference(methodReference);
     if (newMethodReference != methodReference) {
-      lensBuilder.recordMove(methodReference, newMethodReference);
-      return method.toTypeSubstitutedMethod(newMethodReference);
+      return recordMethodChange(method, method.toTypeSubstitutedMethod(newMethodReference));
     }
     return method;
   }
 
-  private DexMethod fixupMethodReference(DexMethod method) {
-    return appView
-        .dexItemFactory()
-        .createMethod(fixupType(method.holder), fixupProto(method.proto), method.name);
+  /** Fixup a method reference. */
+  public DexMethod fixupMethodReference(DexMethod method) {
+    return dexItemFactory.createMethod(
+        fixupType(method.holder), fixupProto(method.proto), method.name);
   }
 
   private NestHostClassAttribute fixupNestHost(NestHostClassAttribute nestHostClassAttribute) {
@@ -221,7 +235,8 @@ public class RepackagingTreeFixer {
     return changed ? newNestMemberAttributes : nestMemberAttributes;
   }
 
-  private DexProto fixupProto(DexProto proto) {
+  /** Fixup a proto descriptor. */
+  public DexProto fixupProto(DexProto proto) {
     DexProto result = protoFixupCache.get(proto);
     if (result == null) {
       DexType returnType = fixupType(proto.returnType);
@@ -232,8 +247,10 @@ public class RepackagingTreeFixer {
     return result;
   }
 
+  // Should remain private as its correctness relies on the setup of 'newProgramClasses'.
   private Collection<DexProgramClass> fixupSynthesizedFrom(
       Collection<DexProgramClass> synthesizedFrom) {
+    assert newProgramClasses != null;
     if (synthesizedFrom.isEmpty()) {
       return synthesizedFrom;
     }
@@ -258,7 +275,8 @@ public class RepackagingTreeFixer {
     return type != null ? fixupType(type) : null;
   }
 
-  private DexType fixupType(DexType type) {
+  /** Fixup a type reference. */
+  public DexType fixupType(DexType type) {
     if (type.isArrayType()) {
       DexType base = type.toBaseType(dexItemFactory);
       DexType fixed = fixupType(base);
@@ -268,7 +286,7 @@ public class RepackagingTreeFixer {
       return type.replaceBaseType(fixed, dexItemFactory);
     }
     if (type.isClassType()) {
-      return repackagedClasses.getOrDefault(type, type);
+      return mapClassType(type);
     }
     return type;
   }
@@ -288,5 +306,10 @@ public class RepackagingTreeFixer {
   private DexTypeList fixupTypeList(DexTypeList types) {
     DexType[] newTypes = fixupTypes(types.values);
     return newTypes != types.values ? new DexTypeList(newTypes) : types;
+  }
+
+  /** Fixup a method signature. */
+  public DexMethodSignature fixupMethodSignature(DexMethodSignature signature) {
+    return signature.withProto(fixupProto(signature.getProto()));
   }
 }
