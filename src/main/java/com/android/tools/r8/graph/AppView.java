@@ -20,6 +20,7 @@ import com.android.tools.r8.ir.analysis.proto.GeneratedMessageLiteShrinker;
 import com.android.tools.r8.ir.analysis.proto.ProtoShrinker;
 import com.android.tools.r8.ir.analysis.value.AbstractValueFactory;
 import com.android.tools.r8.ir.conversion.MethodProcessingId;
+import com.android.tools.r8.ir.desugar.InvokeSpecialBridgeSynthesizer;
 import com.android.tools.r8.ir.desugar.PrefixRewritingMapper;
 import com.android.tools.r8.ir.optimize.CallSiteOptimizationInfoPropagator;
 import com.android.tools.r8.ir.optimize.enums.EnumDataMap;
@@ -67,8 +68,9 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
       new InstanceFieldInitializationInfoFactory();
   private final MethodProcessingId.Factory methodProcessingIdFactory;
 
-  // Desugared library prefix rewriter.
+  // Desugaring.
   public final PrefixRewritingMapper rewritePrefix;
+  private final InvokeSpecialBridgeSynthesizer invokeSpecialBridgeSynthesizer;
 
   // Modeling.
   private final LibraryMethodSideEffectModelCollection libraryMethodSideEffectModelCollection;
@@ -108,6 +110,7 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
     this.methodProcessingIdFactory =
         new MethodProcessingId.Factory(options().testing.methodProcessingIdConsumer);
     this.rewritePrefix = mapper;
+    this.invokeSpecialBridgeSynthesizer = new InvokeSpecialBridgeSynthesizer(this);
 
     if (enableWholeProgramOptimizations() && options().callSiteOptimizationOptions().isEnabled()) {
       this.callSiteOptimizationInfoPropagator =
@@ -134,7 +137,7 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
 
   private static <T extends AppInfo> PrefixRewritingMapper defaultPrefixRewritingMapper(T appInfo) {
     InternalOptions options = appInfo.options();
-    return options.desugaredLibraryConfiguration.createPrefixRewritingMapper(options);
+    return options.desugaredLibraryConfiguration.getPrefixRewritingMapper();
   }
 
   public static <T extends AppInfo> AppView<T> createForD8(T appInfo) {
@@ -292,6 +295,10 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
 
   public CallSiteOptimizationInfoPropagator callSiteOptimizationInfoPropagator() {
     return callSiteOptimizationInfoPropagator;
+  }
+
+  public InvokeSpecialBridgeSynthesizer getInvokeSpecialBridgeSynthesizer() {
+    return invokeSpecialBridgeSynthesizer;
   }
 
   public LibraryMemberOptimizer libraryMethodOptimizer() {

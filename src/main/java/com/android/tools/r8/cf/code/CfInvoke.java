@@ -5,7 +5,6 @@ package com.android.tools.r8.cf.code;
 
 import com.android.tools.r8.cf.CfPrinter;
 import com.android.tools.r8.dex.Constants;
-import com.android.tools.r8.errors.CompilationError;
 import com.android.tools.r8.errors.Unreachable;
 import com.android.tools.r8.graph.AppView;
 import com.android.tools.r8.graph.CfCompareHelper;
@@ -222,7 +221,11 @@ public class CfInvoke extends CfInstruction {
           if (method.name.toString().equals(Constants.INSTANCE_INITIALIZER_NAME)) {
             type = Type.DIRECT;
           } else if (code.getOriginalHolder() == method.holder) {
-            type = invokeTypeForInvokeSpecialToNonInitMethodOnHolder(builder.appView, code);
+            MethodAndInvokeType methodAndInvokeType =
+                transformInvokeSpecialToNonInitMethodOnHolder(
+                    builder.appView, code, builder.getProgramMethod());
+            type = methodAndInvokeType.getInvokeType();
+            canonicalMethod = methodAndInvokeType.getMethod();
           } else {
             type = Type.SUPER;
           }
@@ -357,8 +360,26 @@ public class CfInvoke extends CfInstruction {
     return true;
   }
 
-  private Type invokeTypeForInvokeSpecialToNonInitMethodOnHolder(
-      AppView<?> appView, CfSourceCode code) {
+  private static class MethodAndInvokeType {
+    private final DexMethod method;
+    private final Invoke.Type invokeType;
+
+    private MethodAndInvokeType(DexMethod method, Type invokeType) {
+      this.method = method;
+      this.invokeType = invokeType;
+    }
+
+    public DexMethod getMethod() {
+      return method;
+    }
+
+    public Type getInvokeType() {
+      return invokeType;
+    }
+  }
+
+  private MethodAndInvokeType transformInvokeSpecialToNonInitMethodOnHolder(
+      AppView<?> appView, CfSourceCode code, ProgramMethod context) {
     boolean desugaringEnabled = appView.options().isInterfaceMethodDesugaringEnabled();
     MethodLookupResult lookupResult = appView.graphLens().lookupMethod(method, method, Type.DIRECT);
     if (lookupResult.getType() == Type.VIRTUAL) {
@@ -366,30 +387,38 @@ public class CfInvoke extends CfInstruction {
       // publicized to be final. For example, if a private method A.m() is publicized, and A is
       // subsequently merged with a class B, with declares a public non-final method B.m(), then the
       // horizontal class merger will merge A.m() and B.m() into a new non-final public method.
-      return Type.VIRTUAL;
+      return new MethodAndInvokeType(method, Type.VIRTUAL);
     }
     DexMethod rewrittenMethod = lookupResult.getReference();
     DexEncodedMethod encodedMethod = lookupMethodOnHolder(appView, rewrittenMethod);
     if (encodedMethod == null) {
       // The method is not defined on the class, we can use super to target. When desugaring
       // default interface methods, it is expected they are targeted with invoke-direct.
-      return this.itf && desugaringEnabled ? Type.DIRECT : Type.SUPER;
+      return new MethodAndInvokeType(
+          method, this.itf && desugaringEnabled ? Type.DIRECT : Type.SUPER);
     }
     if (encodedMethod.isPrivateMethod() || !encodedMethod.isVirtualMethod()) {
-      return Type.DIRECT;
+      return new MethodAndInvokeType(method, Type.DIRECT);
     }
     if (encodedMethod.accessFlags.isFinal()) {
       // This method is final which indicates no subtype will overwrite it, we can use
       // invoke-virtual.
-      return Type.VIRTUAL;
+      return new MethodAndInvokeType(method, Type.VIRTUAL);
     }
     if (this.itf && encodedMethod.isDefaultMethod()) {
-      return desugaringEnabled ? Type.DIRECT : Type.SUPER;
+      return new MethodAndInvokeType(method, desugaringEnabled ? Type.DIRECT : Type.SUPER);
     }
-    // We cannot emulate the semantics of invoke-special in this case and should throw a compilation
-    // error.
-    throw new CompilationError(
-        "Failed to compile unsupported use of invokespecial", code.getOrigin());
+    assert encodedMethod.isNonPrivateVirtualMethod();
+    assert context.getHolderType() == method.holder;
+    // This is an invoke-special to a virtual method on invoke-special method holder.
+    // The invoke should be rewritten with a bridge.
+    DexMethod directMethod =
+        appView.getInvokeSpecialBridgeSynthesizer().registerBridgeForMethod(encodedMethod);
+    // In R8 the target should have been inserted in the enqueuer,
+    // while in D8, the target is inserted at the end of the compilation.
+    assert appView.enableWholeProgramOptimizations()
+        == (context.getHolder().lookupDirectMethod(directMethod) != null);
+    return new MethodAndInvokeType(directMethod, Type.DIRECT);
   }
 
   private DexEncodedMethod lookupMethodOnHolder(AppView<?> appView, DexMethod method) {

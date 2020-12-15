@@ -16,7 +16,7 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 @RunWith(Parameterized.class)
-public class InvokeSpecialOnSameClassTest extends TestBase {
+public class InvokeSpecialOnSameInterfaceTest extends TestBase {
 
   private final TestParameters parameters;
 
@@ -25,14 +25,14 @@ public class InvokeSpecialOnSameClassTest extends TestBase {
     return getTestParameters().withAllRuntimesAndApiLevels().build();
   }
 
-  public InvokeSpecialOnSameClassTest(TestParameters parameters) {
+  public InvokeSpecialOnSameInterfaceTest(TestParameters parameters) {
     this.parameters = parameters;
   }
 
   @Test
   public void testRuntime() throws Exception {
     testForRuntime(parameters.getRuntime(), parameters.getApiLevel())
-        .addProgramClasses(Main.class)
+        .addProgramClasses(Main.class, A.class)
         .addProgramClassFileData(getClassWithTransformedInvoked())
         .run(parameters.getRuntime(), Main.class)
         .assertSuccessWithOutputLines("Hello World!");
@@ -40,17 +40,17 @@ public class InvokeSpecialOnSameClassTest extends TestBase {
 
   @Test
   public void testR8() throws Exception {
-      testForR8(parameters.getBackend())
-          .addProgramClasses(Main.class)
-          .addProgramClassFileData(getClassWithTransformedInvoked())
-          .addKeepMainRule(Main.class)
-          .setMinApi(parameters.getApiLevel())
-          .run(parameters.getRuntime(), Main.class)
-          .assertSuccessWithOutputLines("Hello World!");
+    testForR8(parameters.getBackend())
+        .addProgramClasses(Main.class, A.class)
+        .addProgramClassFileData(getClassWithTransformedInvoked())
+        .addKeepMainRule(Main.class)
+        .setMinApi(parameters.getApiLevel())
+        .run(parameters.getRuntime(), Main.class)
+        .assertSuccessWithOutputLines("Hello World!");
   }
 
   private byte[] getClassWithTransformedInvoked() throws IOException {
-    return transformer(A.class)
+    return transformer(AInterface.class)
         .transformMethodInsnInMethod(
             "bar",
             (opcode, owner, name, descriptor, isInterface, continuation) -> {
@@ -59,16 +59,17 @@ public class InvokeSpecialOnSameClassTest extends TestBase {
         .transform();
   }
 
-  public static class A {
-
-    public void foo() {
+  public interface AInterface {
+    default void foo() {
       System.out.println("Hello World!");
     }
 
-    public void bar() {
-      foo(); // Will be rewritten to invoke-special A.foo()
+    default void bar() {
+      foo(); // Will be rewritten to invoke-special AInterface.foo()
     }
   }
+
+  public static class A implements AInterface {}
 
   public static class Main {
 

@@ -34,10 +34,12 @@ import com.android.tools.r8.retrace.stacktraces.InvalidStackTrace;
 import com.android.tools.r8.retrace.stacktraces.MemberFieldOverlapStackTrace;
 import com.android.tools.r8.retrace.stacktraces.MultipleDotsInFileNameStackTrace;
 import com.android.tools.r8.retrace.stacktraces.NamedModuleStackTrace;
+import com.android.tools.r8.retrace.stacktraces.NoObfuscationRangeMappingWithStackTrace;
 import com.android.tools.r8.retrace.stacktraces.NullStackTrace;
 import com.android.tools.r8.retrace.stacktraces.ObfucatedExceptionClassStackTrace;
 import com.android.tools.r8.retrace.stacktraces.ObfuscatedRangeToSingleLineStackTrace;
 import com.android.tools.r8.retrace.stacktraces.RetraceAssertionErrorStackTrace;
+import com.android.tools.r8.retrace.stacktraces.SourceFileWithNumberAndEmptyStackTrace;
 import com.android.tools.r8.retrace.stacktraces.StackTraceForTest;
 import com.android.tools.r8.retrace.stacktraces.SuppressedStackTrace;
 import com.android.tools.r8.retrace.stacktraces.UnicodeInFileNameStackTrace;
@@ -90,6 +92,11 @@ public class RetraceTests extends TestBase {
   @Test
   public void testInlineFileNameWithInnerClassesStackTrace() {
     runRetraceTest(new InlineFileNameWithInnerClassesStackTrace());
+  }
+
+  @Test
+  public void testNoObfuscationRangeMappingWithStackTrace() {
+    runRetraceTest(new NoObfuscationRangeMappingWithStackTrace());
   }
 
   @Test
@@ -215,6 +222,11 @@ public class RetraceTests extends TestBase {
     MemberFieldOverlapStackTrace stackTraceForTest = new MemberFieldOverlapStackTrace();
     runRetraceTest(stackTraceForTest);
     inspectRetraceTest(stackTraceForTest, stackTraceForTest::inspectField);
+  }
+
+  @Test
+  public void testSourceFileWithNumberAndEmptyStackTrace() {
+    runRetraceTest(new SourceFileWithNumberAndEmptyStackTrace());
   }
 
   private void inspectRetraceTest(
