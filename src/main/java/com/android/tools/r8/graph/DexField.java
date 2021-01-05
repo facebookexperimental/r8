@@ -57,6 +57,11 @@ public class DexField extends DexMember<DexEncodedField, DexField> {
   }
 
   @Override
+  public <T> T apply(Function<DexField, T> fieldConsumer, Function<DexMethod, T> methodConsumer) {
+    return fieldConsumer.apply(this);
+  }
+
+  @Override
   public <T> T apply(
       Function<DexType, T> classConsumer,
       Function<DexField, T> fieldConsumer,
@@ -167,6 +172,10 @@ public class DexField extends DexMember<DexEncodedField, DexField> {
   }
 
   public DexField withName(DexString name, DexItemFactory dexItemFactory) {
+    return dexItemFactory.createField(holder, type, name);
+  }
+
+  public DexField withType(DexType type, DexItemFactory dexItemFactory) {
     return dexItemFactory.createField(holder, type, name);
   }
 

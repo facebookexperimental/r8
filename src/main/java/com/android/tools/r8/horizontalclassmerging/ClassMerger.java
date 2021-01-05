@@ -11,6 +11,7 @@ import com.android.tools.r8.dex.Constants;
 import com.android.tools.r8.graph.AppView;
 import com.android.tools.r8.graph.CfCode;
 import com.android.tools.r8.graph.DexAnnotationSet;
+import com.android.tools.r8.graph.DexClass;
 import com.android.tools.r8.graph.DexEncodedField;
 import com.android.tools.r8.graph.DexEncodedMethod;
 import com.android.tools.r8.graph.DexItemFactory;
@@ -26,7 +27,7 @@ import com.android.tools.r8.graph.MethodAccessFlags;
 import com.android.tools.r8.graph.ParameterAnnotationsList;
 import com.android.tools.r8.graph.ProgramMethod;
 import com.android.tools.r8.shaking.AppInfoWithLiveness;
-import com.android.tools.r8.shaking.FieldAccessInfoCollectionModifier;
+import com.android.tools.r8.utils.IterableUtils;
 import com.android.tools.r8.utils.MethodSignatureEquivalence;
 import com.google.common.base.Equivalence.Wrapper;
 import com.google.common.collect.Iterables;
@@ -57,7 +58,6 @@ public class ClassMerger {
   private final ClassInitializerSynthesizedCode classInitializerSynthesizedCode;
   private final HorizontalClassMergerGraphLens.Builder lensBuilder;
   private final HorizontallyMergedClasses.Builder mergedClassesBuilder;
-  private final FieldAccessInfoCollectionModifier.Builder fieldAccessChangesBuilder;
 
   private final ClassMethodsBuilder classMethodsBuilder = new ClassMethodsBuilder();
   private final Reference2IntMap<DexType> classIdentifiers = new Reference2IntOpenHashMap<>();
@@ -70,7 +70,6 @@ public class ClassMerger {
       AppView<AppInfoWithLiveness> appView,
       HorizontalClassMergerGraphLens.Builder lensBuilder,
       HorizontallyMergedClasses.Builder mergedClassesBuilder,
-      FieldAccessInfoCollectionModifier.Builder fieldAccessChangesBuilder,
       MergeGroup group,
       Collection<VirtualMethodMerger> virtualMethodMergers,
       Collection<ConstructorMerger> constructorMergers,
@@ -78,7 +77,6 @@ public class ClassMerger {
     this.appView = appView;
     this.lensBuilder = lensBuilder;
     this.mergedClassesBuilder = mergedClassesBuilder;
-    this.fieldAccessChangesBuilder = fieldAccessChangesBuilder;
     this.group = group;
     this.virtualMethodMergers = virtualMethodMergers;
     this.constructorMergers = constructorMergers;
@@ -86,7 +84,7 @@ public class ClassMerger {
     this.dexItemFactory = appView.dexItemFactory();
     this.classInitializerSynthesizedCode = classInitializerSynthesizedCode;
     this.classStaticFieldsMerger = new ClassStaticFieldsMerger(appView, lensBuilder, group);
-    this.classInstanceFieldsMerger = new ClassInstanceFieldsMerger(lensBuilder, group);
+    this.classInstanceFieldsMerger = new ClassInstanceFieldsMerger(appView, lensBuilder, group);
 
     buildClassIdentifierMap();
   }
@@ -185,29 +183,25 @@ public class ClassMerger {
             merger.merge(
                 classMethodsBuilder,
                 lensBuilder,
-                fieldAccessChangesBuilder,
                 classIdentifiers,
                 syntheticArgumentClass));
   }
 
   void mergeVirtualMethods() {
     virtualMethodMergers.forEach(
-        merger ->
-            merger.merge(
-                classMethodsBuilder, lensBuilder, fieldAccessChangesBuilder, classIdentifiers));
+        merger -> merger.merge(classMethodsBuilder, lensBuilder, classIdentifiers));
     group.forEachSource(clazz -> clazz.getMethodCollection().clearVirtualMethods());
   }
 
   void appendClassIdField() {
-    DexEncodedField encodedField =
+    classInstanceFieldsMerger.setClassIdField(
         new DexEncodedField(
             group.getClassIdField(),
             FieldAccessFlags.fromSharedAccessFlags(
                 Constants.ACC_PUBLIC + Constants.ACC_FINAL + Constants.ACC_SYNTHETIC),
             FieldTypeSignature.noSignature(),
             DexAnnotationSet.empty(),
-            null);
-    group.getTarget().appendInstanceField(encodedField);
+            null));
   }
 
   void mergeStaticFields() {
@@ -238,9 +232,9 @@ public class ClassMerger {
     group.forEachSource(
         clazz -> {
           classInstanceFieldsMerger.addFields(clazz);
-          clazz.setInstanceFields(null);
+          clazz.clearInstanceFields();
         });
-    classInstanceFieldsMerger.merge();
+    group.getTarget().setInstanceFields(classInstanceFieldsMerger.merge());
   }
 
   public void mergeGroup(SyntheticArgumentClass syntheticArgumentClass) {
@@ -277,7 +271,8 @@ public class ClassMerger {
 
     private Builder setup() {
       DexItemFactory dexItemFactory = appView.dexItemFactory();
-      DexProgramClass target = group.iterator().next();
+      DexProgramClass target =
+          IterableUtils.findOrDefault(group, DexClass::isPublic, group.iterator().next());
       // TODO(b/165498187): ensure the name for the field is fresh
       group.setClassIdField(
           dexItemFactory.createField(
@@ -327,8 +322,7 @@ public class ClassMerger {
 
     public ClassMerger build(
         HorizontallyMergedClasses.Builder mergedClassesBuilder,
-        HorizontalClassMergerGraphLens.Builder lensBuilder,
-        FieldAccessInfoCollectionModifier.Builder fieldAccessChangesBuilder) {
+        HorizontalClassMergerGraphLens.Builder lensBuilder) {
       setup();
       List<VirtualMethodMerger> virtualMethodMergers =
           new ArrayList<>(virtualMethodMergerBuilders.size());
@@ -354,7 +348,6 @@ public class ClassMerger {
           appView,
           lensBuilder,
           mergedClassesBuilder,
-          fieldAccessChangesBuilder,
           group,
           virtualMethodMergers,
           constructorMergers,

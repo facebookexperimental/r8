@@ -17,11 +17,14 @@ import com.android.tools.r8.graph.ResolutionResult.NoSuchMethodResult;
 import com.android.tools.r8.graph.ResolutionResult.SingleResolutionResult;
 import com.android.tools.r8.ir.desugar.LambdaDescriptor;
 import com.android.tools.r8.shaking.MainDexClasses;
+import com.android.tools.r8.shaking.MissingClasses;
 import com.android.tools.r8.synthesis.CommittedItems;
 import com.android.tools.r8.synthesis.SyntheticItems;
 import com.android.tools.r8.utils.ListUtils;
 import com.android.tools.r8.utils.SetUtils;
 import com.android.tools.r8.utils.TraversalContinuation;
+import com.android.tools.r8.utils.TriConsumer;
+import com.android.tools.r8.utils.TriFunction;
 import com.android.tools.r8.utils.WorkList;
 import com.google.common.collect.Sets;
 import java.util.ArrayDeque;
@@ -33,8 +36,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map.Entry;
 import java.util.Set;
-import java.util.function.BiConsumer;
-import java.util.function.BiFunction;
 import java.util.function.Function;
 
 /* Specific subclass of AppInfo designed to support desugaring in D8. Desugaring requires a
@@ -56,24 +57,34 @@ public class AppInfoWithClassHierarchy extends AppInfo {
     return new AppInfoWithClassHierarchy(
         SyntheticItems.createInitialSyntheticItems(application),
         classToFeatureSplitMap,
-        mainDexClasses);
+        mainDexClasses,
+        MissingClasses.empty());
   }
 
   private final ClassToFeatureSplitMap classToFeatureSplitMap;
+
+  /** Set of types that are mentioned in the program, but for which no definition exists. */
+  // TODO(b/175659048): Consider hoisting to AppInfo to allow using MissingClasses in D8 desugar.
+  private final MissingClasses missingClasses;
 
   // For AppInfoWithLiveness subclass.
   protected AppInfoWithClassHierarchy(
       CommittedItems committedItems,
       ClassToFeatureSplitMap classToFeatureSplitMap,
-      MainDexClasses mainDexClasses) {
+      MainDexClasses mainDexClasses,
+      MissingClasses missingClasses) {
     super(committedItems, mainDexClasses);
     this.classToFeatureSplitMap = classToFeatureSplitMap;
+    this.missingClasses = missingClasses;
   }
 
   // For desugaring.
   private AppInfoWithClassHierarchy(CreateDesugaringViewOnAppInfo witness, AppInfo appInfo) {
     super(witness, appInfo);
     this.classToFeatureSplitMap = ClassToFeatureSplitMap.createEmptyClassToFeatureSplitMap();
+    // TODO(b/175659048): Migrate the reporting of missing classes in D8 desugar to MissingClasses,
+    //  and use the missing classes from AppInfo instead of MissingClasses.empty().
+    this.missingClasses = MissingClasses.empty();
   }
 
   public static AppInfoWithClassHierarchy createForDesugaring(AppInfo appInfo) {
@@ -82,7 +93,16 @@ public class AppInfoWithClassHierarchy extends AppInfo {
   }
 
   public final AppInfoWithClassHierarchy rebuildWithClassHierarchy(CommittedItems commit) {
-    return new AppInfoWithClassHierarchy(commit, getClassToFeatureSplitMap(), getMainDexClasses());
+    return new AppInfoWithClassHierarchy(
+        commit, getClassToFeatureSplitMap(), getMainDexClasses(), getMissingClasses());
+  }
+
+  public final AppInfoWithClassHierarchy rebuildWithClassHierarchy(MissingClasses missingClasses) {
+    return new AppInfoWithClassHierarchy(
+        getSyntheticItems().commit(app()),
+        getClassToFeatureSplitMap(),
+        getMainDexClasses(),
+        missingClasses);
   }
 
   public AppInfoWithClassHierarchy rebuildWithClassHierarchy(
@@ -90,7 +110,8 @@ public class AppInfoWithClassHierarchy extends AppInfo {
     return new AppInfoWithClassHierarchy(
         getSyntheticItems().commit(fn.apply(app())),
         getClassToFeatureSplitMap(),
-        getMainDexClasses());
+        getMainDexClasses(),
+        getMissingClasses());
   }
 
   @Override
@@ -104,11 +125,16 @@ public class AppInfoWithClassHierarchy extends AppInfo {
     return new AppInfoWithClassHierarchy(
         getSyntheticItems().commitPrunedItems(prunedItems),
         getClassToFeatureSplitMap().withoutPrunedItems(prunedItems),
-        getMainDexClasses().withoutPrunedItems(prunedItems));
+        getMainDexClasses().withoutPrunedItems(prunedItems),
+        getMissingClasses());
   }
 
   public ClassToFeatureSplitMap getClassToFeatureSplitMap() {
     return classToFeatureSplitMap;
+  }
+
+  public MissingClasses getMissingClasses() {
+    return missingClasses;
   }
 
   @Override
@@ -131,7 +157,7 @@ public class AppInfoWithClassHierarchy extends AppInfo {
    * result of the traversal is BREAK iff the function returned BREAK.
    */
   public TraversalContinuation traverseSuperTypes(
-      final DexClass clazz, BiFunction<DexType, Boolean, TraversalContinuation> fn) {
+      final DexClass clazz, TriFunction<DexType, DexClass, Boolean, TraversalContinuation> fn) {
     // We do an initial zero-allocation pass over the class super chain as it does not require a
     // worklist/seen-set. Only if the traversal is not aborted and there actually are interfaces,
     // do we continue traversal over the interface types. This is assuming that the second pass
@@ -144,7 +170,7 @@ public class AppInfoWithClassHierarchy extends AppInfo {
         if (currentClass.superType == null) {
           break;
         }
-        TraversalContinuation stepResult = fn.apply(currentClass.superType, false);
+        TraversalContinuation stepResult = fn.apply(currentClass.superType, currentClass, false);
         if (stepResult.shouldBreak()) {
           return stepResult;
         }
@@ -163,7 +189,7 @@ public class AppInfoWithClassHierarchy extends AppInfo {
       while (currentClass != null) {
         for (DexType iface : currentClass.interfaces.values) {
           if (seen.add(iface)) {
-            TraversalContinuation stepResult = fn.apply(iface, true);
+            TraversalContinuation stepResult = fn.apply(iface, currentClass, true);
             if (stepResult.shouldBreak()) {
               return stepResult;
             }
@@ -183,7 +209,7 @@ public class AppInfoWithClassHierarchy extends AppInfo {
       if (definition != null) {
         for (DexType iface : definition.interfaces.values) {
           if (seen.add(iface)) {
-            TraversalContinuation stepResult = fn.apply(iface, true);
+            TraversalContinuation stepResult = fn.apply(iface, definition, true);
             if (stepResult.shouldBreak()) {
               return stepResult;
             }
@@ -200,11 +226,11 @@ public class AppInfoWithClassHierarchy extends AppInfo {
    *
    * <p>Same as traverseSuperTypes, but unconditionally visits all.
    */
-  public void forEachSuperType(final DexClass clazz, BiConsumer<DexType, Boolean> fn) {
+  public void forEachSuperType(DexClass clazz, TriConsumer<DexType, DexClass, Boolean> fn) {
     traverseSuperTypes(
         clazz,
-        (type, isInterface) -> {
-          fn.accept(type, isInterface);
+        (superType, subclass, isInterface) -> {
+          fn.accept(superType, subclass, isInterface);
           return CONTINUE;
         });
   }
@@ -241,8 +267,7 @@ public class AppInfoWithClassHierarchy extends AppInfo {
     }
     // TODO(b/123506120): Report missing types when the predicate is inconclusive.
     return traverseSuperTypes(
-            clazz,
-            (type, isInterface) -> type == supertype ? BREAK : CONTINUE)
+            clazz, (superType, subclass, isInterface) -> superType == supertype ? BREAK : CONTINUE)
         .shouldBreak();
   }
 
@@ -279,11 +304,13 @@ public class AppInfoWithClassHierarchy extends AppInfo {
     if (clazz.isInterface()) {
       interfaces.add(type);
     }
-    forEachSuperType(clazz, (dexType, isInterface) -> {
-      if (isInterface) {
-        interfaces.add(dexType);
-      }
-    });
+    forEachSuperType(
+        clazz,
+        (superType, subclass, isInterface) -> {
+          if (isInterface) {
+            interfaces.add(superType);
+          }
+        });
     return interfaces;
   }
 

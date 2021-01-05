@@ -207,6 +207,16 @@ public class DexEncodedMethod extends DexEncodedMember<DexEncodedMethod, DexMeth
     return accessFlags;
   }
 
+  public DexType getArgumentType(int argumentIndex) {
+    if (isStatic()) {
+      return getReference().getParameter(argumentIndex);
+    }
+    if (argumentIndex == 0) {
+      return getHolderType();
+    }
+    return getReference().getParameter(argumentIndex - 1);
+  }
+
   public CompilationState getCompilationState() {
     return compilationState;
   }
@@ -603,6 +613,10 @@ public class DexEncodedMethod extends DexEncodedMember<DexEncodedMethod, DexMeth
   public boolean isDirectMethod() {
     checkIfObsolete();
     return (accessFlags.isPrivate() || accessFlags.isConstructor()) && !accessFlags.isStatic();
+  }
+
+  public boolean isInstance() {
+    return !isStatic();
   }
 
   @Override
@@ -1553,7 +1567,10 @@ public class DexEncodedMethod extends DexEncodedMember<DexEncodedMethod, DexMeth
       annotations = from.annotations();
       code = from.code;
       compilationState = CompilationState.NOT_PROCESSED;
-      optimizationInfo = from.optimizationInfo.mutableCopy();
+      optimizationInfo =
+          from.optimizationInfo.isDefaultMethodOptimizationInfo()
+              ? DefaultMethodOptimizationInfo.getInstance()
+              : from.optimizationInfo.mutableCopy();
       kotlinMemberInfo = from.kotlinMemberInfo;
       classFileVersion = from.classFileVersion;
       this.d8R8Synthesized = d8R8Synthesized;
@@ -1566,6 +1583,13 @@ public class DexEncodedMethod extends DexEncodedMember<DexEncodedMethod, DexMeth
         parameterAnnotations =
             from.parameterAnnotationsList.withParameterCount(method.proto.parameters.size());
       }
+    }
+
+    public Builder fixupOptimizationInfo(Consumer<UpdatableMethodOptimizationInfo> consumer) {
+      if (optimizationInfo.isUpdatableMethodOptimizationInfo()) {
+        consumer.accept(optimizationInfo.asUpdatableMethodOptimizationInfo());
+      }
+      return this;
     }
 
     public void setAccessFlags(MethodAccessFlags accessFlags) {

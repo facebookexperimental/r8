@@ -75,8 +75,6 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
     implements InstantiatedSubTypeInfo {
   /** Set of reachable proto types that will be dead code eliminated. */
   private final Set<DexType> deadProtoTypes;
-  /** Set of types that are mentioned in the program, but for which no definition exists. */
-  private final Set<DexType> missingTypes;
   /**
    * Set of types that are mentioned in the program. We at least need an empty abstract classitem
    * for these.
@@ -136,6 +134,11 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
   private final Set<DexMethod> forceInline;
   /** All methods that *must* never be inlined due to a configuration directive (testing only). */
   private final Set<DexMethod> neverInline;
+  /**
+   * All methods that *must* never be inlined as a result of having a single caller due to a
+   * configuration directive (testing only).
+   */
+  private final Set<DexMethod> neverInlineDueToSingleCaller;
   /** Items for which to print inlining decisions for (testing only). */
   private final Set<DexMethod> whyAreYouNotInlining;
   /** All methods that may not have any parameters with a constant value removed. */
@@ -190,7 +193,7 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
       ClassToFeatureSplitMap classToFeatureSplitMap,
       MainDexClasses mainDexClasses,
       Set<DexType> deadProtoTypes,
-      Set<DexType> missingTypes,
+      MissingClasses missingClasses,
       Set<DexType> liveTypes,
       Set<DexMethod> targetedMethods,
       Set<DexMethod> failedResolutionTargets,
@@ -209,6 +212,7 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
       Set<DexMethod> alwaysInline,
       Set<DexMethod> forceInline,
       Set<DexMethod> neverInline,
+      Set<DexMethod> neverInlineDueToSingleCaller,
       Set<DexMethod> whyAreYouNotInlining,
       Set<DexMethod> keepConstantArguments,
       Set<DexMethod> keepUnusedArguments,
@@ -226,9 +230,8 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
       Map<DexField, Int2ReferenceMap<DexField>> switchMaps,
       Set<DexType> lockCandidates,
       Map<DexType, Visibility> initClassReferences) {
-    super(syntheticItems, classToFeatureSplitMap, mainDexClasses);
+    super(syntheticItems, classToFeatureSplitMap, mainDexClasses, missingClasses);
     this.deadProtoTypes = deadProtoTypes;
-    this.missingTypes = missingTypes;
     this.liveTypes = liveTypes;
     this.targetedMethods = targetedMethods;
     this.failedResolutionTargets = failedResolutionTargets;
@@ -247,6 +250,7 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
     this.alwaysInline = alwaysInline;
     this.forceInline = forceInline;
     this.neverInline = neverInline;
+    this.neverInlineDueToSingleCaller = neverInlineDueToSingleCaller;
     this.whyAreYouNotInlining = whyAreYouNotInlining;
     this.keepConstantArguments = keepConstantArguments;
     this.keepUnusedArguments = keepUnusedArguments;
@@ -273,7 +277,7 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
         previous.getClassToFeatureSplitMap(),
         previous.getMainDexClasses(),
         previous.deadProtoTypes,
-        previous.missingTypes,
+        previous.getMissingClasses(),
         CollectionUtils.mergeSets(previous.liveTypes, committedItems.getCommittedTypes()),
         previous.targetedMethods,
         previous.failedResolutionTargets,
@@ -292,6 +296,7 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
         previous.alwaysInline,
         previous.forceInline,
         previous.neverInline,
+        previous.neverInlineDueToSingleCaller,
         previous.whyAreYouNotInlining,
         previous.keepConstantArguments,
         previous.keepUnusedArguments,
@@ -317,7 +322,7 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
         previous.getClassToFeatureSplitMap().withoutPrunedItems(prunedItems),
         previous.getMainDexClasses().withoutPrunedItems(prunedItems),
         previous.deadProtoTypes,
-        previous.missingTypes,
+        previous.getMissingClasses(),
         prunedItems.hasRemovedClasses()
             ? Sets.difference(previous.liveTypes, prunedItems.getRemovedClasses())
             : previous.liveTypes,
@@ -338,6 +343,7 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
         previous.alwaysInline,
         previous.forceInline,
         previous.neverInline,
+        previous.neverInlineDueToSingleCaller,
         previous.whyAreYouNotInlining,
         previous.keepConstantArguments,
         previous.keepUnusedArguments,
@@ -362,7 +368,7 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
   private void verify() {
     assert keepInfo.verifyPinnedTypesAreLive(liveTypes);
     assert objectAllocationInfoCollection.verifyAllocatedTypesAreLive(
-        liveTypes, missingTypes, this);
+        liveTypes, getMissingClasses(), this);
   }
 
   private static KeepInfoCollection extendPinnedItems(
@@ -407,9 +413,9 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
     super(
         previous.getSyntheticItems().commit(previous.app()),
         previous.getClassToFeatureSplitMap(),
-        previous.getMainDexClasses());
+        previous.getMainDexClasses(),
+        previous.getMissingClasses());
     this.deadProtoTypes = previous.deadProtoTypes;
-    this.missingTypes = previous.missingTypes;
     this.liveTypes = previous.liveTypes;
     this.targetedMethods = previous.targetedMethods;
     this.failedResolutionTargets = previous.failedResolutionTargets;
@@ -428,6 +434,7 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
     this.alwaysInline = previous.alwaysInline;
     this.forceInline = previous.forceInline;
     this.neverInline = previous.neverInline;
+    this.neverInlineDueToSingleCaller = previous.neverInlineDueToSingleCaller;
     this.whyAreYouNotInlining = previous.whyAreYouNotInlining;
     this.keepConstantArguments = previous.keepConstantArguments;
     this.keepUnusedArguments = previous.keepUnusedArguments;
@@ -458,7 +465,7 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
     DexClass definition = super.definitionFor(type);
     assert definition != null
             || deadProtoTypes.contains(type)
-            || missingTypes.contains(type)
+            || getMissingClasses().contains(type)
             // TODO(b/150693139): Remove these exceptions once fixed.
             || InterfaceMethodRewriter.isCompanionClassType(type)
             || InterfaceMethodRewriter.hasDispatchClassSuffix(type)
@@ -563,6 +570,10 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
 
   public boolean isNeverInlineMethod(DexMethod method) {
     return neverInline.contains(method);
+  }
+
+  public boolean isNeverInlineDueToSingleCallerMethod(ProgramMethod method) {
+    return neverInlineDueToSingleCaller.contains(method.getReference());
   }
 
   public boolean isWhyAreYouNotInliningMethod(DexMethod method) {
@@ -678,10 +689,6 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
 
   public Set<DexType> getDeadProtoTypes() {
     return deadProtoTypes;
-  }
-
-  public Set<DexType> getMissingTypes() {
-    return missingTypes;
   }
 
   public Int2ReferenceMap<DexField> getSwitchMap(DexField field) {
@@ -832,11 +839,31 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
         && !keepInfo.getMethodInfo(method).isPinned();
   }
 
-  public boolean mayPropagateValueFor(DexReference reference) {
+  public boolean mayPropagateValueFor(DexMember<?, ?> reference) {
     assert checkIfObsolete();
-    return options().enableValuePropagation
-        && !isPinned(reference)
-        && !neverPropagateValue.contains(reference);
+    return reference.apply(this::mayPropagateValueFor, this::mayPropagateValueFor);
+  }
+
+  public boolean mayPropagateValueFor(DexField field) {
+    assert checkIfObsolete();
+    if (!options().enableValuePropagation || neverPropagateValue.contains(field)) {
+      return false;
+    }
+    if (isPinned(field) && !field.getType().isAlwaysNull(this)) {
+      return false;
+    }
+    return true;
+  }
+
+  public boolean mayPropagateValueFor(DexMethod method) {
+    assert checkIfObsolete();
+    if (!options().enableValuePropagation || neverPropagateValue.contains(method)) {
+      return false;
+    }
+    if (isPinned(method) && !method.getReturnType().isAlwaysNull(this)) {
+      return false;
+    }
+    return true;
   }
 
   private boolean isLibraryOrClasspathField(DexEncodedField field) {
@@ -965,7 +992,7 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
         getClassToFeatureSplitMap().rewrittenWithLens(lens),
         getMainDexClasses().rewrittenWithLens(lens),
         deadProtoTypes,
-        missingTypes,
+        getMissingClasses().commitSyntheticItems(committedItems),
         lens.rewriteTypes(liveTypes),
         lens.rewriteMethods(targetedMethods),
         lens.rewriteMethods(failedResolutionTargets),
@@ -984,6 +1011,7 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
         lens.rewriteMethods(alwaysInline),
         lens.rewriteMethods(forceInline),
         lens.rewriteMethods(neverInline),
+        lens.rewriteMethods(neverInlineDueToSingleCaller),
         lens.rewriteMethods(whyAreYouNotInlining),
         lens.rewriteMethods(keepConstantArguments),
         lens.rewriteMethods(keepUnusedArguments),

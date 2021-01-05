@@ -144,16 +144,21 @@ public class DexProgramClass extends DexClass
     synthesizedDirectlyFrom.forEach(this::addSynthesizedFrom);
   }
 
-  public void forEachProgramField(Consumer<ProgramField> consumer) {
+  public void forEachProgramField(Consumer<? super ProgramField> consumer) {
     forEachField(field -> consumer.accept(new ProgramField(this, field)));
   }
 
-  public void forEachProgramMethod(Consumer<ProgramMethod> consumer) {
+  public void forEachProgramMember(Consumer<? super ProgramMember<?, ?>> consumer) {
+    forEachProgramField(consumer);
+    forEachProgramMethod(consumer);
+  }
+
+  public void forEachProgramMethod(Consumer<? super ProgramMethod> consumer) {
     forEachProgramMethodMatching(alwaysTrue(), consumer);
   }
 
   public void forEachProgramMethodMatching(
-      Predicate<DexEncodedMethod> predicate, Consumer<ProgramMethod> consumer) {
+      Predicate<DexEncodedMethod> predicate, Consumer<? super ProgramMethod> consumer) {
     methodCollection.forEachMethodMatching(
         predicate, method -> consumer.accept(new ProgramMethod(this, method)));
   }
@@ -178,6 +183,16 @@ public class DexProgramClass extends DexClass
       Predicate<DexEncodedMethod> predicate, Consumer<ProgramMethod> consumer) {
     methodCollection.forEachDirectMethodMatching(
         predicate, method -> consumer.accept(new ProgramMethod(this, method)));
+  }
+
+  public void forEachProgramInstanceInitializer(Consumer<ProgramMethod> consumer) {
+    forEachProgramInstanceInitializerMatching(alwaysTrue(), consumer);
+  }
+
+  public void forEachProgramInstanceInitializerMatching(
+      Predicate<DexEncodedMethod> predicate, Consumer<ProgramMethod> consumer) {
+    forEachProgramDirectMethodMatching(
+        method -> method.isInstanceInitializer() && predicate.test(method), consumer);
   }
 
   public void forEachProgramVirtualMethod(Consumer<ProgramMethod> consumer) {

@@ -10,10 +10,10 @@ import com.android.tools.r8.graph.DirectMappedDexApplication;
 import com.android.tools.r8.horizontalclassmerging.policies.AllInstantiatedOrUninstantiated;
 import com.android.tools.r8.horizontalclassmerging.policies.CheckAbstractClasses;
 import com.android.tools.r8.horizontalclassmerging.policies.DontInlinePolicy;
-import com.android.tools.r8.horizontalclassmerging.policies.DontMergeIntoLessVisible;
 import com.android.tools.r8.horizontalclassmerging.policies.DontMergeSynchronizedClasses;
 import com.android.tools.r8.horizontalclassmerging.policies.IgnoreSynthetics;
 import com.android.tools.r8.horizontalclassmerging.policies.LimitGroups;
+import com.android.tools.r8.horizontalclassmerging.policies.MinimizeFieldCasts;
 import com.android.tools.r8.horizontalclassmerging.policies.NoAnnotations;
 import com.android.tools.r8.horizontalclassmerging.policies.NoClassInitializerWithObservableSideEffects;
 import com.android.tools.r8.horizontalclassmerging.policies.NoClassesOrMembersWithAnnotations;
@@ -34,11 +34,12 @@ import com.android.tools.r8.horizontalclassmerging.policies.PreventMergeIntoMain
 import com.android.tools.r8.horizontalclassmerging.policies.PreventMethodImplementation;
 import com.android.tools.r8.horizontalclassmerging.policies.RespectPackageBoundaries;
 import com.android.tools.r8.horizontalclassmerging.policies.SameFeatureSplit;
-import com.android.tools.r8.horizontalclassmerging.policies.SameFields;
+import com.android.tools.r8.horizontalclassmerging.policies.SameInstanceFields;
 import com.android.tools.r8.horizontalclassmerging.policies.SameNestHost;
 import com.android.tools.r8.horizontalclassmerging.policies.SameParentClass;
 import com.android.tools.r8.shaking.AppInfoWithLiveness;
 import com.android.tools.r8.shaking.FieldAccessInfoCollectionModifier;
+import com.android.tools.r8.shaking.KeepInfoCollection;
 import com.android.tools.r8.shaking.MainDexTracingResult;
 import com.android.tools.r8.shaking.RuntimeTypeCheckInfo;
 import com.google.common.collect.ImmutableList;
@@ -49,6 +50,7 @@ import java.util.Collections;
 import java.util.List;
 
 public class HorizontalClassMerger {
+
   private final AppView<AppInfoWithLiveness> appView;
 
   public HorizontalClassMerger(AppView<AppInfoWithLiveness> appView) {
@@ -57,7 +59,7 @@ public class HorizontalClassMerger {
   }
 
   // TODO(b/165577835): replace Collection<DexProgramClass> with MergeGroup
-  public HorizontalClassMergerGraphLens run(
+  public HorizontalClassMergerResult run(
       DirectMappedDexApplication.Builder appBuilder,
       MainDexTracingResult mainDexTracingResult,
       RuntimeTypeCheckInfo runtimeTypeCheckInfo) {
@@ -78,27 +80,51 @@ public class HorizontalClassMerger {
         new HorizontallyMergedClasses.Builder();
     HorizontalClassMergerGraphLens.Builder lensBuilder =
         new HorizontalClassMergerGraphLens.Builder();
-    FieldAccessInfoCollectionModifier.Builder fieldAccessChangesBuilder =
-        new FieldAccessInfoCollectionModifier.Builder();
+    MainDexTracingResult.Builder mainDexTracingResultBuilder =
+        mainDexTracingResult.extensionBuilder(appView.appInfo());
 
     // Set up a class merger for each group.
     List<ClassMerger> classMergers =
-        initializeClassMergers(
-            mergedClassesBuilder, lensBuilder, fieldAccessChangesBuilder, groups);
+        initializeClassMergers(mergedClassesBuilder, lensBuilder, groups);
     Iterable<DexProgramClass> allMergeClasses =
         Iterables.concat(
             Iterables.transform(classMergers, classMerger -> classMerger.getGroup().getClasses()));
 
     // Merge the classes.
     SyntheticArgumentClass syntheticArgumentClass =
-        new SyntheticArgumentClass.Builder().build(appView, appBuilder, allMergeClasses);
+        new SyntheticArgumentClass.Builder(
+                appBuilder, appView, mainDexTracingResult, mainDexTracingResultBuilder)
+            .build(allMergeClasses);
     applyClassMergers(classMergers, syntheticArgumentClass);
 
-    // Generate the class lens.
+    // Generate the graph lens.
     HorizontallyMergedClasses mergedClasses = mergedClassesBuilder.build();
     appView.setHorizontallyMergedClasses(mergedClasses);
-    return createLens(
-        mergedClasses, lensBuilder, fieldAccessChangesBuilder, syntheticArgumentClass);
+    HorizontalClassMergerGraphLens lens =
+        createLens(mergedClasses, lensBuilder, syntheticArgumentClass);
+
+    // Prune keep info.
+    KeepInfoCollection keepInfo = appView.appInfo().getKeepInfo();
+    keepInfo.mutate(mutator -> mutator.removeKeepInfoForPrunedItems(mergedClasses.getSources()));
+
+    return new HorizontalClassMergerResult(
+        createFieldAccessInfoCollectionModifier(groups), lens, mainDexTracingResultBuilder.build());
+  }
+
+  private FieldAccessInfoCollectionModifier createFieldAccessInfoCollectionModifier(
+      Collection<MergeGroup> groups) {
+    FieldAccessInfoCollectionModifier.Builder builder =
+        new FieldAccessInfoCollectionModifier.Builder();
+    for (MergeGroup group : groups) {
+      DexProgramClass target = group.getTarget();
+      target.forEachProgramInstanceInitializerMatching(
+          definition -> definition.getCode().isHorizontalClassMergingCode(),
+          method -> builder.recordFieldWrittenInContext(group.getClassIdField(), method));
+      target.forEachProgramVirtualMethodMatching(
+          definition -> definition.hasCode() && definition.getCode().isHorizontalClassMergingCode(),
+          method -> builder.recordFieldReadInContext(group.getClassIdField(), method));
+    }
+    return builder.build();
   }
 
   private List<Policy> getPolicies(
@@ -106,7 +132,7 @@ public class HorizontalClassMerger {
       RuntimeTypeCheckInfo runtimeTypeCheckInfo) {
     return ImmutableList.of(
         new NotMatchedByNoHorizontalClassMerging(appView),
-        new SameFields(),
+        new SameInstanceFields(appView),
         new NoInterfaces(),
         new NoAnnotations(),
         new NoEnums(appView),
@@ -133,12 +159,8 @@ public class HorizontalClassMerger {
         new SameFeatureSplit(appView),
         new RespectPackageBoundaries(appView),
         new DontMergeSynchronizedClasses(appView),
-        new LimitGroups(appView),
-        // TODO(b/166577694): no policies should be run after this policy, as it would
-        // potentially break tests
-        new DontMergeIntoLessVisible()
-        // TODO: add policies
-        );
+        new MinimizeFieldCasts(),
+        new LimitGroups(appView));
   }
 
   /**
@@ -148,7 +170,6 @@ public class HorizontalClassMerger {
   private List<ClassMerger> initializeClassMergers(
       HorizontallyMergedClasses.Builder mergedClassesBuilder,
       HorizontalClassMergerGraphLens.Builder lensBuilder,
-      FieldAccessInfoCollectionModifier.Builder fieldAccessChangesBuilder,
       Collection<MergeGroup> groups) {
     List<ClassMerger> classMergers = new ArrayList<>();
 
@@ -156,8 +177,7 @@ public class HorizontalClassMerger {
     for (MergeGroup group : groups) {
       assert !group.isEmpty();
       ClassMerger merger =
-          new ClassMerger.Builder(appView, group)
-              .build(mergedClassesBuilder, lensBuilder, fieldAccessChangesBuilder);
+          new ClassMerger.Builder(appView, group).build(mergedClassesBuilder, lensBuilder);
       classMergers.add(merger);
     }
 
@@ -179,17 +199,8 @@ public class HorizontalClassMerger {
   private HorizontalClassMergerGraphLens createLens(
       HorizontallyMergedClasses mergedClasses,
       HorizontalClassMergerGraphLens.Builder lensBuilder,
-      FieldAccessInfoCollectionModifier.Builder fieldAccessChangesBuilder,
       SyntheticArgumentClass syntheticArgumentClass) {
-
-    HorizontalClassMergerGraphLens lens =
-        new TreeFixer(
-                appView,
-                mergedClasses,
-                lensBuilder,
-                fieldAccessChangesBuilder,
-                syntheticArgumentClass)
-            .fixupTypeReferences();
-    return lens;
+    return new TreeFixer(appView, mergedClasses, lensBuilder, syntheticArgumentClass)
+        .fixupTypeReferences();
   }
 }

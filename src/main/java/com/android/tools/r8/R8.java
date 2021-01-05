@@ -13,7 +13,6 @@ import com.android.tools.r8.dex.ApplicationWriter;
 import com.android.tools.r8.dex.Marker;
 import com.android.tools.r8.dex.Marker.Tool;
 import com.android.tools.r8.errors.CheckDiscardDiagnostic;
-import com.android.tools.r8.errors.CompilationError;
 import com.android.tools.r8.experimental.graphinfo.GraphConsumer;
 import com.android.tools.r8.graph.AppInfoWithClassHierarchy;
 import com.android.tools.r8.graph.AppServices;
@@ -43,7 +42,7 @@ import com.android.tools.r8.graph.analysis.InitializedClassesInInstanceMethodsAn
 import com.android.tools.r8.graph.classmerging.StaticallyMergedClasses;
 import com.android.tools.r8.graph.classmerging.VerticallyMergedClasses;
 import com.android.tools.r8.horizontalclassmerging.HorizontalClassMerger;
-import com.android.tools.r8.horizontalclassmerging.HorizontalClassMergerGraphLens;
+import com.android.tools.r8.horizontalclassmerging.HorizontalClassMergerResult;
 import com.android.tools.r8.horizontalclassmerging.HorizontallyMergedClasses;
 import com.android.tools.r8.inspector.internal.InspectorImpl;
 import com.android.tools.r8.ir.conversion.IRConverter;
@@ -96,7 +95,7 @@ import com.android.tools.r8.shaking.EnqueuerFactory;
 import com.android.tools.r8.shaking.MainDexClasses;
 import com.android.tools.r8.shaking.MainDexListBuilder;
 import com.android.tools.r8.shaking.MainDexTracingResult;
-import com.android.tools.r8.shaking.ProguardClassFilter;
+import com.android.tools.r8.shaking.MissingClasses;
 import com.android.tools.r8.shaking.ProguardConfigurationRule;
 import com.android.tools.r8.shaking.ProguardConfigurationUtils;
 import com.android.tools.r8.shaking.RootSetBuilder;
@@ -122,7 +121,6 @@ import com.android.tools.r8.utils.ThreadUtils;
 import com.android.tools.r8.utils.Timing;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
-import com.google.common.collect.Sets;
 import com.google.common.io.ByteStreams;
 import java.io.ByteArrayOutputStream;
 import java.io.FileOutputStream;
@@ -252,13 +250,6 @@ public class R8 {
     }
   }
 
-  private Set<DexType> filterMissingClasses(Set<DexType> missingClasses,
-      ProguardClassFilter dontWarnPatterns) {
-    Set<DexType> result = new HashSet<>(missingClasses);
-    dontWarnPatterns.filterOutMatches(result);
-    return result;
-  }
-
   static void runForTesting(AndroidApp app, InternalOptions options)
       throws CompilationFailedException {
     ExecutorService executor = ThreadUtils.getExecutorService(options);
@@ -329,35 +320,19 @@ public class R8 {
       List<ProguardConfigurationRule> synthesizedProguardRules = new ArrayList<>();
       timing.begin("Strip unused code");
       Set<DexType> classesToRetainInnerClassAttributeFor = null;
-      Set<DexType> missingClasses = null;
       RuntimeTypeCheckInfo.Builder classMergingEnqueuerExtensionBuilder =
           new RuntimeTypeCheckInfo.Builder(appView.dexItemFactory());
       try {
-        // TODO(b/154849103): Find a better way to determine missing classes.
-        missingClasses = new SubtypingInfo(appView).getMissingClasses();
-        missingClasses = filterMissingClasses(
-            missingClasses, options.getProguardConfiguration().getDontWarnPatterns());
-        if (!missingClasses.isEmpty()) {
-          missingClasses.forEach(
-              clazz -> {
-                options.reporter.warning(
-                    new StringDiagnostic("Missing class: " + clazz.toSourceString()));
-              });
-          if (!options.ignoreMissingClasses) {
-            DexType missingClass = missingClasses.iterator().next();
-            if (missingClasses.size() == 1) {
-              throw new CompilationError(
-                  "Compilation can't be completed because the class `"
-                      + missingClass.toSourceString()
-                      + "` is missing.");
-            } else {
-              throw new CompilationError(
-                  "Compilation can't be completed because `" + missingClass.toSourceString()
-                      + "` and " + (missingClasses.size() - 1) + " other classes are missing.");
-            }
-          }
+        // TODO(b/154849103): Remove once reported by the Enqueuer.
+        if (!appView.testing().enableExperimentalMissingClassesReporting) {
+          appView.setAppInfo(
+              appView
+                  .appInfo()
+                  .rebuildWithClassHierarchy(
+                      MissingClasses.builderForInitialMissingClasses()
+                          .addNewMissingClasses(new SubtypingInfo(appView).getMissingClasses())
+                          .reportMissingClasses(options)));
         }
-        options.reporter.failIfPendingErrors();
 
         // Add synthesized -assumenosideeffects from min api if relevant.
         if (options.isGeneratingDex()) {
@@ -391,9 +366,6 @@ public class R8 {
         assert appView.rootSet().verifyKeptMethodsAreTargetedAndLive(appViewWithLiveness.appInfo());
         assert appView.rootSet().verifyKeptTypesAreLive(appViewWithLiveness.appInfo());
         assert appView.rootSet().verifyKeptItemsAreKept(appView);
-
-        missingClasses =
-            Sets.union(missingClasses, appViewWithLiveness.appInfo().getMissingTypes());
 
         appView.rootSet().checkAllRulesAreUsed(options);
 
@@ -588,20 +560,26 @@ public class R8 {
           HorizontalClassMerger merger = new HorizontalClassMerger(appViewWithLiveness);
           DirectMappedDexApplication.Builder appBuilder =
               appView.appInfo().app().asDirect().builder();
-          HorizontalClassMergerGraphLens lens =
+          HorizontalClassMergerResult horizontalClassMergerResult =
               merger.run(appBuilder, mainDexTracingResult, runtimeTypeCheckInfo);
-          if (lens != null) {
-            DirectMappedDexApplication app = appBuilder.build();
+          if (horizontalClassMergerResult != null) {
+            // Must rewrite AppInfoWithLiveness before pruning the merged classes, to ensure that
+            // allocations sites, fields accesses, etc. are correctly transferred to the target
+            // classes.
+            appView.rewriteWithLensAndApplication(
+                horizontalClassMergerResult.getGraphLens(), appBuilder.build());
+            horizontalClassMergerResult
+                .getFieldAccessInfoCollectionModifier()
+                .modify(appViewWithLiveness);
+
             appView.pruneItems(
                 PrunedItems.builder()
-                    .setPrunedApp(app)
+                    .setPrunedApp(appView.appInfo().app())
                     .addRemovedClasses(appView.horizontallyMergedClasses().getSources())
                     .addNoLongerSyntheticItems(appView.horizontallyMergedClasses().getTargets())
                     .build());
-            appView.rewriteWithLens(lens);
 
-            // Only required for class merging, clear instance to save memory.
-            runtimeTypeCheckInfo = null;
+            mainDexTracingResult = horizontalClassMergerResult.getMainDexTracingResult();
           }
           timing.end();
         } else {
@@ -717,7 +695,6 @@ public class R8 {
                   appView,
                   new SubtypingInfo(appView),
                   keptGraphConsumer,
-                  missingClasses,
                   prunedTypes);
           appView.setAppInfo(
               enqueuer.traceApplication(

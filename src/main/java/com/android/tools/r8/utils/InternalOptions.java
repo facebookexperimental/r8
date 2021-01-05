@@ -256,6 +256,8 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
   public boolean enableInliningOfInvokesWithClassInitializationSideEffects = true;
   public boolean enableInliningOfInvokesWithNullableReceivers = true;
   public boolean disableInliningOfLibraryMethodOverrides = true;
+  public boolean enableSimpleInliningConstraints = true;
+  public int simpleInliningConstraintThreshold = 0;
   public boolean enableClassInlining = true;
   public boolean enableClassStaticizer = true;
   public boolean enableInitializedClassesAnalysis = true;
@@ -1362,6 +1364,10 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
 
   public static class TestingOptions {
 
+    public static void enableExperimentalMissingClassesReporting(InternalOptions options) {
+      options.testing.enableExperimentalMissingClassesReporting = true;
+    }
+
     public static int NO_LIMIT = -1;
 
     // Force writing the specified bytes as the DEX version content.
@@ -1431,6 +1437,7 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     public boolean alwaysUsePessimisticRegisterAllocation = false;
     public boolean enableCheckCastAndInstanceOfRemoval = true;
     public boolean enableDeadSwitchCaseElimination = true;
+    public boolean enableExperimentalMissingClassesReporting = false;
     public boolean enableInvokeSuperToInvokeVirtualRewriting = true;
     public boolean enableSwitchToIfRewriting = true;
     public boolean enableEnumUnboxingDebugLogs = false;

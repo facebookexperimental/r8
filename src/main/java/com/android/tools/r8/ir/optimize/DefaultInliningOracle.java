@@ -18,6 +18,7 @@ import com.android.tools.r8.graph.DexType;
 import com.android.tools.r8.graph.ProgramMethod;
 import com.android.tools.r8.graph.ResolutionResult.SingleResolutionResult;
 import com.android.tools.r8.ir.analysis.ClassInitializationAnalysis;
+import com.android.tools.r8.ir.analysis.inlining.SimpleInliningConstraint;
 import com.android.tools.r8.ir.code.BasicBlock;
 import com.android.tools.r8.ir.code.IRCode;
 import com.android.tools.r8.ir.code.InstancePut;
@@ -203,7 +204,9 @@ public final class DefaultInliningOracle implements InliningOracle, InliningStra
       return false;
     }
     assert reason != Reason.FORCE
-        || !inlineeRefersToClassesNotInMainDex(method.getHolderType(), singleTarget);
+            || !inlineeRefersToClassesNotInMainDex(method.getHolderType(), singleTarget)
+        : MainDexDirectReferenceTracer.getFirstReferenceOutsideFromCode(
+            appView.appInfo(), singleTarget, inliner.mainDexClasses.getRoots());
     return true;
   }
 
@@ -223,7 +226,11 @@ public final class DefaultInliningOracle implements InliningOracle, InliningStra
     if (code.estimatedSizeForInliningAtMost(instructionLimit)) {
       return true;
     }
-    return false;
+    // Even if the inlinee is big it may become simple after inlining. We therefore check if the
+    // inlinee's simple inlining constraint is satisfied by the invoke.
+    SimpleInliningConstraint simpleInliningConstraint =
+        target.getDefinition().getOptimizationInfo().getSimpleInliningConstraint();
+    return simpleInliningConstraint.isSatisfied(invoke);
   }
 
   private int computeInstructionLimit(InvokeMethod invoke, ProgramMethod candidate) {

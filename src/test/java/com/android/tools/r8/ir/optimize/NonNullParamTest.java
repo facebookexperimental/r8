@@ -65,7 +65,6 @@ public class NonNullParamTest extends TestBase {
         .addProgramClasses(classes)
         .addKeepMainRule(mainClass)
         .addKeepRules(ImmutableList.of("-keepattributes InnerClasses,Signature,EnclosingMethod"))
-        .addTestingAnnotationsAsProgramClasses()
         // All tests are checking if invocations to certain null-check utils are gone.
         .noMinification()
         .addOptionsModification(
@@ -92,7 +91,7 @@ public class NonNullParamTest extends TestBase {
 
     MethodSubject selfCheck = mainSubject.uniqueMethodWithName("selfCheck");
     assertThat(selfCheck, isPresent());
-    assertEquals(1, countCallToParamNullCheck(selfCheck));
+    assertEquals(0, countCallToParamNullCheck(selfCheck));
     assertEquals(1, countPrintCall(selfCheck));
     assertEquals(0, countThrow(selfCheck));
 

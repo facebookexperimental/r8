@@ -15,7 +15,8 @@ import java.util.Set;
 public class EnqueuerFactory {
 
   public static Enqueuer createForInitialTreeShaking(
-      AppView<? extends AppInfoWithClassHierarchy> appView, SubtypingInfo subtypingInfo) {
+      AppView<? extends AppInfoWithClassHierarchy> appView,
+      SubtypingInfo subtypingInfo) {
     return new Enqueuer(appView, subtypingInfo, null, Mode.INITIAL_TREE_SHAKING);
   }
 
@@ -23,19 +24,18 @@ public class EnqueuerFactory {
       AppView<? extends AppInfoWithClassHierarchy> appView,
       SubtypingInfo subtypingInfo,
       GraphConsumer keptGraphConsumer,
-      Set<DexType> initialMissingTypes,
       Set<DexType> initialPrunedTypes) {
     Enqueuer enqueuer =
         new Enqueuer(appView, subtypingInfo, keptGraphConsumer, Mode.FINAL_TREE_SHAKING);
     appView.withProtoShrinker(
         shrinker -> enqueuer.setInitialDeadProtoTypes(shrinker.getDeadProtoTypes()));
-    enqueuer.setInitialMissingTypes(initialMissingTypes);
     enqueuer.setInitialPrunedTypes(initialPrunedTypes);
     return enqueuer;
   }
 
   public static Enqueuer createForMainDexTracing(
-      AppView<? extends AppInfoWithClassHierarchy> appView, SubtypingInfo subtypingInfo) {
+      AppView<? extends AppInfoWithClassHierarchy> appView,
+      SubtypingInfo subtypingInfo) {
     return createForMainDexTracing(appView, subtypingInfo, null);
   }
 
