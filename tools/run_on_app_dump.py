@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # Copyright (c) 2020, the R8 project authors. Please see the AUTHORS file
 # for details. All rights reserved. Use of this source code is governed by a
 # BSD-style license that can be found in the LICENSE file.
@@ -212,15 +212,6 @@ APPS = [
     'folder': 'newpipe',
   }),
   # TODO(b/172806808): Monkey runner does not work.
-  App({
-    'id': 'io.rover.app.debug',
-    'name': 'Rover',
-    'dump_app': 'dump_app.zip',
-    'apk_app': 'example-app-release-unsigned.apk',
-    'url': 'https://github.com/RoverPlatform/rover-android',
-    'revision': '94342117097770ea3ca2c6df6ab496a1a55c3ce7',
-    'folder': 'rover-android',
-  }),
   App({
     'id': 'io.rover.app.debug',
     'name': 'Rover',
