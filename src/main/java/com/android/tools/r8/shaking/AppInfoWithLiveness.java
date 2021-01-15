@@ -469,7 +469,6 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
             || getMissingClasses().contains(type)
             // TODO(b/150693139): Remove these exceptions once fixed.
             || InterfaceMethodRewriter.isCompanionClassType(type)
-            || InterfaceMethodRewriter.hasDispatchClassSuffix(type)
             || InterfaceMethodRewriter.isEmulatedLibraryClassType(type)
             || type.toDescriptorString().startsWith("Lj$/$r8$retargetLibraryMember$")
             || TwrCloseResourceRewriter.isUtilityClassDescriptor(type)
@@ -575,6 +574,10 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
 
   public boolean isNeverInlineDueToSingleCallerMethod(ProgramMethod method) {
     return neverInlineDueToSingleCaller.contains(method.getReference());
+  }
+
+  public boolean isAssumeNoSideEffectsMethod(DexMethod method) {
+    return noSideEffects.containsKey(method);
   }
 
   public boolean isWhyAreYouNotInliningMethod(DexMethod method) {

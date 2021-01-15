@@ -4,6 +4,13 @@
 
 package com.android.tools.r8.ir.desugar;
 
+import static com.android.tools.r8.ir.code.Opcodes.INVOKE_CUSTOM;
+import static com.android.tools.r8.ir.code.Opcodes.INVOKE_DIRECT;
+import static com.android.tools.r8.ir.code.Opcodes.INVOKE_INTERFACE;
+import static com.android.tools.r8.ir.code.Opcodes.INVOKE_STATIC;
+import static com.android.tools.r8.ir.code.Opcodes.INVOKE_SUPER;
+import static com.android.tools.r8.ir.code.Opcodes.INVOKE_VIRTUAL;
+
 import com.android.tools.r8.DesugarGraphConsumer;
 import com.android.tools.r8.cf.CfVersion;
 import com.android.tools.r8.dex.Constants;
@@ -36,8 +43,10 @@ import com.android.tools.r8.ir.code.BasicBlock;
 import com.android.tools.r8.ir.code.IRCode;
 import com.android.tools.r8.ir.code.Instruction;
 import com.android.tools.r8.ir.code.InstructionListIterator;
+import com.android.tools.r8.ir.code.InvokeCustom;
 import com.android.tools.r8.ir.code.InvokeDirect;
 import com.android.tools.r8.ir.code.InvokeMethod;
+import com.android.tools.r8.ir.code.InvokeMethodWithReceiver;
 import com.android.tools.r8.ir.code.InvokeStatic;
 import com.android.tools.r8.ir.code.InvokeSuper;
 import com.android.tools.r8.ir.conversion.IRConverter;
@@ -102,7 +111,6 @@ public final class InterfaceMethodRewriter {
 
   // Public for testing.
   public static final String EMULATE_LIBRARY_CLASS_NAME_SUFFIX = "$-EL";
-  public static final String DISPATCH_CLASS_NAME_SUFFIX = "$-DC";
   public static final String COMPANION_CLASS_NAME_SUFFIX = "$-CC";
   public static final String DEFAULT_METHOD_PREFIX = "$default$";
   public static final String PRIVATE_METHOD_PREFIX = "$private$";
@@ -208,7 +216,16 @@ public final class InterfaceMethodRewriter {
     return emulatedInterfaces.containsKey(itf);
   }
 
-  public boolean needsRewriting(DexMethod method) {
+  public boolean needsRewriting(DexMethod method, boolean isInvokeSuper, AppView<?> appView) {
+    if (isInvokeSuper) {
+      DexClass clazz = appView.appInfo().definitionFor(method.getHolderType());
+      if (clazz != null
+          && clazz.isLibraryClass()
+          && clazz.isInterface()
+          && appView.rewritePrefix.hasRewrittenType(clazz.type, appView)) {
+        return true;
+      }
+    }
     return emulatedMethods.contains(method.getName());
   }
 
@@ -216,18 +233,19 @@ public final class InterfaceMethodRewriter {
     return emulatedInterfaces.get(itf);
   }
 
-  private void leavingStaticInvokeToInterface(
-      DexProgramClass holder, DexEncodedMethod encodedMethod) {
+  private void leavingStaticInvokeToInterface(ProgramMethod method) {
     // When leaving static interface method invokes possibly upgrade the class file
     // version, but don't go above the initial class file version. If the input was
     // 1.7 or below, this will make a VerificationError on the input a VerificationError
     // on the output. If the input was 1.8 or above the runtime behaviour (potential ICCE)
     // will remain the same.
-    if (holder.hasClassFileVersion()) {
-      encodedMethod.upgradeClassFileVersion(
-          Ordered.min(CfVersion.V1_8, holder.getInitialClassFileVersion()));
+    if (method.getHolder().hasClassFileVersion()) {
+      method
+          .getDefinition()
+          .upgradeClassFileVersion(
+              Ordered.min(CfVersion.V1_8, method.getHolder().getInitialClassFileVersion()));
     } else {
-      encodedMethod.upgradeClassFileVersion(CfVersion.V1_8);
+      method.getDefinition().upgradeClassFileVersion(CfVersion.V1_8);
     }
   }
 
@@ -235,276 +253,297 @@ public final class InterfaceMethodRewriter {
   // NOTE: can be called for different methods concurrently.
   public void rewriteMethodReferences(IRCode code) {
     ProgramMethod context = code.context();
-    DexEncodedMethod encodedMethod = context.getDefinition();
-    if (synthesizedMethods.contains(encodedMethod)) {
+    if (synthesizedMethods.contains(context)) {
       return;
     }
 
     ListIterator<BasicBlock> blocks = code.listIterator();
-    AppInfo appInfo = appView.appInfo();
     while (blocks.hasNext()) {
       BasicBlock block = blocks.next();
       InstructionListIterator instructions = block.listIterator(code);
       while (instructions.hasNext()) {
         Instruction instruction = instructions.next();
-
-        if (instruction.isInvokeCustom()) {
-          // Check that static interface methods are not referenced
-          // from invoke-custom instructions via method handles.
-          DexCallSite callSite = instruction.asInvokeCustom().getCallSite();
-          reportStaticInterfaceMethodHandle(encodedMethod.method, callSite.bootstrapMethod);
-          for (DexValue arg : callSite.bootstrapArgs) {
-            if (arg.isDexValueMethodHandle()) {
-              reportStaticInterfaceMethodHandle(
-                  encodedMethod.method, arg.asDexValueMethodHandle().value);
-            }
-          }
-          continue;
+        switch (instruction.opcode()) {
+          case INVOKE_CUSTOM:
+            rewriteInvokeCustom(instruction.asInvokeCustom(), context);
+            break;
+          case INVOKE_DIRECT:
+            rewriteInvokeDirect(instruction.asInvokeDirect(), instructions, context);
+            break;
+          case INVOKE_STATIC:
+            rewriteInvokeStatic(instruction.asInvokeStatic(), instructions, context);
+            break;
+          case INVOKE_SUPER:
+            rewriteInvokeSuper(instruction.asInvokeSuper(), instructions, context);
+            break;
+          case INVOKE_INTERFACE:
+          case INVOKE_VIRTUAL:
+            rewriteInvokeInterfaceOrInvokeVirtual(
+                instruction.asInvokeMethodWithReceiver(), instructions);
+            break;
+          default:
+            // Intentionally empty.
+            break;
         }
+      }
+    }
+  }
 
-        if (instruction.isInvokeStatic()) {
-          InvokeStatic invokeStatic = instruction.asInvokeStatic();
-          DexMethod method = invokeStatic.getInvokedMethod();
-          if (appView.getSyntheticItems().isPendingSynthetic(method.holder)) {
-            // We did not create this code yet, but it will not require rewriting.
-            continue;
-          }
-          DexClass clazz = appInfo.definitionFor(method.holder);
-          if (clazz == null) {
-            // NOTE: leave unchanged those calls to undefined targets. This may lead to runtime
-            // exception but we can not report it as error since it can also be the intended
-            // behavior.
-            if (invokeStatic.getInterfaceBit()) {
-              leavingStaticInvokeToInterface(context.getHolder(), encodedMethod);
-            }
-            warnMissingType(encodedMethod.method, method.holder);
-          } else if (clazz.isInterface()) {
-            if (isNonDesugaredLibraryClass(clazz)) {
-              // NOTE: we intentionally don't desugar static calls into static interface
-              // methods coming from android.jar since it is only possible in case v24+
-              // version of android.jar is provided.
-              //
-              // We assume such calls are properly guarded by if-checks like
-              //    'if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.XYZ) { ... }'
-              //
-              // WARNING: This may result in incorrect code on older platforms!
-              // Retarget call to an appropriate method of companion class.
+  private void rewriteInvokeCustom(InvokeCustom invoke, ProgramMethod context) {
+    // Check that static interface methods are not referenced from invoke-custom instructions via
+    // method handles.
+    DexCallSite callSite = invoke.getCallSite();
+    reportStaticInterfaceMethodHandle(context, callSite.bootstrapMethod);
+    for (DexValue arg : callSite.bootstrapArgs) {
+      if (arg.isDexValueMethodHandle()) {
+        reportStaticInterfaceMethodHandle(context, arg.asDexValueMethodHandle().value);
+      }
+    }
+  }
 
-              if (!options.canLeaveStaticInterfaceMethodInvokes()) {
-                // On pre-L devices static calls to interface methods result in verifier
-                // rejecting the whole class. We have to create special dispatch classes,
-                // so the user class is not rejected because it make this call directly.
-                // TODO(b/166247515): If this an incorrect invoke-static without the interface bit
-                //  we end up "fixing" the code and remove and ICCE error.
-                ProgramMethod newProgramMethod =
-                    appView
-                        .getSyntheticItems()
-                        .createMethod(
-                            context.getHolder(),
-                            factory,
-                            syntheticMethodBuilder -> {
-                              syntheticMethodBuilder
-                                  .setProto(method.proto)
-                                  .setAccessFlags(
-                                      MethodAccessFlags.fromSharedAccessFlags(
-                                          Constants.ACC_PUBLIC
-                                              | Constants.ACC_STATIC
-                                              | Constants.ACC_SYNTHETIC,
-                                          false))
-                                  .setCode(
-                                      m ->
-                                          ForwardMethodBuilder.builder(factory)
-                                              .setStaticTarget(method, true)
-                                              .setStaticSource(m)
-                                              .build());
-                            });
-                instructions.replaceCurrentInstruction(
-                    new InvokeStatic(
-                        newProgramMethod.getReference(),
-                        invokeStatic.outValue(),
-                        invokeStatic.arguments()));
-                synchronized (synthesizedMethods) {
-                  // The synthetic dispatch class has static interface method invokes, so set
-                  // the class file version accordingly.
-                  newProgramMethod.getDefinition().upgradeClassFileVersion(CfVersion.V1_8);
-                  synthesizedMethods.add(newProgramMethod);
-                }
-              } else {
-                // When leaving static interface method invokes upgrade the class file version.
-                encodedMethod.upgradeClassFileVersion(CfVersion.V1_8);
-              }
-            } else {
+  private void rewriteInvokeDirect(
+      InvokeDirect invoke, InstructionListIterator instructions, ProgramMethod context) {
+    DexMethod method = invoke.getInvokedMethod();
+    if (factory.isConstructor(method)) {
+      return;
+    }
+
+    DexClass clazz = appView.definitionForHolder(method, context);
+    if (clazz == null) {
+      // Report missing class since we don't know if it is an interface.
+      warnMissingType(context, method.holder);
+      return;
+    }
+
+    if (!clazz.isInterface()) {
+      return;
+    }
+
+    if (clazz.isLibraryClass()) {
+      throw new CompilationError(
+          "Unexpected call to a private method "
+              + "defined in library class "
+              + clazz.toSourceString(),
+          getMethodOrigin(context.getReference()));
+    }
+
+    DexEncodedMethod directTarget = clazz.lookupMethod(method);
+    if (directTarget != null) {
+      // This can be a private instance method call. Note that the referenced
+      // method is expected to be in the current class since it is private, but desugaring
+      // may move some methods or their code into other classes.
+      instructions.replaceCurrentInstruction(
+          new InvokeStatic(
+              directTarget.isPrivateMethod()
+                  ? privateAsMethodOfCompanionClass(method)
+                  : defaultAsMethodOfCompanionClass(method),
+              invoke.outValue(),
+              invoke.arguments()));
+    } else {
+      // The method can be a default method in the interface hierarchy.
+      DexClassAndMethod virtualTarget =
+          appView.appInfoForDesugaring().lookupMaximallySpecificMethod(clazz, method);
+      if (virtualTarget != null) {
+        // This is a invoke-direct call to a virtual method.
+        instructions.replaceCurrentInstruction(
+            new InvokeStatic(
+                defaultAsMethodOfCompanionClass(virtualTarget.getDefinition().method),
+                invoke.outValue(),
+                invoke.arguments()));
+      } else {
+        // The below assert is here because a well-type program should have a target, but we
+        // cannot throw a compilation error, since we have no knowledge about the input.
+        assert false;
+      }
+    }
+  }
+
+  private void rewriteInvokeStatic(
+      InvokeStatic invoke, InstructionListIterator instructions, ProgramMethod context) {
+    DexMethod invokedMethod = invoke.getInvokedMethod();
+    if (appView.getSyntheticItems().isPendingSynthetic(invokedMethod.holder)) {
+      // We did not create this code yet, but it will not require rewriting.
+      return;
+    }
+
+    DexClass clazz = appView.definitionFor(invokedMethod.holder, context);
+    if (clazz == null) {
+      // NOTE: leave unchanged those calls to undefined targets. This may lead to runtime
+      // exception but we can not report it as error since it can also be the intended
+      // behavior.
+      if (invoke.getInterfaceBit()) {
+        leavingStaticInvokeToInterface(context);
+      }
+      warnMissingType(context, invokedMethod.holder);
+      return;
+    }
+
+    if (!clazz.isInterface()) {
+      if (invoke.getInterfaceBit()) {
+        leavingStaticInvokeToInterface(context);
+      }
+      return;
+    }
+
+    if (isNonDesugaredLibraryClass(clazz)) {
+      // NOTE: we intentionally don't desugar static calls into static interface
+      // methods coming from android.jar since it is only possible in case v24+
+      // version of android.jar is provided.
+      //
+      // We assume such calls are properly guarded by if-checks like
+      //    'if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.XYZ) { ... }'
+      //
+      // WARNING: This may result in incorrect code on older platforms!
+      // Retarget call to an appropriate method of companion class.
+
+      if (!options.canLeaveStaticInterfaceMethodInvokes()) {
+        // On pre-L devices static calls to interface methods result in verifier
+        // rejecting the whole class. We have to create special dispatch classes,
+        // so the user class is not rejected because it make this call directly.
+        // TODO(b/166247515): If this an incorrect invoke-static without the interface bit
+        //  we end up "fixing" the code and remove and ICCE error.
+        ProgramMethod newProgramMethod =
+            appView
+                .getSyntheticItems()
+                .createMethod(
+                    context.getHolder(),
+                    factory,
+                    syntheticMethodBuilder ->
+                        syntheticMethodBuilder
+                            .setProto(invokedMethod.proto)
+                            .setAccessFlags(
+                                MethodAccessFlags.fromSharedAccessFlags(
+                                    Constants.ACC_PUBLIC
+                                        | Constants.ACC_STATIC
+                                        | Constants.ACC_SYNTHETIC,
+                                    false))
+                            .setCode(
+                                m ->
+                                    ForwardMethodBuilder.builder(factory)
+                                        .setStaticTarget(invokedMethod, true)
+                                        .setStaticSource(m)
+                                        .build()));
+        instructions.replaceCurrentInstruction(
+            new InvokeStatic(
+                newProgramMethod.getReference(), invoke.outValue(), invoke.arguments()));
+        synchronized (synthesizedMethods) {
+          // The synthetic dispatch class has static interface method invokes, so set
+          // the class file version accordingly.
+          newProgramMethod.getDefinition().upgradeClassFileVersion(CfVersion.V1_8);
+          synthesizedMethods.add(newProgramMethod);
+        }
+      } else {
+        // When leaving static interface method invokes upgrade the class file version.
+        context.getDefinition().upgradeClassFileVersion(CfVersion.V1_8);
+      }
+    } else {
+      instructions.replaceCurrentInstruction(
+          new InvokeStatic(
+              staticAsMethodOfCompanionClass(invokedMethod),
+              invoke.outValue(),
+              invoke.arguments()));
+    }
+  }
+
+  private void rewriteInvokeSuper(
+      InvokeSuper invoke, InstructionListIterator instructions, ProgramMethod context) {
+    DexMethod invokedMethod = invoke.getInvokedMethod();
+    DexClass clazz = appView.definitionFor(invokedMethod.holder, context);
+    if (clazz == null) {
+      // NOTE: leave unchanged those calls to undefined targets. This may lead to runtime
+      // exception but we can not report it as error since it can also be the intended
+      // behavior.
+      warnMissingType(context, invokedMethod.holder);
+      return;
+    }
+
+    if (clazz.isInterface() && !clazz.isLibraryClass()) {
+      // NOTE: we intentionally don't desugar super calls into interface methods
+      // coming from android.jar since it is only possible in case v24+ version
+      // of android.jar is provided.
+      //
+      // We assume such calls are properly guarded by if-checks like
+      //    'if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.XYZ) { ... }'
+      //
+      // WARNING: This may result in incorrect code on older platforms!
+      // Retarget call to an appropriate method of companion class.
+      DexMethod amendedMethod = amendDefaultMethod(context.getHolder(), invokedMethod);
+      instructions.replaceCurrentInstruction(
+          new InvokeStatic(
+              defaultAsMethodOfCompanionClass(amendedMethod),
+              invoke.outValue(),
+              invoke.arguments()));
+    } else {
+      DexType emulatedItf = maximallySpecificEmulatedInterfaceOrNull(invokedMethod);
+      if (emulatedItf == null) {
+        if (clazz.isInterface() && appView.rewritePrefix.hasRewrittenType(clazz.type, appView)) {
+          DexClassAndMethod target =
+              appView.appInfoForDesugaring().lookupSuperTarget(invokedMethod, context);
+          if (target != null && target.getDefinition().isDefaultMethod()) {
+            DexClass holder = target.getHolder();
+            if (holder.isLibraryClass() && holder.isInterface()) {
               instructions.replaceCurrentInstruction(
-                  new InvokeStatic(staticAsMethodOfCompanionClass(method),
-                      invokeStatic.outValue(), invokeStatic.arguments()));
-            }
-          } else {
-            assert !clazz.isInterface();
-            if (invokeStatic.getInterfaceBit()) {
-              leavingStaticInvokeToInterface(context.getHolder(), encodedMethod);
+                  new InvokeStatic(
+                      defaultAsMethodOfCompanionClass(target.getReference(), factory),
+                      invoke.outValue(),
+                      invoke.arguments()));
             }
           }
-          continue;
         }
-
-        if (instruction.isInvokeSuper()) {
-          InvokeSuper invokeSuper = instruction.asInvokeSuper();
-          DexMethod invokedMethod = invokeSuper.getInvokedMethod();
-          DexClass clazz = appInfo.definitionFor(invokedMethod.holder);
-          if (clazz == null) {
-            // NOTE: leave unchanged those calls to undefined targets. This may lead to runtime
-            // exception but we can not report it as error since it can also be the intended
-            // behavior.
-            warnMissingType(encodedMethod.method, invokedMethod.holder);
-          } else if (clazz.isInterface() && !clazz.isLibraryClass()) {
-            // NOTE: we intentionally don't desugar super calls into interface methods
-            // coming from android.jar since it is only possible in case v24+ version
-            // of android.jar is provided.
-            //
-            // We assume such calls are properly guarded by if-checks like
-            //    'if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.XYZ) { ... }'
-            //
-            // WARNING: This may result in incorrect code on older platforms!
-            // Retarget call to an appropriate method of companion class.
-            DexMethod amendedMethod =
-                amendDefaultMethod(
-                    appInfo.definitionFor(encodedMethod.getHolderType()), invokedMethod);
+      } else {
+        // That invoke super may not resolve since the super method may not be present
+        // since it's in the emulated interface. We need to force resolution. If it resolves
+        // to a library method, then it needs to be rewritten.
+        // If it resolves to a program overrides, the invoke-super can remain.
+        DexClassAndMethod superTarget =
+            appView.appInfoForDesugaring().lookupSuperTarget(invoke.getInvokedMethod(), context);
+        if (superTarget != null && superTarget.isLibraryMethod()) {
+          // Rewriting is required because the super invoke resolves into a missing
+          // method (method is on desugared library). Find out if it needs to be
+          // retarget or if it just calls a companion class method and rewrite.
+          DexMethod retargetMethod =
+              options.desugaredLibraryConfiguration.retargetMethod(superTarget, appView);
+          if (retargetMethod == null) {
+            DexMethod originalCompanionMethod =
+                instanceAsMethodOfCompanionClass(
+                    superTarget.getReference(), DEFAULT_METHOD_PREFIX, factory);
+            DexMethod companionMethod =
+                factory.createMethod(
+                    getCompanionClassType(emulatedItf),
+                    factory.protoWithDifferentFirstParameter(
+                        originalCompanionMethod.proto, emulatedItf),
+                    originalCompanionMethod.name);
             instructions.replaceCurrentInstruction(
-                new InvokeStatic(defaultAsMethodOfCompanionClass(amendedMethod),
-                    invokeSuper.outValue(), invokeSuper.arguments()));
+                new InvokeStatic(companionMethod, invoke.outValue(), invoke.arguments()));
           } else {
-            DexType dexType = maximallySpecificEmulatedInterfaceOrNull(invokedMethod);
-            if (dexType == null) {
-              if (clazz.isInterface()
-                  && appView.rewritePrefix.hasRewrittenType(clazz.type, appView)) {
-                DexClassAndMethod target =
-                    appView.appInfoForDesugaring().lookupSuperTarget(invokedMethod, code.context());
-                if (target != null && target.getDefinition().isDefaultMethod()) {
-                  DexClass holder = target.getHolder();
-                  if (holder.isLibraryClass() && holder.isInterface()) {
-                    instructions.replaceCurrentInstruction(
-                        new InvokeStatic(
-                            defaultAsMethodOfCompanionClass(target.getReference(), factory),
-                            invokeSuper.outValue(),
-                            invokeSuper.arguments()));
-                  }
-                }
-              }
-            } else {
-              // That invoke super may not resolve since the super method may not be present
-              // since it's in the emulated interface. We need to force resolution. If it resolves
-              // to a library method, then it needs to be rewritten.
-              // If it resolves to a program overrides, the invoke-super can remain.
-              DexClassAndMethod superTarget =
-                  appView
-                      .appInfoForDesugaring()
-                      .lookupSuperTarget(invokeSuper.getInvokedMethod(), code.context());
-              if (superTarget != null && superTarget.isLibraryMethod()) {
-                // Rewriting is required because the super invoke resolves into a missing
-                // method (method is on desugared library). Find out if it needs to be
-                // retarget or if it just calls a companion class method and rewrite.
-                DexMethod retargetMethod =
-                    options.desugaredLibraryConfiguration.retargetMethod(superTarget, appView);
-                if (retargetMethod == null) {
-                  DexMethod originalCompanionMethod =
-                      instanceAsMethodOfCompanionClass(
-                          superTarget.getReference(), DEFAULT_METHOD_PREFIX, factory);
-                  DexMethod companionMethod =
-                      factory.createMethod(
-                          getCompanionClassType(dexType),
-                          factory.protoWithDifferentFirstParameter(
-                              originalCompanionMethod.proto, dexType),
-                          originalCompanionMethod.name);
-                  instructions.replaceCurrentInstruction(
-                      new InvokeStatic(
-                          companionMethod, invokeSuper.outValue(), invokeSuper.arguments()));
-                } else {
-                  instructions.replaceCurrentInstruction(
-                      new InvokeStatic(
-                          retargetMethod, invokeSuper.outValue(), invokeSuper.arguments()));
-                }
-              }
-            }
-          }
-          continue;
-        }
-
-        if (instruction.isInvokeDirect()) {
-          InvokeDirect invokeDirect = instruction.asInvokeDirect();
-          DexMethod method = invokeDirect.getInvokedMethod();
-          if (factory.isConstructor(method)) {
-            continue;
-          }
-
-          DexClass clazz = appInfo.definitionForHolder(method);
-          if (clazz == null) {
-            // Report missing class since we don't know if it is an interface.
-            warnMissingType(encodedMethod.method, method.holder);
-          } else if (clazz.isInterface()) {
-            if (clazz.isLibraryClass()) {
-              throw new CompilationError("Unexpected call to a private method " +
-                  "defined in library class " + clazz.toSourceString(),
-                  getMethodOrigin(encodedMethod.method));
-            }
-            DexEncodedMethod directTarget = clazz.lookupMethod(method);
-            if (directTarget != null) {
-              // This can be a private instance method call. Note that the referenced
-              // method is expected to be in the current class since it is private, but desugaring
-              // may move some methods or their code into other classes.
-              if (directTarget.isPrivateMethod()) {
-                instructions.replaceCurrentInstruction(
-                    new InvokeStatic(
-                        privateAsMethodOfCompanionClass(method),
-                        invokeDirect.outValue(),
-                        invokeDirect.arguments()));
-              } else {
-                instructions.replaceCurrentInstruction(
-                    new InvokeStatic(
-                        defaultAsMethodOfCompanionClass(method),
-                        invokeDirect.outValue(),
-                        invokeDirect.arguments()));
-              }
-            } else {
-              // The method can be a default method in the interface hierarchy.
-              DexClassAndMethod virtualTarget =
-                  appView.appInfoForDesugaring().lookupMaximallySpecificMethod(clazz, method);
-              if (virtualTarget != null) {
-                // This is a invoke-direct call to a virtual method.
-                instructions.replaceCurrentInstruction(
-                    new InvokeStatic(
-                        defaultAsMethodOfCompanionClass(virtualTarget.getDefinition().method),
-                        invokeDirect.outValue(),
-                        invokeDirect.arguments()));
-              } else {
-                // The below assert is here because a well-type program should have a target, but we
-                // cannot throw a compilation error, since we have no knowledge about the input.
-                assert false;
-              }
-            }
-          }
-        }
-
-        if (instruction.isInvokeVirtual() || instruction.isInvokeInterface()) {
-          InvokeMethod invokeMethod = instruction.asInvokeMethod();
-          DexMethod invokedMethod = invokeMethod.getInvokedMethod();
-          DexType dexType = maximallySpecificEmulatedInterfaceOrNull(invokedMethod);
-          if (dexType != null) {
-            // The call potentially ends up in a library class, in which case we need to rewrite,
-            // since the code may be in the desugared library.
-            SingleResolutionResult resolution =
-                appView
-                    .appInfoForDesugaring()
-                    .resolveMethod(invokedMethod, invokeMethod.getInterfaceBit())
-                    .asSingleResolution();
-            if (resolution != null
-                && (resolution.getResolvedHolder().isLibraryClass()
-                    || appView.options().isDesugaredLibraryCompilation())) {
-              rewriteCurrentInstructionToEmulatedInterfaceCall(
-                  dexType, invokedMethod, invokeMethod, instructions);
-            }
+            instructions.replaceCurrentInstruction(
+                new InvokeStatic(retargetMethod, invoke.outValue(), invoke.arguments()));
           }
         }
       }
+    }
+  }
+
+  private void rewriteInvokeInterfaceOrInvokeVirtual(
+      InvokeMethodWithReceiver invoke, InstructionListIterator instructions) {
+    DexMethod invokedMethod = invoke.getInvokedMethod();
+    DexType emulatedItf = maximallySpecificEmulatedInterfaceOrNull(invokedMethod);
+    if (emulatedItf == null) {
+      return;
+    }
+
+    // The call potentially ends up in a library class, in which case we need to rewrite, since the
+    // code may be in the desugared library.
+    SingleResolutionResult resolution =
+        appView
+            .appInfoForDesugaring()
+            .resolveMethod(invokedMethod, invoke.getInterfaceBit())
+            .asSingleResolution();
+    if (resolution != null
+        && (resolution.getResolvedHolder().isLibraryClass()
+            || appView.options().isDesugaredLibraryCompilation())) {
+      rewriteCurrentInstructionToEmulatedInterfaceCall(
+          emulatedItf, invokedMethod, invoke, instructions);
     }
   }
 
@@ -547,12 +586,13 @@ public final class InterfaceMethodRewriter {
       DexMethod invokedMethod,
       InvokeMethod invokeMethod,
       InstructionListIterator instructions) {
-    DexEncodedMethod defaultMethod = appView.definitionFor(emulatedItf).lookupMethod(invokedMethod);
-    if (defaultMethod != null && !dontRewrite(defaultMethod.method)) {
-      assert !defaultMethod.isAbstract();
+    DexClassAndMethod defaultMethod =
+        appView.definitionFor(emulatedItf).lookupClassMethod(invokedMethod);
+    if (defaultMethod != null && !dontRewrite(defaultMethod)) {
+      assert !defaultMethod.getAccessFlags().isAbstract();
       instructions.replaceCurrentInstruction(
           new InvokeStatic(
-              emulateInterfaceLibraryMethod(invokedMethod, emulatedItf, factory),
+              emulateInterfaceLibraryMethod(defaultMethod),
               invokeMethod.outValue(),
               invokeMethod.arguments()));
     }
@@ -570,10 +610,11 @@ public final class InterfaceMethodRewriter {
     return appView.rewritePrefix.hasRewrittenType(clazz.type, appView);
   }
 
-  boolean dontRewrite(DexMethod method) {
+  boolean dontRewrite(DexClassAndMethod method) {
     for (Pair<DexType, DexString> dontRewrite :
         options.desugaredLibraryConfiguration.getDontRewriteInvocation()) {
-      if (method.holder == dontRewrite.getFirst() && method.name == dontRewrite.getSecond()) {
+      if (method.getHolderType() == dontRewrite.getFirst()
+          && method.getName() == dontRewrite.getSecond()) {
         return true;
       }
     }
@@ -666,87 +707,82 @@ public final class InterfaceMethodRewriter {
     return false;
   }
 
-  private static DexMethod emulateInterfaceLibraryMethod(
-      DexMethod method, DexType holder, DexItemFactory factory) {
+  private DexMethod emulateInterfaceLibraryMethod(DexClassAndMethod method) {
     return factory.createMethod(
-        getEmulateLibraryInterfaceClassType(holder, factory),
-        factory.prependTypeToProto(holder, method.proto),
-        factory.createString(method.name.toString()));
+        getEmulateLibraryInterfaceClassType(method.getHolderType(), factory),
+        factory.prependTypeToProto(method.getHolderType(), method.getProto()),
+        method.getName());
   }
 
   private DexProgramClass synthesizeEmulateInterfaceLibraryClass(
       DexProgramClass theInterface, Map<DexType, List<DexType>> emulatedInterfacesHierarchy) {
     List<DexEncodedMethod> emulationMethods = new ArrayList<>();
-    for (DexEncodedMethod method : theInterface.methods()) {
-      if (method.isDefaultMethod()) {
-        DexMethod libraryMethod =
-            factory.createMethod(
-                emulatedInterfaces.get(theInterface.type), method.method.proto, method.method.name);
-        DexMethod originalCompanionMethod =
-            method.isStatic()
-                ? staticAsMethodOfCompanionClass(method.method)
-                : instanceAsMethodOfCompanionClass(method.method, DEFAULT_METHOD_PREFIX, factory);
-        DexMethod companionMethod =
-            factory.createMethod(
-                getCompanionClassType(theInterface.type),
-                originalCompanionMethod.proto,
-                originalCompanionMethod.name);
+    theInterface.forEachProgramMethodMatching(
+        DexEncodedMethod::isDefaultMethod,
+        method -> {
+          DexMethod libraryMethod =
+              method.getReference().withHolder(emulatedInterfaces.get(theInterface.type), factory);
+          DexMethod companionMethod =
+              method.getAccessFlags().isStatic()
+                  ? staticAsMethodOfCompanionClass(method)
+                  : defaultAsMethodOfCompanionClass(method);
 
-        // To properly emulate the library interface call, we need to compute the interfaces
-        // inheriting from the interface and manually implement the dispatch with instance of.
-        // The list guarantees that an interface is always after interfaces it extends,
-        // hence reverse iteration.
-        List<DexType> subInterfaces = emulatedInterfacesHierarchy.get(theInterface.type);
-        List<Pair<DexType, DexMethod>> extraDispatchCases = new ArrayList<>();
-        // In practice, there is usually a single case (except for tests),
-        // so we do not bother to make the following loop more clever.
-        Map<DexString, Map<DexType, DexType>> retargetCoreLibMember =
-            options.desugaredLibraryConfiguration.getRetargetCoreLibMember();
-        for (DexString methodName : retargetCoreLibMember.keySet()) {
-          if (method.method.name == methodName) {
-            for (DexType inType : retargetCoreLibMember.get(methodName).keySet()) {
-              DexClass inClass = appView.definitionFor(inType);
-              if (inClass != null && implementsInterface(inClass, theInterface.type)) {
-                extraDispatchCases.add(
-                    new Pair<>(
-                        inType,
-                        factory.createMethod(
-                            retargetCoreLibMember.get(methodName).get(inType),
-                            factory.protoWithDifferentFirstParameter(
-                                originalCompanionMethod.proto, inType),
-                            method.method.name)));
+          // To properly emulate the library interface call, we need to compute the interfaces
+          // inheriting from the interface and manually implement the dispatch with instance of.
+          // The list guarantees that an interface is always after interfaces it extends,
+          // hence reverse iteration.
+          List<DexType> subInterfaces = emulatedInterfacesHierarchy.get(theInterface.type);
+          List<Pair<DexType, DexMethod>> extraDispatchCases = new ArrayList<>();
+          // In practice, there is usually a single case (except for tests),
+          // so we do not bother to make the following loop more clever.
+          Map<DexString, Map<DexType, DexType>> retargetCoreLibMember =
+              options.desugaredLibraryConfiguration.getRetargetCoreLibMember();
+          for (DexString methodName : retargetCoreLibMember.keySet()) {
+            if (method.getName() == methodName) {
+              for (DexType inType : retargetCoreLibMember.get(methodName).keySet()) {
+                DexClass inClass = appView.definitionFor(inType);
+                if (inClass != null && implementsInterface(inClass, theInterface.type)) {
+                  extraDispatchCases.add(
+                      new Pair<>(
+                          inType,
+                          factory.createMethod(
+                              retargetCoreLibMember.get(methodName).get(inType),
+                              factory.protoWithDifferentFirstParameter(
+                                  companionMethod.proto, inType),
+                              method.getName())));
+                }
               }
             }
           }
-        }
-        if (subInterfaces != null) {
-          for (int i = subInterfaces.size() - 1; i >= 0; i--) {
-            DexClass subInterfaceClass = appView.definitionFor(subInterfaces.get(i));
-            assert subInterfaceClass != null; // Else computation of subInterface would have failed.
-            // if the method is implemented, extra dispatch is required.
-            DexEncodedMethod result = subInterfaceClass.lookupVirtualMethod(method.method);
-            if (result != null && !result.isAbstract()) {
-              extraDispatchCases.add(
-                  new Pair<>(
-                      subInterfaceClass.type,
-                      factory.createMethod(
-                          getCompanionClassType(subInterfaceClass.type),
-                          factory.protoWithDifferentFirstParameter(
-                              originalCompanionMethod.proto, subInterfaceClass.type),
-                          originalCompanionMethod.name)));
+          if (subInterfaces != null) {
+            for (int i = subInterfaces.size() - 1; i >= 0; i--) {
+              DexClass subInterfaceClass = appView.definitionFor(subInterfaces.get(i));
+              assert subInterfaceClass
+                  != null; // Else computation of subInterface would have failed.
+              // if the method is implemented, extra dispatch is required.
+              DexEncodedMethod result =
+                  subInterfaceClass.lookupVirtualMethod(method.getReference());
+              if (result != null && !result.isAbstract()) {
+                extraDispatchCases.add(
+                    new Pair<>(
+                        subInterfaceClass.type,
+                        factory.createMethod(
+                            getCompanionClassType(subInterfaceClass.type),
+                            factory.protoWithDifferentFirstParameter(
+                                companionMethod.proto, subInterfaceClass.type),
+                            companionMethod.name)));
+              }
             }
           }
-        }
-        emulationMethods.add(
-            DexEncodedMethod.toEmulateDispatchLibraryMethod(
-                method.getHolderType(),
-                emulateInterfaceLibraryMethod(method.method, method.getHolderType(), factory),
-                companionMethod,
-                libraryMethod,
-                extraDispatchCases,
-                appView));
-      }
-    }
+          emulationMethods.add(
+              DexEncodedMethod.toEmulateDispatchLibraryMethod(
+                  method.getHolderType(),
+                  emulateInterfaceLibraryMethod(method),
+                  companionMethod,
+                  libraryMethod,
+                  extraDispatchCases,
+                  appView));
+        });
     if (emulationMethods.isEmpty()) {
       return null;
     }
@@ -799,17 +835,17 @@ public final class InterfaceMethodRewriter {
     return factory.createSynthesizedType(elTypeDescriptor);
   }
 
-  private void reportStaticInterfaceMethodHandle(DexMethod referencedFrom, DexMethodHandle handle) {
+  private void reportStaticInterfaceMethodHandle(ProgramMethod context, DexMethodHandle handle) {
     if (handle.type.isInvokeStatic()) {
       DexClass holderClass = appView.definitionFor(handle.asMethod().holder);
       // NOTE: If the class definition is missing we can't check. Let it be handled as any other
       // missing call target.
       if (holderClass == null) {
-        warnMissingType(referencedFrom, handle.asMethod().holder);
+        warnMissingType(context, handle.asMethod().holder);
       } else if (holderClass.isInterface()) {
         throw new Unimplemented(
             "Desugaring of static interface method handle in `"
-                + referencedFrom.toSourceString()
+                + context.toSourceString()
                 + "` is not yet supported.");
       }
     }
@@ -829,15 +865,6 @@ public final class InterfaceMethodRewriter {
 
   DexType getCompanionClassType(DexType type) {
     return getCompanionClassType(type, factory);
-  }
-
-  // Gets the forwarding class for the interface `type`.
-  final DexType getDispatchClassType(DexType type) {
-    assert type.isClassType();
-    String descriptor = type.descriptor.toString();
-    String dcTypeDescriptor = descriptor.substring(0, descriptor.length() - 1)
-        + DISPATCH_CLASS_NAME_SUFFIX + ";";
-    return factory.createType(dcTypeDescriptor);
   }
 
   // Checks if `type` is a companion class.
@@ -864,19 +891,13 @@ public final class InterfaceMethodRewriter {
   }
 
   // Represent a static interface method as a method of companion class.
+  final DexMethod staticAsMethodOfCompanionClass(DexClassAndMethod method) {
+    return staticAsMethodOfCompanionClass(method.getReference());
+  }
+
   final DexMethod staticAsMethodOfCompanionClass(DexMethod method) {
     // No changes for static methods.
     return factory.createMethod(getCompanionClassType(method.holder), method.proto, method.name);
-  }
-
-  // Represent a static interface method as a method of dispatch class.
-  final DexMethod staticAsMethodOfDispatchClass(DexMethod method) {
-    return factory.createMethod(getDispatchClassType(method.holder), method.proto, method.name);
-  }
-
-  // Checks if the type ends with dispatch class suffix.
-  public static boolean hasDispatchClassSuffix(DexType clazz) {
-    return clazz.getName().endsWith(DISPATCH_CLASS_NAME_SUFFIX);
   }
 
   private static DexMethod instanceAsMethodOfCompanionClass(
@@ -911,6 +932,10 @@ public final class InterfaceMethodRewriter {
 
   DexMethod defaultAsMethodOfCompanionClass(DexMethod method) {
     return defaultAsMethodOfCompanionClass(method, factory);
+  }
+
+  DexMethod defaultAsMethodOfCompanionClass(DexClassAndMethod method) {
+    return defaultAsMethodOfCompanionClass(method.getReference(), factory);
   }
 
   // Represent a private instance interface method as a method of companion class.
@@ -1135,37 +1160,6 @@ public final class InterfaceMethodRewriter {
     return true;
   }
 
-  public static boolean isEmulatedInterfaceDispatch(AppView<?> appView, DexEncodedMethod method) {
-    // Answers true if this method is already managed through emulated interface dispatch.
-    Map<DexType, DexType> emulateLibraryInterface =
-        appView.options().desugaredLibraryConfiguration.getEmulateLibraryInterface();
-    if (emulateLibraryInterface.isEmpty()) {
-      return false;
-    }
-    DexMethod methodToFind = method.method;
-
-    // Look-up all superclass and interfaces, if an emulated interface is found, and it implements
-    // the method, answers true.
-    LinkedList<DexType> workList = new LinkedList<>();
-    workList.add(methodToFind.holder);
-    while (!workList.isEmpty()) {
-      DexType dexType = workList.removeFirst();
-      DexClass dexClass = appView.definitionFor(dexType);
-      assert dexClass != null; // It is a library class, or we are doing L8 compilation.
-      if (dexClass.isInterface() && emulateLibraryInterface.containsKey(dexType)) {
-        DexEncodedMethod dexEncodedMethod = dexClass.lookupMethod(methodToFind);
-        if (dexEncodedMethod != null) {
-          return true;
-        }
-      }
-      Collections.addAll(workList, dexClass.interfaces.values);
-      if (dexClass.superType != appView.dexItemFactory().objectType) {
-        workList.add(dexClass.superType);
-      }
-    }
-    return false;
-  }
-
   private boolean shouldIgnoreFromReports(DexType missing) {
     return appView.rewritePrefix.hasRewrittenType(missing, appView)
         || missing.isD8R8SynthesizedClassType()
@@ -1187,13 +1181,13 @@ public final class InterfaceMethodRewriter {
     options.warningMissingInterfaceForDesugar(classToDesugar, implementing, missing);
   }
 
-  private void warnMissingType(DexMethod referencedFrom, DexType missing) {
+  private void warnMissingType(ProgramMethod context, DexType missing) {
     // Companion/Emulated interface/Conversion classes for desugared library won't be missing,
     // they are in the desugared library.
     if (shouldIgnoreFromReports(missing)) {
       return;
     }
-    DexMethod method = appView.graphLens().getOriginalMethodSignature(referencedFrom);
+    DexMethod method = appView.graphLens().getOriginalMethodSignature(context.getReference());
     Origin origin = getMethodOrigin(method);
     MethodPosition position = new MethodPosition(method.asMethodReference());
     options.warningMissingTypeForDesugar(origin, position, missing, method);

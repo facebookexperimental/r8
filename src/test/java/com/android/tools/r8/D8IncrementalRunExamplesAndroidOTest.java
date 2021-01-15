@@ -96,7 +96,6 @@ public abstract class D8IncrementalRunExamplesAndroidOTest
           Assert.assertTrue(
               descriptor.contains(LambdaRewriter.LAMBDA_CLASS_NAME_PREFIX)
                   || descriptor.endsWith(InterfaceMethodRewriter.COMPANION_CLASS_NAME_SUFFIX + ";")
-                  || descriptor.endsWith(InterfaceMethodRewriter.DISPATCH_CLASS_NAME_SUFFIX + ";")
                   || descriptor.equals(TwrCloseResourceRewriter.UTILITY_CLASS_DESCRIPTOR)
                   || descriptor.contains(SyntheticItems.EXTERNAL_SYNTHETIC_CLASS_SEPARATOR)
                   || descriptor.equals(mainClassDescriptor));

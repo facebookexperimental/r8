@@ -442,8 +442,7 @@ public class IRConverter {
   }
 
   private void synthesizeTwrCloseResourceUtilityClass(
-      Builder<?> builder, ExecutorService executorService)
-      throws ExecutionException {
+      Builder<?> builder, ExecutorService executorService) throws ExecutionException {
     if (twrCloseResourceRewriter != null) {
       twrCloseResourceRewriter.synthesizeUtilityClass(builder, executorService, options);
     }

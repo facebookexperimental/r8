@@ -56,14 +56,14 @@ class NeedsIRDesugarUseRegistry extends UseRegistry {
   public void registerInvokeVirtual(DexMethod method) {
     registerBackportedMethodRewriting(method);
     registerLibraryRetargeting(method, false);
-    registerInterfaceMethodRewriting(method);
+    registerInterfaceMethodRewriting(method, false);
     registerDesugaredLibraryAPIConverter(method);
   }
 
   @Override
   public void registerInvokeDirect(DexMethod method) {
     registerLibraryRetargeting(method, false);
-    registerInterfaceMethodRewriting(method);
+    registerInterfaceMethodRewriting(method, false);
     registerDesugaredLibraryAPIConverter(method);
   }
 
@@ -73,10 +73,11 @@ class NeedsIRDesugarUseRegistry extends UseRegistry {
     }
   }
 
-  private void registerInterfaceMethodRewriting(DexMethod method) {
+  private void registerInterfaceMethodRewriting(DexMethod method, boolean isInvokeSuper) {
     if (!needsDesugarging) {
       needsDesugarging =
-          interfaceMethodRewriter != null && interfaceMethodRewriter.needsRewriting(method);
+          interfaceMethodRewriter != null
+              && interfaceMethodRewriter.needsRewriting(method, isInvokeSuper, appView);
     }
   }
 
@@ -103,14 +104,14 @@ class NeedsIRDesugarUseRegistry extends UseRegistry {
     }
     registerBackportedMethodRewriting(method);
     registerLibraryRetargeting(method, false);
-    registerInterfaceMethodRewriting(method);
+    registerInterfaceMethodRewriting(method, false);
     registerDesugaredLibraryAPIConverter(method);
   }
 
   @Override
   public void registerInvokeInterface(DexMethod method) {
     registerLibraryRetargeting(method, true);
-    registerInterfaceMethodRewriting(method);
+    registerInterfaceMethodRewriting(method, false);
     registerDesugaredLibraryAPIConverter(method);
   }
 
@@ -131,7 +132,7 @@ class NeedsIRDesugarUseRegistry extends UseRegistry {
   @Override
   public void registerInvokeSuper(DexMethod method) {
     registerLibraryRetargeting(method, false);
-    registerInterfaceMethodRewriting(method);
+    registerInterfaceMethodRewriting(method, true);
     registerDesugaredLibraryAPIConverter(method);
   }
 
