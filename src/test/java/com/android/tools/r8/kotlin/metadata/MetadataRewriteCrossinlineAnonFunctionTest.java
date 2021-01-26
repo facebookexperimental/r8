@@ -68,6 +68,8 @@ public class MetadataRewriteCrossinlineAnonFunctionTest extends KotlinMetadataTe
             .addProgramFiles(libJars.getForConfiguration(kotlinc, targetVersion))
             .addKeepAllClassesRule()
             .addKeepAllAttributes()
+            .addDontWarnJetBrainsNotNullAnnotation()
+            .addDontWarnKotlin()
             .compile()
             .writeToZip();
     Path output =

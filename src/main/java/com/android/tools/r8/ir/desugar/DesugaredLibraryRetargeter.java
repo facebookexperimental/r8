@@ -43,6 +43,7 @@ import com.android.tools.r8.ir.code.InvokeMethod;
 import com.android.tools.r8.ir.code.InvokeStatic;
 import com.android.tools.r8.ir.conversion.IRConverter;
 import com.android.tools.r8.origin.SynthesizedOrigin;
+import com.android.tools.r8.utils.InternalOptions;
 import com.android.tools.r8.utils.StringDiagnostic;
 import com.android.tools.r8.utils.WorkList;
 import com.android.tools.r8.utils.collections.DexClassAndMethodSet;
@@ -64,6 +65,7 @@ import java.util.function.Consumer;
 
 public class DesugaredLibraryRetargeter {
 
+  private static final String RETARGET_PACKAGE = "retarget/";
   public static final String DESUGAR_LIB_RETARGET_CLASS_NAME_PREFIX =
       "$r8$retargetLibraryMember$virtualDispatch";
 
@@ -76,12 +78,25 @@ public class DesugaredLibraryRetargeter {
   // Non final virtual library methods requiring generation of emulated dispatch.
   private final DexClassAndMethodSet emulatedDispatchMethods = DexClassAndMethodSet.create();
 
+  private final String packageAndClassDescriptorPrefix;
+
   public DesugaredLibraryRetargeter(AppView<?> appView) {
     this.appView = appView;
+    packageAndClassDescriptorPrefix =
+        getRetargetPackageAndClassPrefixDescriptor(appView.options().desugaredLibraryConfiguration);
     if (appView.options().desugaredLibraryConfiguration.getRetargetCoreLibMember().isEmpty()) {
       return;
     }
     new RetargetingSetup().setUpRetargeting();
+  }
+
+  public static boolean isRetargetType(DexType type, InternalOptions options) {
+    if (options.desugaredLibraryConfiguration == null) {
+      return false;
+    }
+    return type.toDescriptorString()
+        .startsWith(
+            getRetargetPackageAndClassPrefixDescriptor(options.desugaredLibraryConfiguration));
   }
 
   public static void checkForAssumedLibraryTypes(AppView<?> appView) {
@@ -347,8 +362,10 @@ public class DesugaredLibraryRetargeter {
   private class RetargetingSetup {
 
     private void setUpRetargeting() {
+      DesugaredLibraryConfiguration desugaredLibraryConfiguration =
+          appView.options().desugaredLibraryConfiguration;
       Map<DexString, Map<DexType, DexType>> retargetCoreLibMember =
-          appView.options().desugaredLibraryConfiguration.getRetargetCoreLibMember();
+          desugaredLibraryConfiguration.getRetargetCoreLibMember();
       for (DexString methodName : retargetCoreLibMember.keySet()) {
         for (DexType inType : retargetCoreLibMember.get(methodName).keySet()) {
           DexClass typeClass = appView.definitionFor(inType);
@@ -376,6 +393,22 @@ public class DesugaredLibraryRetargeter {
             }
           }
         }
+      }
+      if (desugaredLibraryConfiguration.isLibraryCompilation()) {
+        // TODO(b/177977763): This is only a workaround rewriting invokes of j.u.Arrays.deepEquals0
+        // to j.u.DesugarArrays.deepEquals0.
+        DexItemFactory itemFactory = appView.options().dexItemFactory();
+        DexString name = itemFactory.createString("deepEquals0");
+        DexProto proto =
+            itemFactory.createProto(
+                itemFactory.booleanType, itemFactory.objectType, itemFactory.objectType);
+        DexMethod source =
+            itemFactory.createMethod(
+                itemFactory.createType(itemFactory.arraysDescriptor), proto, name);
+        DexMethod target =
+            itemFactory.createMethod(
+                itemFactory.createType("Ljava/util/DesugarArrays;"), proto, name);
+        retargetLibraryMember.put(source, target);
       }
     }
 
@@ -668,14 +701,17 @@ public class DesugaredLibraryRetargeter {
     return dispatchTypeFor(method, "dispatchHolder");
   }
 
+  private static String getRetargetPackageAndClassPrefixDescriptor(
+      DesugaredLibraryConfiguration config) {
+    return "L"
+        + config.getSynthesizedLibraryClassesPackagePrefix()
+        + RETARGET_PACKAGE
+        + DESUGAR_LIB_RETARGET_CLASS_NAME_PREFIX;
+  }
+
   private DexType dispatchTypeFor(DexClassAndMethod method, String suffix) {
     String descriptor =
-        "L"
-            + appView
-                .options()
-                .desugaredLibraryConfiguration
-                .getSynthesizedLibraryClassesPackagePrefix()
-            + DESUGAR_LIB_RETARGET_CLASS_NAME_PREFIX
+        packageAndClassDescriptorPrefix
             + '$'
             + method.getHolderType().getName()
             + '$'

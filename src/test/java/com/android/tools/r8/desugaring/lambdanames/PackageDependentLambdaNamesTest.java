@@ -12,6 +12,7 @@ import com.android.tools.r8.transformers.ClassFileTransformer;
 import com.android.tools.r8.utils.BooleanUtils;
 import com.android.tools.r8.utils.DescriptorUtils;
 import com.android.tools.r8.utils.StringUtils;
+import com.android.tools.r8.utils.codeinspector.FoundClassSubject;
 import java.util.List;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -47,11 +48,11 @@ public class PackageDependentLambdaNamesTest extends TestBase {
     if (parameters.isDexRuntime()) {
       result.inspect(
           inspector -> {
-            // When in the same package we expect the two System.out::print lambdas to be shared.
+            // With the hygienic synthetics the reference to System.out::print can always be shared.
             assertEquals(
-                samePackage ? 2 : 3,
+                2,
                 inspector.allClasses().stream()
-                    .filter(c -> c.isSynthesizedJavaLambdaClass())
+                    .filter(FoundClassSubject::isSynthesizedJavaLambdaClass)
                     .count());
           });
     }
@@ -85,7 +86,6 @@ public class PackageDependentLambdaNamesTest extends TestBase {
     return transformer.transform();
   }
 
-  @FunctionalInterface
   public interface StringConsumer {
     void accept(String arg);
   }

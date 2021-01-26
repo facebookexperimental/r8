@@ -5,6 +5,8 @@ package com.android.tools.r8.shaking;
 
 import static com.android.tools.r8.graph.DexProgramClass.asProgramClassOrNull;
 import static com.android.tools.r8.graph.FieldAccessInfoImpl.MISSING_FIELD_ACCESS_INFO;
+import static com.android.tools.r8.ir.desugar.LambdaDescriptor.isLambdaMetafactoryMethod;
+import static com.android.tools.r8.ir.optimize.enums.UnboxedEnumMemberRelocator.ENUM_UNBOXING_UTILITY_CLASS_SUFFIX;
 import static com.android.tools.r8.naming.IdentifierNameStringUtils.identifyIdentifier;
 import static com.android.tools.r8.naming.IdentifierNameStringUtils.isReflectionMethod;
 import static com.android.tools.r8.shaking.AnnotationRemover.shouldKeepAnnotation;
@@ -19,6 +21,7 @@ import com.android.tools.r8.experimental.graphinfo.GraphConsumer;
 import com.android.tools.r8.graph.AppInfoWithClassHierarchy;
 import com.android.tools.r8.graph.AppView;
 import com.android.tools.r8.graph.CfCode;
+import com.android.tools.r8.graph.Code;
 import com.android.tools.r8.graph.DexAnnotation;
 import com.android.tools.r8.graph.DexAnnotationSet;
 import com.android.tools.r8.graph.DexApplication;
@@ -55,6 +58,7 @@ import com.android.tools.r8.graph.InnerClassAttribute;
 import com.android.tools.r8.graph.LookupLambdaTarget;
 import com.android.tools.r8.graph.LookupTarget;
 import com.android.tools.r8.graph.MethodAccessInfoCollection;
+import com.android.tools.r8.graph.NestMemberClassAttribute;
 import com.android.tools.r8.graph.ObjectAllocationInfoCollectionImpl;
 import com.android.tools.r8.graph.ProgramDefinition;
 import com.android.tools.r8.graph.ProgramField;
@@ -86,6 +90,8 @@ import com.android.tools.r8.ir.desugar.DesugaredLibraryAPIConverter;
 import com.android.tools.r8.ir.desugar.LambdaClass;
 import com.android.tools.r8.ir.desugar.LambdaDescriptor;
 import com.android.tools.r8.ir.desugar.LambdaRewriter;
+import com.android.tools.r8.ir.desugar.TwrCloseResourceRewriter;
+import com.android.tools.r8.ir.desugar.nest.NestBasedAccessDesugaring;
 import com.android.tools.r8.kotlin.KotlinMetadataEnqueuerExtension;
 import com.android.tools.r8.logging.Log;
 import com.android.tools.r8.naming.identifiernamestring.IdentifierNameStringLookupResult;
@@ -103,12 +109,15 @@ import com.android.tools.r8.shaking.ScopedDexMethodSet.AddMethodIfMoreVisibleRes
 import com.android.tools.r8.utils.Action;
 import com.android.tools.r8.utils.InternalOptions;
 import com.android.tools.r8.utils.InternalOptions.DesugarState;
+import com.android.tools.r8.utils.InternalOptions.OutlineOptions;
 import com.android.tools.r8.utils.IteratorUtils;
+import com.android.tools.r8.utils.ListUtils;
 import com.android.tools.r8.utils.MethodSignatureEquivalence;
 import com.android.tools.r8.utils.OptionalBool;
 import com.android.tools.r8.utils.Pair;
 import com.android.tools.r8.utils.SetUtils;
 import com.android.tools.r8.utils.StringDiagnostic;
+import com.android.tools.r8.utils.ThreadUtils;
 import com.android.tools.r8.utils.Timing;
 import com.android.tools.r8.utils.Visibility;
 import com.android.tools.r8.utils.WorkList;
@@ -118,6 +127,7 @@ import com.android.tools.r8.utils.collections.ProgramMethodSet;
 import com.android.tools.r8.utils.collections.SortedProgramMethodSet;
 import com.google.common.base.Equivalence.Wrapper;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Sets.SetView;
@@ -134,6 +144,7 @@ import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
@@ -162,7 +173,8 @@ public class Enqueuer {
   public enum Mode {
     INITIAL_TREE_SHAKING,
     FINAL_TREE_SHAKING,
-    MAIN_DEX_TRACING,
+    INITIAL_MAIN_DEX_TRACING,
+    FINAL_MAIN_DEX_TRACING,
     WHY_ARE_YOU_KEEPING;
 
     public boolean isInitialTreeShaking() {
@@ -177,8 +189,16 @@ public class Enqueuer {
       return isInitialTreeShaking() || isFinalTreeShaking();
     }
 
-    public boolean isTracingMainDex() {
-      return this == MAIN_DEX_TRACING;
+    public boolean isInitialMainDexTracing() {
+      return this == INITIAL_MAIN_DEX_TRACING;
+    }
+
+    public boolean isFinalMainDexTracing() {
+      return this == FINAL_MAIN_DEX_TRACING;
+    }
+
+    public boolean isMainDexTracing() {
+      return isInitialMainDexTracing() || isFinalMainDexTracing();
     }
 
     public boolean isWhyAreYouKeeping() {
@@ -198,10 +218,10 @@ public class Enqueuer {
   // Don't hold a direct pointer to app info (use appView).
   private AppInfoWithClassHierarchy appInfo;
   private final AppView<AppInfoWithClassHierarchy> appView;
+  private final ExecutorService executorService;
   private SubtypingInfo subtypingInfo;
   private final InternalOptions options;
   private RootSet rootSet;
-  private ProguardClassFilter dontWarnPatterns;
   private final EnqueuerUseRegistryFactory useRegistryFactory;
   private AnnotationRemover.Builder annotationRemoverBuilder;
   private final EnqueuerDefinitionSupplier enqueuerDefinitionSupplier =
@@ -283,7 +303,10 @@ public class Enqueuer {
   private final SetWithReason<DexEncodedMethod> targetedMethods;
 
   /** Set of methods that have invalid resolutions or lookups. */
-  private final Set<DexMethod> failedResolutionTargets;
+  private final Set<DexMethod> failedMethodResolutionTargets;
+
+  /** Set of methods that have invalid resolutions or lookups. */
+  private final Set<DexField> failedFieldResolutionTargets;
 
   /**
    * Set of program methods that are used as the bootstrap method for an invoke-dynamic instruction.
@@ -359,23 +382,32 @@ public class Enqueuer {
 
   private final LambdaRewriter lambdaRewriter;
   private final BackportedMethodRewriter backportRewriter;
+  private final NestBasedAccessDesugaring nestBasedAccessRewriter;
+  private final TwrCloseResourceRewriter twrCloseResourceRewriter;
+
   private final DesugaredLibraryConversionWrapperAnalysis desugaredLibraryWrapperAnalysis;
   private final Map<DexType, Pair<LambdaClass, ProgramMethod>> lambdaClasses =
       new IdentityHashMap<>();
   private final ProgramMethodMap<Map<DexCallSite, LambdaClass>> lambdaCallSites =
       ProgramMethodMap.create();
   private final Map<DexMethod, ProgramMethod> methodsWithBackports = new IdentityHashMap<>();
+  private final Map<DexMethod, ProgramMethod> methodsWithTwrCloseResource = new IdentityHashMap<>();
   private final Set<DexProgramClass> classesWithSerializableLambdas = Sets.newIdentityHashSet();
+  private final ProgramMethodSet pendingDesugaring = ProgramMethodSet.create();
+  private final MainDexTracingResult previousMainDexTracingResult;
 
   Enqueuer(
       AppView<? extends AppInfoWithClassHierarchy> appView,
+      ExecutorService executorService,
       SubtypingInfo subtypingInfo,
       GraphConsumer keptGraphConsumer,
-      Mode mode) {
+      Mode mode,
+      MainDexTracingResult previousMainDexTracingResult) {
     assert appView.appServices() != null;
     InternalOptions options = appView.options();
     this.appInfo = appView.appInfo();
     this.appView = appView.withClassHierarchy();
+    this.executorService = executorService;
     this.subtypingInfo = subtypingInfo;
     this.forceProguardCompatibility = options.forceProguardCompatibility;
     this.graphReporter = new GraphReporter(appView, keptGraphConsumer);
@@ -384,6 +416,7 @@ public class Enqueuer {
     this.options = options;
     this.useRegistryFactory = createUseRegistryFactory();
     this.workList = EnqueuerWorklist.createWorklist();
+    this.previousMainDexTracingResult = previousMainDexTracingResult;
 
     if (mode.isInitialOrFinalTreeShaking()) {
       if (options.protoShrinking().enableGeneratedMessageLiteShrinking) {
@@ -397,12 +430,19 @@ public class Enqueuer {
     // This set is only populated in edge cases due to multiple default interface methods.
     // The set is generally expected to be empty and in the unlikely chance it is not, it will
     // likely contain two methods. Thus the default capacity of 2.
-    failedResolutionTargets = SetUtils.newIdentityHashSet(2);
+    failedMethodResolutionTargets = SetUtils.newIdentityHashSet(2);
+    failedFieldResolutionTargets = SetUtils.newIdentityHashSet(0);
     liveMethods = new LiveMethodsSet(graphReporter::registerMethod);
     liveFields = new LiveFieldsSet(graphReporter::registerField);
     lambdaRewriter = options.desugarState == DesugarState.ON ? new LambdaRewriter(appView) : null;
+    nestBasedAccessRewriter =
+        options.shouldDesugarNests() ? new NestBasedAccessDesugaring(appView) : null;
     backportRewriter =
         options.desugarState == DesugarState.ON ? new BackportedMethodRewriter(appView) : null;
+    twrCloseResourceRewriter =
+        TwrCloseResourceRewriter.enableTwrCloseResourceDesugaring(options)
+            ? new TwrCloseResourceRewriter(appView)
+            : null;
 
     objectAllocationInfoCollection =
         ObjectAllocationInfoCollectionImpl.builder(mode.isInitialTreeShaking(), graphReporter);
@@ -517,10 +557,15 @@ public class Enqueuer {
   }
 
   private void recordMethodReference(DexMethod method, ProgramDefinition context) {
-    recordTypeReference(method.holder, context);
-    recordTypeReference(method.proto.returnType, context);
+    recordMethodReference(method, context, this::reportMissingClass);
+  }
+
+  private void recordMethodReference(
+      DexMethod method, ProgramDefinition context, Consumer<DexType> missingClassConsumer) {
+    recordTypeReference(method.holder, context, missingClassConsumer);
+    recordTypeReference(method.proto.returnType, context, missingClassConsumer);
     for (DexType type : method.proto.parameters.values) {
-      recordTypeReference(type, context);
+      recordTypeReference(type, context, missingClassConsumer);
     }
   }
 
@@ -905,13 +950,17 @@ public class Enqueuer {
   }
 
   void traceCallSite(DexCallSite callSite, ProgramMethod context) {
-    DexProgramClass bootstrapClass =
-        getProgramHolderOrNull(callSite.bootstrapMethod.asMethod(), context);
-    if (bootstrapClass != null) {
-      bootstrapMethods.add(callSite.bootstrapMethod.asMethod());
+    // Do not lookup java.lang.invoke.LambdaMetafactory when compiling for DEX to avoid reporting
+    // the class as missing.
+    if (options.isGeneratingClassFiles() || !isLambdaMetafactoryMethod(callSite, appInfo())) {
+      DexProgramClass bootstrapClass =
+          getProgramHolderOrNull(callSite.bootstrapMethod.asMethod(), context);
+      if (bootstrapClass != null) {
+        bootstrapMethods.add(callSite.bootstrapMethod.asMethod());
+      }
     }
 
-    LambdaDescriptor descriptor = LambdaDescriptor.tryInfer(callSite, appInfo, context);
+    LambdaDescriptor descriptor = LambdaDescriptor.tryInfer(callSite, appInfo(), context);
     if (descriptor == null) {
       return;
     }
@@ -921,7 +970,7 @@ public class Enqueuer {
       assert contextMethod.getCode().isCfCode() : "Unexpected input type with lambdas";
       CfCode code = contextMethod.getCode().asCfCode();
       if (code != null) {
-        LambdaClass lambdaClass = lambdaRewriter.getOrCreateLambdaClass(descriptor, context);
+        LambdaClass lambdaClass = lambdaRewriter.createLambdaClass(descriptor, context);
         lambdaClasses.put(lambdaClass.type, new Pair<>(lambdaClass, context));
         lambdaCallSites
             .computeIfAbsent(context, k -> new IdentityHashMap<>())
@@ -1234,12 +1283,24 @@ public class Enqueuer {
     return false;
   }
 
+  private boolean registerCloseResource(DexMethod invokedMethod, ProgramMethod context) {
+    if (twrCloseResourceRewriter != null
+        && TwrCloseResourceRewriter.isTwrCloseResourceMethod(
+            invokedMethod, appView.dexItemFactory())) {
+      methodsWithTwrCloseResource.putIfAbsent(context.getReference(), context);
+      return true;
+    }
+    return false;
+  }
+
   private void traceInvokeStatic(
       DexMethod invokedMethod, ProgramMethod context, KeepReason reason) {
     if (registerBackportInvoke(invokedMethod, context)) {
       return;
     }
-
+    if (registerCloseResource(invokedMethod, context)) {
+      return;
+    }
     DexItemFactory dexItemFactory = appView.dexItemFactory();
     if (dexItemFactory.classMethods.isReflectiveClassLookup(invokedMethod)
         || dexItemFactory.atomicFieldUpdaterMethods.isFieldUpdater(invokedMethod)) {
@@ -1659,18 +1720,38 @@ public class Enqueuer {
       return;
     }
 
+    assert !mode.isFinalMainDexTracing()
+            || !options.testing.checkForNotExpandingMainDexTracingResult
+            || previousMainDexTracingResult.isRoot(clazz)
+            || clazz.toSourceString().contains(ENUM_UNBOXING_UTILITY_CLASS_SUFFIX)
+            // TODO(b/177847090): Consider not outlining anything in main dex.
+            || clazz.toSourceString().contains(OutlineOptions.CLASS_NAME)
+        : "Class " + clazz.toSourceString() + " was not a main dex root in the first round";
+
     // Mark types in inner-class attributes referenced.
     for (InnerClassAttribute innerClassAttribute : clazz.getInnerClasses()) {
       recordTypeReference(innerClassAttribute.getInner(), clazz, this::ignoreMissingClass);
       recordTypeReference(innerClassAttribute.getOuter(), clazz, this::ignoreMissingClass);
     }
+
+    // Mark types in nest attributes referenced.
+    if (clazz.isNestHost()) {
+      for (NestMemberClassAttribute nestMemberClassAttribute :
+          clazz.getNestMembersClassAttributes()) {
+        recordTypeReference(nestMemberClassAttribute.getNestMember(), clazz);
+      }
+    } else {
+      recordTypeReference(clazz.getNestHost(), clazz);
+    }
+
     EnclosingMethodAttribute enclosingMethodAttribute = clazz.getEnclosingMethodAttribute();
     if (enclosingMethodAttribute != null) {
       DexMethod enclosingMethod = enclosingMethodAttribute.getEnclosingMethod();
       if (enclosingMethod != null) {
-        recordMethodReference(enclosingMethod, clazz);
+        recordMethodReference(enclosingMethod, clazz, this::ignoreMissingClass);
       } else {
-        recordTypeReference(enclosingMethodAttribute.getEnclosingClass(), clazz);
+        recordTypeReference(
+            enclosingMethodAttribute.getEnclosingClass(), clazz, this::ignoreMissingClass);
       }
     }
 
@@ -1680,7 +1761,7 @@ public class Enqueuer {
 
     KeepReason reason = KeepReason.reachableFromLiveType(clazz.type);
 
-    for (DexType iface : clazz.interfaces.values) {
+    for (DexType iface : clazz.getInterfaces()) {
       markInterfaceTypeAsLiveViaInheritanceClause(iface, clazz);
     }
 
@@ -1766,33 +1847,40 @@ public class Enqueuer {
 
     if (!appView.options().enableUnusedInterfaceRemoval
         || rootSet.noUnusedInterfaceRemoval.contains(type)
-        || mode.isTracingMainDex()) {
+        || mode.isMainDexTracing()) {
       markTypeAsLive(clazz, implementer);
-    } else {
-      if (liveTypes.contains(clazz)) {
-        // The interface is already live, so make sure to report this implements-edge.
-        graphReporter.reportClassReferencedFrom(clazz, implementer);
-      } else {
-        // No need to mark the type as live. If an interface type is only reachable via the
-        // inheritance clause of another type it can simply be removed from the inheritance clause.
-        // The interface is needed if it has a live default interface method or field, though.
-        // Therefore, we record that this implemented-by edge has not been reported, such that we
-        // can report it in the future if one its members becomes live.
-        WorkList<DexProgramClass> worklist = WorkList.newIdentityWorkList();
-        worklist.addIfNotSeen(clazz);
-        while (worklist.hasNext()) {
-          DexProgramClass current = worklist.next();
-          if (liveTypes.contains(current)) {
-            continue;
-          }
-          Set<DexProgramClass> implementors =
-              unusedInterfaceTypes.computeIfAbsent(current, ignore -> Sets.newIdentityHashSet());
-          if (implementors.add(implementer)) {
-            for (DexType iface : current.interfaces.values) {
-              DexProgramClass definition = getProgramClassOrNull(iface, current);
-              if (definition != null) {
-                worklist.addIfNotSeen(definition);
-              }
+      return;
+    }
+
+    if (liveTypes.contains(clazz)) {
+      // The interface is already live, so make sure to report this implements-edge.
+      graphReporter.reportClassReferencedFrom(clazz, implementer);
+      return;
+    }
+
+    // No need to mark the type as live. If an interface type is only reachable via the
+    // inheritance clause of another type it can simply be removed from the inheritance clause.
+    // The interface is needed if it has a live default interface method or field, though.
+    // Therefore, we record that this implemented-by edge has not been reported, such that we
+    // can report it in the future if one its members becomes live.
+    WorkList<DexProgramClass> worklist = WorkList.newIdentityWorkList();
+    worklist.addIfNotSeen(clazz);
+    while (worklist.hasNext()) {
+      DexProgramClass current = worklist.next();
+      if (liveTypes.contains(current)) {
+        continue;
+      }
+      Set<DexProgramClass> implementors =
+          unusedInterfaceTypes.computeIfAbsent(current, ignore -> Sets.newIdentityHashSet());
+      if (implementors.add(implementer)) {
+        for (DexType iface : current.getInterfaces()) {
+          DexProgramClass definition = getProgramClassOrNull(iface, current);
+          if (definition != null) {
+            if (definition.isPublic()
+                || implementer.getType().isSamePackage(definition.getType())) {
+              worklist.addIfNotSeen(definition);
+            } else {
+              markTypeAsLive(current, implementer);
             }
           }
         }
@@ -1859,6 +1947,7 @@ public class Enqueuer {
     FieldResolutionResult resolutionResult = appInfo.resolveField(field);
     if (resolutionResult.isFailedOrUnknownResolution()) {
       reportMissingField(field);
+      failedFieldResolutionTargets.add(field);
     }
     return resolutionResult;
   }
@@ -1870,7 +1959,8 @@ public class Enqueuer {
     ResolutionResult resolutionResult = appInfo.unsafeResolveMethodDueToDexFormat(method);
     if (resolutionResult.isFailedResolution()) {
       reportMissingMethod(method);
-      markFailedResolutionTargets(method, resolutionResult.asFailedResolution(), context, reason);
+      markFailedMethodResolutionTargets(
+          method, resolutionResult.asFailedResolution(), context, reason);
     }
     return resolutionResult.asSingleResolution();
   }
@@ -1882,7 +1972,8 @@ public class Enqueuer {
     ResolutionResult resolutionResult = appInfo.resolveMethod(method, interfaceInvoke);
     if (resolutionResult.isFailedResolution()) {
       reportMissingMethod(method);
-      markFailedResolutionTargets(method, resolutionResult.asFailedResolution(), context, reason);
+      markFailedMethodResolutionTargets(
+          method, resolutionResult.asFailedResolution(), context, reason);
     }
     return resolutionResult.asSingleResolution();
   }
@@ -2020,6 +2111,7 @@ public class Enqueuer {
     // TODO(zerny): Is it ok that we lookup in both the direct and virtual pool here?
     DexEncodedMethod encodedMethod = clazz.lookupMethod(reference);
     if (encodedMethod == null) {
+      failedMethodResolutionTargets.add(reference);
       reportMissingMethod(reference);
       return;
     }
@@ -2047,7 +2139,7 @@ public class Enqueuer {
   }
 
   private void ensureFromLibraryOrThrow(DexType type, DexLibraryClass context) {
-    if (mode.isTracingMainDex()) {
+    if (mode.isMainDexTracing()) {
       // b/72312389: android.jar contains parts of JUnit and most developers include JUnit in
       // their programs. This leads to library classes extending program classes. When tracing
       // main dex lists we allow this.
@@ -2071,7 +2163,7 @@ public class Enqueuer {
             }
           });
     }
-    if (dontWarnPatterns.matches(context.type)) {
+    if (appView.getDontWarnConfiguration().matches(context)) {
       // Ignore.
       return;
     }
@@ -2245,20 +2337,24 @@ public class Enqueuer {
   private void checkLambdaInterface(DexType itf, ProgramMethod context) {
     DexClass clazz = definitionFor(itf, context);
     if (clazz == null) {
-      StringDiagnostic message =
-          new StringDiagnostic(
-              "Lambda expression implements missing interface `" + itf.toSourceString() + "`",
-              context.getOrigin());
-      options.reporter.warning(message);
+      if (!appView.getDontWarnConfiguration().matches(itf)) {
+        StringDiagnostic message =
+            new StringDiagnostic(
+                "Lambda expression implements missing interface `" + itf.toSourceString() + "`",
+                context.getOrigin());
+        options.reporter.warning(message);
+      }
     } else if (!clazz.isInterface()) {
-      StringDiagnostic message =
-          new StringDiagnostic(
-              "Lambda expression expected to implement an interface, but found "
-                  + "`"
-                  + itf.toSourceString()
-                  + "`",
-              context.getOrigin());
-      options.reporter.warning(message);
+      if (!appView.getDontWarnConfiguration().matches(itf)) {
+        StringDiagnostic message =
+            new StringDiagnostic(
+                "Lambda expression expected to implement an interface, but found "
+                    + "`"
+                    + itf.toSourceString()
+                    + "`",
+                context.getOrigin());
+        options.reporter.warning(message);
+      }
     }
   }
 
@@ -2385,7 +2481,7 @@ public class Enqueuer {
   private void markLibraryAndClasspathMethodOverridesAsLive(
       InstantiatedObject instantiation, DexClass libraryClass) {
     assert libraryClass.isNotProgramClass();
-    if (mode.isTracingMainDex()) {
+    if (mode.isMainDexTracing()) {
       // Library roots must be specified for tracing of library methods. For classpath the expected
       // use case is that the classes will be classloaded, thus they should have no bearing on the
       // content of the main dex file.
@@ -2804,17 +2900,17 @@ public class Enqueuer {
     }
   }
 
-  private void markFailedResolutionTargets(
+  private void markFailedMethodResolutionTargets(
       DexMethod symbolicMethod,
       FailedResolutionResult failedResolution,
       ProgramDefinition context,
       KeepReason reason) {
-    failedResolutionTargets.add(symbolicMethod);
+    failedMethodResolutionTargets.add(symbolicMethod);
     failedResolution.forEachFailureDependency(
         method -> {
           DexProgramClass clazz = getProgramClassOrNull(method.getHolderType(), context);
           if (clazz != null) {
-            failedResolutionTargets.add(method.method);
+            failedMethodResolutionTargets.add(method.method);
             markMethodAsTargeted(new ProgramMethod(clazz, method), reason);
           }
         });
@@ -2860,7 +2956,7 @@ public class Enqueuer {
     // If invoke target is invalid (inaccessible or not an instance-method) record it and stop.
     DexClassAndMethod target = resolution.lookupInvokeSuperTarget(from.getHolder(), appInfo);
     if (target == null) {
-      failedResolutionTargets.add(resolution.getResolvedMethod().method);
+      failedMethodResolutionTargets.add(resolution.getResolvedMethod().method);
       return;
     }
 
@@ -2891,7 +2987,7 @@ public class Enqueuer {
   public Set<DexProgramClass> traceMainDex(
       RootSet rootSet, ExecutorService executorService, Timing timing) throws ExecutionException {
     assert analyses.isEmpty();
-    assert mode.isTracingMainDex();
+    assert mode.isMainDexTracing();
     this.rootSet = rootSet;
     // Translate the result of root-set computation into enqueuer actions.
     enqueueRootItems(rootSet.noShrinking);
@@ -2902,12 +2998,10 @@ public class Enqueuer {
 
   public AppInfoWithLiveness traceApplication(
       RootSet rootSet,
-      ProguardClassFilter dontWarnPatterns,
       ExecutorService executorService,
       Timing timing)
       throws ExecutionException {
     this.rootSet = rootSet;
-    this.dontWarnPatterns = dontWarnPatterns;
     // Translate the result of root-set computation into enqueuer actions.
     if (appView.options().getProguardConfiguration() != null
         && !options.kotlinOptimizationOptions().disableKotlinSpecificOptimizations) {
@@ -3012,6 +3106,8 @@ public class Enqueuer {
 
   private static class SyntheticAdditions {
 
+    List<ProgramMethod> desugaredMethods = new LinkedList<>();
+
     Map<DexType, Pair<DexProgramClass, ProgramMethod>> syntheticInstantiations =
         new IdentityHashMap<>();
 
@@ -3019,6 +3115,8 @@ public class Enqueuer {
         ProgramMethodMap.createLinked();
 
     Map<DexMethod, ProgramMethod> liveMethods = new IdentityHashMap<>();
+
+    Map<DexType, DexProgramClass> syntheticProgramClasses = new IdentityHashMap<>();
 
     Map<DexType, DexClasspathClass> syntheticClasspathClasses = new IdentityHashMap<>();
 
@@ -3031,24 +3129,27 @@ public class Enqueuer {
 
     boolean isEmpty() {
       boolean empty =
-          syntheticInstantiations.isEmpty()
+          desugaredMethods.isEmpty()
+              && syntheticInstantiations.isEmpty()
               && liveMethods.isEmpty()
+              && syntheticProgramClasses.isEmpty()
               && syntheticClasspathClasses.isEmpty();
       assert !empty || (liveMethodsWithKeepActions.isEmpty() && mainDexTypes.isEmpty());
       return empty;
     }
 
-    void addInstantiatedClass(
-        DexProgramClass clazz, ProgramMethod context, boolean isMainDexClass) {
+    void addInstantiatedClass(DexProgramClass clazz, ProgramMethod context) {
       assert !syntheticInstantiations.containsKey(clazz.type);
       syntheticInstantiations.put(clazz.type, new Pair<>(clazz, context));
-      if (isMainDexClass) {
-        mainDexTypes.add(clazz);
-      }
     }
 
     void addClasspathClass(DexClasspathClass clazz) {
       DexClasspathClass old = syntheticClasspathClasses.put(clazz.type, clazz);
+      assert old == null;
+    }
+
+    void addProgramClass(DexProgramClass clazz) {
+      DexProgramClass old = syntheticProgramClasses.put(clazz.type, clazz);
       assert old == null;
     }
 
@@ -3066,10 +3167,7 @@ public class Enqueuer {
 
     void amendApplication(Builder appBuilder) {
       assert !isEmpty();
-      for (Pair<DexProgramClass, ProgramMethod> clazzAndContext :
-          syntheticInstantiations.values()) {
-        appBuilder.addProgramClass(clazzAndContext.getFirst());
-      }
+      appBuilder.addProgramClasses(syntheticProgramClasses.values());
       appBuilder.addClasspathClasses(syntheticClasspathClasses.values());
     }
 
@@ -3081,8 +3179,13 @@ public class Enqueuer {
     void enqueueWorkItems(Enqueuer enqueuer) {
       assert !isEmpty();
       assert enqueuer.mode.isInitialTreeShaking();
+
       // All synthetic additions are initial tree shaking only. No need to track keep reasons.
       KeepReasonWitness fakeReason = enqueuer.graphReporter.fakeReportShouldNotBeUsed();
+
+      for (ProgramMethod desugaredMethod : desugaredMethods) {
+        enqueuer.workList.enqueueTraceCodeAction(desugaredMethod);
+      }
 
       liveMethodsWithKeepActions.forEach(
           item -> enqueuer.keepInfo.joinMethod(item.getFirst(), item.getSecond()));
@@ -3127,7 +3230,7 @@ public class Enqueuer {
     }
   }
 
-  private void synthesize() {
+  private void synthesize() throws ExecutionException {
     if (!mode.isInitialTreeShaking()) {
       return;
     }
@@ -3135,11 +3238,14 @@ public class Enqueuer {
     // In particular these additions are order independent, i.e., it does not matter which are
     // registered first and no dependencies may exist among them.
     SyntheticAdditions additions = new SyntheticAdditions();
+    desugar(additions);
     synthesizeInvokeSpecialBridges(additions);
     synthesizeInterfaceMethodBridges(additions);
     synthesizeLambdas(additions);
     synthesizeLibraryConversionWrappers(additions);
     synthesizeBackports(additions);
+    synthesizeNestConstructor(additions);
+    synthesizeTwrCloseResource(additions);
     if (additions.isEmpty()) {
       return;
     }
@@ -3159,6 +3265,50 @@ public class Enqueuer {
     // Finally once all synthesized items "exist" it is now safe to continue tracing. The new work
     // items are enqueued and the fixed point will continue once this subroutine returns.
     additions.enqueueWorkItems(this);
+  }
+
+  private void desugar(SyntheticAdditions additions) throws ExecutionException {
+    ThreadUtils.processItems(pendingDesugaring, this::desugar, executorService);
+    Iterables.addAll(additions.desugaredMethods, pendingDesugaring);
+    pendingDesugaring.clear();
+  }
+
+  private void desugar(ProgramMethod method) {
+    Code code = method.getDefinition().getCode();
+    if (!code.isCfCode()) {
+      appView
+          .options()
+          .reporter
+          .error(
+              new StringDiagnostic(
+                  "Unsupported attempt to desugar non-CF code",
+                  method.getOrigin(),
+                  method.getPosition()));
+      return;
+    }
+
+    CfCode cfCode = code.asCfCode();
+    List<CfInstruction> desugaredInstructions =
+        ListUtils.flatMap(
+            cfCode.getInstructions(),
+            instruction -> {
+              // TODO(b/177810578): Migrate other cf-to-cf based desugaring here, and assert that
+              //  that at most one instruction desugarer applies to each instruction.
+              if (nestBasedAccessRewriter != null) {
+                List<CfInstruction> replacement =
+                    nestBasedAccessRewriter.desugarInstruction(instruction, method, null);
+                if (replacement != null) {
+                  return replacement;
+                }
+              }
+              return null;
+            },
+            null);
+    if (desugaredInstructions != null) {
+      cfCode.setInstructions(desugaredInstructions);
+    } else {
+      assert false : "Expected code to be desugared";
+    }
   }
 
   private void synthesizeInvokeSpecialBridges(SyntheticAdditions additions) {
@@ -3183,6 +3333,22 @@ public class Enqueuer {
     }
   }
 
+  private void synthesizeNestConstructor(SyntheticAdditions additions) {
+    if (nestBasedAccessRewriter != null) {
+      DexProgramClass nestConstructor = nestBasedAccessRewriter.synthesizeNestConstructor();
+      if (nestConstructor != null) {
+        // TODO(b/177638147): use getSyntheticItems().createClass().
+        additions.addProgramClass(nestConstructor);
+      }
+    }
+  }
+
+  private void synthesizeTwrCloseResource(SyntheticAdditions additions) {
+    for (ProgramMethod method : methodsWithTwrCloseResource.values()) {
+      twrCloseResourceRewriter.rewriteCf(method, additions::addLiveMethod);
+    }
+  }
+
   private void synthesizeLambdas(SyntheticAdditions additions) {
     if (lambdaRewriter == null || lambdaClasses.isEmpty()) {
       assert lambdaCallSites.isEmpty();
@@ -3193,8 +3359,8 @@ public class Enqueuer {
       // Add all desugared classes to the application, main-dex list, and mark them instantiated.
       LambdaClass lambdaClass = lambdaClassAndContext.getFirst();
       ProgramMethod context = lambdaClassAndContext.getSecond();
-      DexProgramClass programClass = lambdaClass.getOrCreateLambdaClass();
-      additions.addInstantiatedClass(programClass, context, lambdaClass.addToMainDexList.get());
+      DexProgramClass programClass = lambdaClass.getLambdaProgramClass();
+      additions.addInstantiatedClass(programClass, context);
       // Mark the instance constructor targeted and live.
       DexEncodedMethod constructor = programClass.lookupDirectMethod(lambdaClass.constructor);
       KeepReason reason = KeepReason.instantiatedIn(context);
@@ -3299,11 +3465,12 @@ public class Enqueuer {
             appInfo.getMainDexClasses(),
             deadProtoTypes,
             appView.testing().enableExperimentalMissingClassesReporting
-                ? missingClassesBuilder.reportMissingClasses(options)
+                ? missingClassesBuilder.reportMissingClasses(appView)
                 : missingClassesBuilder.ignoreMissingClasses(),
             SetUtils.mapIdentityHashSet(liveTypes.getItems(), DexProgramClass::getType),
             Enqueuer.toDescriptorSet(targetedMethods.getItems()),
-            Collections.unmodifiableSet(failedResolutionTargets),
+            Collections.unmodifiableSet(failedMethodResolutionTargets),
+            Collections.unmodifiableSet(failedFieldResolutionTargets),
             Collections.unmodifiableSet(bootstrapMethods),
             Collections.unmodifiableSet(methodsTargetedByInvokeDynamic),
             Collections.unmodifiableSet(virtualMethodsTargetedByInvokeDirect),
@@ -3349,10 +3516,9 @@ public class Enqueuer {
     lambdaRewriter
         .getKnownLambdaClasses()
         .forEach(
-            (type, lambda) -> {
-              DexProgramClass synthesizedClass = lambda.getOrCreateLambdaClass();
+            lambda -> {
+              DexProgramClass synthesizedClass = lambda.getLambdaProgramClass();
               assert synthesizedClass != null;
-              assert synthesizedClass == appInfo().definitionForWithoutExistenceAssert(type);
               assert liveTypes.contains(synthesizedClass);
               if (synthesizedClass == null) {
                 return;
@@ -3835,7 +4001,8 @@ public class Enqueuer {
     processAnnotations(holder, method);
     definition.parameterAnnotationsList.forEachAnnotation(
         annotation -> processAnnotation(holder, method, annotation));
-    method.registerCodeReferences(useRegistryFactory.create(appView, method, this));
+
+    traceNonDesugaredCode(method);
 
     // Add all dependent members to the workqueue.
     enqueueRootItems(rootSet.getDependentItems(definition));
@@ -3844,6 +4011,21 @@ public class Enqueuer {
 
     // Notify analyses.
     analyses.forEach(analysis -> analysis.processNewlyLiveMethod(method, context));
+  }
+
+  private void traceNonDesugaredCode(ProgramMethod method) {
+    if (getMode().isInitialTreeShaking()) {
+      if (nestBasedAccessRewriter != null && nestBasedAccessRewriter.needsDesugaring(method)) {
+        pendingDesugaring.add(method);
+        return;
+      }
+    }
+
+    traceCode(method);
+  }
+
+  void traceCode(ProgramMethod method) {
+    method.registerCodeReferences(useRegistryFactory.create(appView, method, this));
   }
 
   private void checkMemberForSoftPinning(ProgramMember<?, ?> member) {
@@ -4510,7 +4692,7 @@ public class Enqueuer {
     }
 
     public DexClass definitionFor(DexType type, ProgramDefinition context) {
-      return enqueuer.definitionFor(type, context);
+      return enqueuer.definitionFor(type, context, enqueuer::ignoreMissingClass);
     }
   }
 }

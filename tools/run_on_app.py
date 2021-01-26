@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # Copyright (c) 2017, the R8 project authors. Please see the AUTHORS file
 # for details. All rights reserved. Use of this source code is governed by a
 # BSD-style license that can be found in the LICENSE file.
@@ -215,8 +215,7 @@ def GenerateAdditionalProguardConfiguration(temp, outdir):
 # Please add bug number for disabled permutations and please explicitly
 # do Bug: #BUG in the commit message of disabling to ensure re-enabling
 DISABLED_PERMUTATIONS = [
-  # (app, version, type), e.g., ('gmail', '180826.15', 'deploy'),
-  ('youtube', '15.09', 'deploy'), # b/150267318
+  # (app, version, type), e.g., ('gmail', '180826.15', 'deploy')
 ]
 
 def get_permutations():
@@ -232,7 +231,7 @@ def get_permutations():
   }
   # Check to ensure that we add all variants here.
   assert len(APPS) == len(data_providers)
-  for app, data in data_providers.iteritems():
+  for app, data in data_providers.items():
     for version in data.VERSIONS:
       for type in data.VERSIONS[version]:
         if (app, version, type) not in DISABLED_PERMUTATIONS:
@@ -276,9 +275,9 @@ def find_min_xmx(options, args):
   else:
     working = 1024 * 8
   exit_code = 0
-  range = options.find_min_xmx_range_size
+  range = int(options.find_min_xmx_range_size)
   while working - not_working > range:
-    next_candidate = working - ((working - not_working)/2)
+    next_candidate = int(working - ((working - not_working)/2))
     print('working: %s, non_working: %s, next_candidate: %s' %
           (working, not_working, next_candidate))
     extra_args = ['-Xmx%sM' % next_candidate]

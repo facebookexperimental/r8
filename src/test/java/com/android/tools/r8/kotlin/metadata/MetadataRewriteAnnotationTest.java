@@ -121,6 +121,8 @@ public class MetadataRewriteAnnotationTest extends KotlinMetadataTestBase {
                 ProguardKeepAttributes.RUNTIME_VISIBLE_ANNOTATIONS,
                 ProguardKeepAttributes.RUNTIME_VISIBLE_PARAMETER_ANNOTATIONS,
                 ProguardKeepAttributes.RUNTIME_VISIBLE_TYPE_ANNOTATIONS)
+            .addDontWarnJetBrainsNotNullAnnotation()
+            .addDontWarnKotlin()
             .compile()
             .inspect(this::inspect)
             .writeToZip();

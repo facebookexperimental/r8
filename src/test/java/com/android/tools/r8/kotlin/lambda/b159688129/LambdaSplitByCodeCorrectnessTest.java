@@ -71,6 +71,7 @@ public class LambdaSplitByCodeCorrectnessTest extends AbstractR8KotlinTestBase {
             options -> options.horizontalClassMergerOptions().disableKotlinLambdaMerging())
         .setMinApi(parameters.getApiLevel())
         .addKeepMainRule(PKG_NAME + ".SimpleKt")
+        .addDontWarnJetBrainsNotNullAnnotation()
         .applyIf(
             splitGroup,
             b ->

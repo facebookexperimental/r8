@@ -13,7 +13,6 @@ import static com.android.tools.r8.ir.code.Opcodes.INVOKE_VIRTUAL;
 
 import com.android.tools.r8.DesugarGraphConsumer;
 import com.android.tools.r8.cf.CfVersion;
-import com.android.tools.r8.dex.Constants;
 import com.android.tools.r8.errors.CompilationError;
 import com.android.tools.r8.errors.Unimplemented;
 import com.android.tools.r8.graph.AppInfo;
@@ -24,6 +23,7 @@ import com.android.tools.r8.graph.DexApplication.Builder;
 import com.android.tools.r8.graph.DexCallSite;
 import com.android.tools.r8.graph.DexClass;
 import com.android.tools.r8.graph.DexClassAndMethod;
+import com.android.tools.r8.graph.DexClasspathClass;
 import com.android.tools.r8.graph.DexEncodedField;
 import com.android.tools.r8.graph.DexEncodedMethod;
 import com.android.tools.r8.graph.DexItemFactory;
@@ -36,9 +36,13 @@ import com.android.tools.r8.graph.DexTypeList;
 import com.android.tools.r8.graph.DexValue;
 import com.android.tools.r8.graph.GenericSignature;
 import com.android.tools.r8.graph.GenericSignature.ClassSignature;
+import com.android.tools.r8.graph.GenericSignature.MethodTypeSignature;
 import com.android.tools.r8.graph.MethodAccessFlags;
+import com.android.tools.r8.graph.MethodCollection;
+import com.android.tools.r8.graph.ParameterAnnotationsList;
 import com.android.tools.r8.graph.ProgramMethod;
 import com.android.tools.r8.graph.ResolutionResult.SingleResolutionResult;
+import com.android.tools.r8.ir.analysis.type.TypeAnalysis;
 import com.android.tools.r8.ir.code.BasicBlock;
 import com.android.tools.r8.ir.code.IRCode;
 import com.android.tools.r8.ir.code.Instruction;
@@ -49,18 +53,24 @@ import com.android.tools.r8.ir.code.InvokeMethod;
 import com.android.tools.r8.ir.code.InvokeMethodWithReceiver;
 import com.android.tools.r8.ir.code.InvokeStatic;
 import com.android.tools.r8.ir.code.InvokeSuper;
+import com.android.tools.r8.ir.code.Value;
 import com.android.tools.r8.ir.conversion.IRConverter;
+import com.android.tools.r8.ir.conversion.MethodProcessingId;
+import com.android.tools.r8.ir.conversion.MethodProcessor;
 import com.android.tools.r8.ir.desugar.DefaultMethodsHelper.Collection;
 import com.android.tools.r8.ir.desugar.InterfaceProcessor.InterfaceProcessorNestedGraphLens;
+import com.android.tools.r8.ir.optimize.UtilityMethodsForCodeOptimizations;
+import com.android.tools.r8.ir.optimize.UtilityMethodsForCodeOptimizations.UtilityMethodForCodeOptimizations;
 import com.android.tools.r8.ir.synthetic.ForwardMethodBuilder;
 import com.android.tools.r8.origin.Origin;
 import com.android.tools.r8.origin.SynthesizedOrigin;
 import com.android.tools.r8.position.MethodPosition;
 import com.android.tools.r8.shaking.MainDexClasses;
+import com.android.tools.r8.synthesis.SyntheticNaming;
+import com.android.tools.r8.synthesis.SyntheticNaming.SyntheticKind;
 import com.android.tools.r8.utils.DescriptorUtils;
 import com.android.tools.r8.utils.InternalOptions;
 import com.android.tools.r8.utils.IterableUtils;
-import com.android.tools.r8.utils.ObjectUtils;
 import com.android.tools.r8.utils.Pair;
 import com.android.tools.r8.utils.StringDiagnostic;
 import com.android.tools.r8.utils.collections.SortedProgramMethodSet;
@@ -251,15 +261,21 @@ public final class InterfaceMethodRewriter {
 
   // Rewrites the references to static and default interface methods.
   // NOTE: can be called for different methods concurrently.
-  public void rewriteMethodReferences(IRCode code) {
+  public void rewriteMethodReferences(
+      IRCode code, MethodProcessor methodProcessor, MethodProcessingId methodProcessingId) {
     ProgramMethod context = code.context();
     if (synthesizedMethods.contains(context)) {
       return;
     }
 
+    Set<Value> affectedValues = Sets.newIdentityHashSet();
+    Set<BasicBlock> blocksToRemove = Sets.newIdentityHashSet();
     ListIterator<BasicBlock> blocks = code.listIterator();
     while (blocks.hasNext()) {
       BasicBlock block = blocks.next();
+      if (blocksToRemove.contains(block)) {
+        continue;
+      }
       InstructionListIterator instructions = block.listIterator(code);
       while (instructions.hasNext()) {
         Instruction instruction = instructions.next();
@@ -271,7 +287,15 @@ public final class InterfaceMethodRewriter {
             rewriteInvokeDirect(instruction.asInvokeDirect(), instructions, context);
             break;
           case INVOKE_STATIC:
-            rewriteInvokeStatic(instruction.asInvokeStatic(), instructions, context);
+            rewriteInvokeStatic(
+                instruction.asInvokeStatic(),
+                code,
+                blocks,
+                instructions,
+                affectedValues,
+                blocksToRemove,
+                methodProcessor,
+                methodProcessingId);
             break;
           case INVOKE_SUPER:
             rewriteInvokeSuper(instruction.asInvokeSuper(), instructions, context);
@@ -287,6 +311,14 @@ public final class InterfaceMethodRewriter {
         }
       }
     }
+
+    code.removeBlocks(blocksToRemove);
+
+    if (!affectedValues.isEmpty()) {
+      new TypeAnalysis(appView).narrowing(affectedValues);
+    }
+
+    assert code.isConsistentSSA();
   }
 
   private void rewriteInvokeCustom(InvokeCustom invoke, ProgramMethod context) {
@@ -327,16 +359,16 @@ public final class InterfaceMethodRewriter {
           getMethodOrigin(context.getReference()));
     }
 
-    DexEncodedMethod directTarget = clazz.lookupMethod(method);
+    DexClassAndMethod directTarget = clazz.lookupClassMethod(method);
     if (directTarget != null) {
       // This can be a private instance method call. Note that the referenced
       // method is expected to be in the current class since it is private, but desugaring
       // may move some methods or their code into other classes.
       instructions.replaceCurrentInstruction(
           new InvokeStatic(
-              directTarget.isPrivateMethod()
-                  ? privateAsMethodOfCompanionClass(method)
-                  : defaultAsMethodOfCompanionClass(method),
+              directTarget.getDefinition().isPrivateMethod()
+                  ? privateAsMethodOfCompanionClass(directTarget)
+                  : defaultAsMethodOfCompanionClass(directTarget),
               invoke.outValue(),
               invoke.arguments()));
     } else {
@@ -347,7 +379,7 @@ public final class InterfaceMethodRewriter {
         // This is a invoke-direct call to a virtual method.
         instructions.replaceCurrentInstruction(
             new InvokeStatic(
-                defaultAsMethodOfCompanionClass(virtualTarget.getDefinition().method),
+                defaultAsMethodOfCompanionClass(virtualTarget),
                 invoke.outValue(),
                 invoke.arguments()));
       } else {
@@ -359,13 +391,21 @@ public final class InterfaceMethodRewriter {
   }
 
   private void rewriteInvokeStatic(
-      InvokeStatic invoke, InstructionListIterator instructions, ProgramMethod context) {
+      InvokeStatic invoke,
+      IRCode code,
+      ListIterator<BasicBlock> blockIterator,
+      InstructionListIterator instructions,
+      Set<Value> affectedValues,
+      Set<BasicBlock> blocksToRemove,
+      MethodProcessor methodProcessor,
+      MethodProcessingId methodProcessingId) {
     DexMethod invokedMethod = invoke.getInvokedMethod();
     if (appView.getSyntheticItems().isPendingSynthetic(invokedMethod.holder)) {
       // We did not create this code yet, but it will not require rewriting.
       return;
     }
 
+    ProgramMethod context = code.context();
     DexClass clazz = appView.definitionFor(invokedMethod.holder, context);
     if (clazz == null) {
       // NOTE: leave unchanged those calls to undefined targets. This may lead to runtime
@@ -406,17 +446,13 @@ public final class InterfaceMethodRewriter {
             appView
                 .getSyntheticItems()
                 .createMethod(
+                    SyntheticNaming.SyntheticKind.STATIC_INTERFACE_CALL,
                     context.getHolder(),
                     factory,
                     syntheticMethodBuilder ->
                         syntheticMethodBuilder
                             .setProto(invokedMethod.proto)
-                            .setAccessFlags(
-                                MethodAccessFlags.fromSharedAccessFlags(
-                                    Constants.ACC_PUBLIC
-                                        | Constants.ACC_STATIC
-                                        | Constants.ACC_SYNTHETIC,
-                                    false))
+                            .setAccessFlags(MethodAccessFlags.createPublicStaticSynthetic())
                             .setCode(
                                 m ->
                                     ForwardMethodBuilder.builder(factory)
@@ -436,13 +472,43 @@ public final class InterfaceMethodRewriter {
         // When leaving static interface method invokes upgrade the class file version.
         context.getDefinition().upgradeClassFileVersion(CfVersion.V1_8);
       }
-    } else {
+      return;
+    }
+
+    SingleResolutionResult resolutionResult =
+        appView
+            .appInfoForDesugaring()
+            .resolveMethodOnInterface(clazz, invokedMethod)
+            .asSingleResolution();
+    if (resolutionResult != null && resolutionResult.getResolvedMethod().isStatic()) {
       instructions.replaceCurrentInstruction(
           new InvokeStatic(
-              staticAsMethodOfCompanionClass(invokedMethod),
+              staticAsMethodOfCompanionClass(resolutionResult.getResolutionPair()),
               invoke.outValue(),
               invoke.arguments()));
+      return;
     }
+
+    // Replace by throw new IncompatibleClassChangeError/NoSuchMethodError.
+    UtilityMethodForCodeOptimizations throwMethod =
+        resolutionResult == null
+            ? UtilityMethodsForCodeOptimizations.synthesizeThrowNoSuchMethodErrorMethod(
+                appView, context, methodProcessingId)
+            : UtilityMethodsForCodeOptimizations.synthesizeThrowIncompatibleClassChangeErrorMethod(
+                appView, context, methodProcessingId);
+    throwMethod.optimize(methodProcessor);
+
+    InvokeStatic throwInvoke =
+        InvokeStatic.builder()
+            .setMethod(throwMethod.getMethod())
+            .setFreshOutValue(appView, code)
+            .setPosition(invoke)
+            .build();
+    instructions.previous();
+    instructions.add(throwInvoke);
+    instructions.next();
+    instructions.replaceCurrentInstructionWithThrow(
+        appView, code, blockIterator, throwInvoke.outValue(), blocksToRemove, affectedValues);
   }
 
   private void rewriteInvokeSuper(
@@ -470,7 +536,7 @@ public final class InterfaceMethodRewriter {
       DexMethod amendedMethod = amendDefaultMethod(context.getHolder(), invokedMethod);
       instructions.replaceCurrentInstruction(
           new InvokeStatic(
-              defaultAsMethodOfCompanionClass(amendedMethod),
+              defaultAsMethodOfCompanionClass(amendedMethod, appView.dexItemFactory()),
               invoke.outValue(),
               invoke.arguments()));
     } else {
@@ -484,7 +550,7 @@ public final class InterfaceMethodRewriter {
             if (holder.isLibraryClass() && holder.isInterface()) {
               instructions.replaceCurrentInstruction(
                   new InvokeStatic(
-                      defaultAsMethodOfCompanionClass(target.getReference(), factory),
+                      defaultAsMethodOfCompanionClass(target),
                       invoke.outValue(),
                       invoke.arguments()));
             }
@@ -504,9 +570,7 @@ public final class InterfaceMethodRewriter {
           DexMethod retargetMethod =
               options.desugaredLibraryConfiguration.retargetMethod(superTarget, appView);
           if (retargetMethod == null) {
-            DexMethod originalCompanionMethod =
-                instanceAsMethodOfCompanionClass(
-                    superTarget.getReference(), DEFAULT_METHOD_PREFIX, factory);
+            DexMethod originalCompanionMethod = defaultAsMethodOfCompanionClass(superTarget);
             DexMethod companionMethod =
                 factory.createMethod(
                     getCompanionClassType(emulatedItf),
@@ -892,12 +956,11 @@ public final class InterfaceMethodRewriter {
 
   // Represent a static interface method as a method of companion class.
   final DexMethod staticAsMethodOfCompanionClass(DexClassAndMethod method) {
-    return staticAsMethodOfCompanionClass(method.getReference());
-  }
-
-  final DexMethod staticAsMethodOfCompanionClass(DexMethod method) {
-    // No changes for static methods.
-    return factory.createMethod(getCompanionClassType(method.holder), method.proto, method.name);
+    DexItemFactory dexItemFactory = appView.dexItemFactory();
+    DexType companionClassType = getCompanionClassType(method.getHolderType(), dexItemFactory);
+    DexMethod rewritten = method.getReference().withHolder(companionClassType, dexItemFactory);
+    recordCompanionClassReference(appView, method, rewritten);
+    return rewritten;
   }
 
   private static DexMethod instanceAsMethodOfCompanionClass(
@@ -930,12 +993,11 @@ public final class InterfaceMethodRewriter {
     return instanceAsMethodOfCompanionClass(method, DEFAULT_METHOD_PREFIX, factory);
   }
 
-  DexMethod defaultAsMethodOfCompanionClass(DexMethod method) {
-    return defaultAsMethodOfCompanionClass(method, factory);
-  }
-
-  DexMethod defaultAsMethodOfCompanionClass(DexClassAndMethod method) {
-    return defaultAsMethodOfCompanionClass(method.getReference(), factory);
+  final DexMethod defaultAsMethodOfCompanionClass(DexClassAndMethod method) {
+    DexItemFactory dexItemFactory = appView.dexItemFactory();
+    DexMethod rewritten = defaultAsMethodOfCompanionClass(method.getReference(), dexItemFactory);
+    recordCompanionClassReference(appView, method, rewritten);
+    return rewritten;
   }
 
   // Represent a private instance interface method as a method of companion class.
@@ -944,8 +1006,57 @@ public final class InterfaceMethodRewriter {
     return instanceAsMethodOfCompanionClass(method, PRIVATE_METHOD_PREFIX, factory);
   }
 
-  DexMethod privateAsMethodOfCompanionClass(DexMethod method) {
-    return privateAsMethodOfCompanionClass(method, factory);
+  private DexMethod privateAsMethodOfCompanionClass(DexClassAndMethod method) {
+    return privateAsMethodOfCompanionClass(method.getReference(), factory);
+  }
+
+  private static void recordCompanionClassReference(
+      AppView<?> appView, DexClassAndMethod method, DexMethod rewritten) {
+    // If the interface class is a program class, we shouldn't need to synthesize the companion
+    // class on the classpath.
+    if (method.getHolder().isProgramClass()) {
+      return;
+    }
+
+    // If the companion class does not exist, then synthesize it on the classpath.
+    DexClass companionClass = appView.definitionFor(rewritten.getHolderType());
+    if (companionClass == null) {
+      companionClass =
+          synthesizeEmptyCompanionClass(appView, rewritten.getHolderType(), method.getHolder());
+    }
+
+    // If the companion class is a classpath class, then synthesize the companion class method if it
+    // does not exist.
+    if (companionClass.isClasspathClass()) {
+      synthetizeCompanionClassMethodIfNotPresent(companionClass.asClasspathClass(), rewritten);
+    }
+  }
+
+  private static DexClasspathClass synthesizeEmptyCompanionClass(
+      AppView<?> appView, DexType type, DexClass context) {
+    return appView
+        .getSyntheticItems()
+        .createClasspathClass(
+            SyntheticKind.COMPANION_CLASS, type, context, appView.dexItemFactory());
+  }
+
+  private static void synthetizeCompanionClassMethodIfNotPresent(
+      DexClasspathClass companionClass, DexMethod method) {
+    MethodCollection methodCollection = companionClass.getMethodCollection();
+    synchronized (methodCollection) {
+      if (methodCollection.getMethod(method) == null) {
+        boolean d8R8Synthesized = true;
+        methodCollection.addDirectMethod(
+            new DexEncodedMethod(
+                method,
+                MethodAccessFlags.createPublicStaticSynthetic(),
+                MethodTypeSignature.noSignature(),
+                DexAnnotationSet.empty(),
+                ParameterAnnotationsList.empty(),
+                DexEncodedMethod.buildEmptyThrowingCfCode(method),
+                d8R8Synthesized));
+      }
+    }
   }
 
   private void renameEmulatedInterfaces() {
@@ -1128,6 +1239,7 @@ public final class InterfaceMethodRewriter {
       Builder<?> builder, Flavor flavour, Consumer<ProgramMethod> newSynthesizedMethodConsumer) {
     ClassProcessor processor = new ClassProcessor(appView, this, newSynthesizedMethodConsumer);
     // First we compute all desugaring *without* introducing forwarding methods.
+    assert appView.getSyntheticItems().verifyNonLegacySyntheticsAreCommitted();
     for (DexProgramClass clazz : builder.getProgramClasses()) {
       if (shouldProcess(clazz, flavour, false)) {
         if (appView.isAlreadyLibraryDesugared(clazz)) {
@@ -1165,11 +1277,8 @@ public final class InterfaceMethodRewriter {
         || missing.isD8R8SynthesizedClassType()
         || isCompanionClassType(missing)
         || emulatedInterfaces.containsValue(missing)
-        || ObjectUtils.getBooleanOrElse(
-            options.getProguardConfiguration(),
-            configuration -> configuration.getDontWarnPatterns().matches(missing),
-            false)
-        || options.desugaredLibraryConfiguration.getCustomConversions().containsValue(missing);
+        || options.desugaredLibraryConfiguration.getCustomConversions().containsValue(missing)
+        || appView.getDontWarnConfiguration().matches(missing);
   }
 
   void warnMissingInterface(DexClass classToDesugar, DexClass implementing, DexType missing) {

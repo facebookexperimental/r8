@@ -11,6 +11,7 @@ import static org.junit.Assume.assumeTrue;
 import com.android.tools.r8.CompilationFailedException;
 import com.android.tools.r8.TestParameters;
 import com.android.tools.r8.TestRuntime;
+import com.android.tools.r8.TestShrinkerBuilder;
 import com.android.tools.r8.ToolHelper;
 import com.android.tools.r8.ToolHelper.ArtCommandBuilder;
 import com.android.tools.r8.ToolHelper.ProcessResult;
@@ -247,6 +248,9 @@ public class FeatureSplitTest extends DesugaredLibraryTestBase {
                   SplitterTestBase.simpleSplitProvider(
                       builder, feature2Path, temp, FeatureClass2.class))
           .addKeepAllClassesRule()
+          .applyIf(
+              parameters.getApiLevel().isLessThan(AndroidApiLevel.N),
+              TestShrinkerBuilder::addDontWarnEmulatedLibraryClasses)
           .enableCoreLibraryDesugaring(parameters.getApiLevel(), keepRuleConsumer)
           .compile()
           .writeToZip(basePath);

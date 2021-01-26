@@ -5,7 +5,6 @@ package com.android.tools.r8.graph;
 
 import static com.android.tools.r8.graph.DexProgramClass.asProgramClassOrNull;
 import static com.android.tools.r8.horizontalclassmerging.ClassMerger.CLASS_ID_FIELD_NAME;
-import static com.android.tools.r8.ir.desugar.LambdaRewriter.LAMBDA_CLASS_NAME_PREFIX;
 import static com.android.tools.r8.ir.desugar.LambdaRewriter.LAMBDA_INSTANCE_FIELD_NAME;
 
 import com.android.tools.r8.errors.Unreachable;
@@ -573,6 +572,14 @@ public abstract class GraphLens {
     return builder.build();
   }
 
+  public ImmutableSet<DexField> rewriteFields(Set<DexField> fields) {
+    ImmutableSet.Builder<DexField> builder = ImmutableSet.builder();
+    for (DexField field : fields) {
+      builder.add(getRenamedFieldSignature(field));
+    }
+    return builder.build();
+  }
+
   public <T> ImmutableMap<DexField, T> rewriteFieldKeys(Map<DexField, T> map) {
     ImmutableMap.Builder<DexField, T> builder = ImmutableMap.builder();
     map.forEach((field, value) -> builder.put(getRenamedFieldSignature(field), value));
@@ -620,7 +627,7 @@ public abstract class GraphLens {
         // that they can be mapped back to the original program.
         DexField originalField = getOriginalFieldSignature(field.getReference());
         assert originalFields.contains(originalField)
-                || isD8R8SynthesizedField(originalField, dexItemFactory)
+                || isD8R8SynthesizedField(originalField, appView)
             : "Unable to map field `"
                 + field.getReference().toSourceString()
                 + "` back to original program";
@@ -638,16 +645,16 @@ public abstract class GraphLens {
     return true;
   }
 
-  private boolean isD8R8SynthesizedField(DexField field, DexItemFactory dexItemFactory) {
+  private boolean isD8R8SynthesizedField(DexField field, AppView<?> appView) {
     // TODO(b/167947782): Should be a general check to see if the field is D8/R8 synthesized
     //  instead of relying on field names.
-    if (field.match(dexItemFactory.objectMembers.clinitField)) {
+    if (field.match(appView.dexItemFactory().objectMembers.clinitField)) {
       return true;
     }
     if (field.getName().toSourceString().equals(CLASS_ID_FIELD_NAME)) {
       return true;
     }
-    if (field.getHolderType().toSourceString().contains(LAMBDA_CLASS_NAME_PREFIX)
+    if (appView.getSyntheticItems().isSyntheticClass(field.getHolderType())
         && field.getName().toSourceString().equals(LAMBDA_INSTANCE_FIELD_NAME)) {
       return true;
     }

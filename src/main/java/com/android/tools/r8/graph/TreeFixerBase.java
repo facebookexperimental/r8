@@ -4,6 +4,7 @@
 
 package com.android.tools.r8.graph;
 
+import com.android.tools.r8.shaking.AppInfoWithLiveness;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.IdentityHashMap;
@@ -15,7 +16,7 @@ public abstract class TreeFixerBase {
   private final AppView<?> appView;
   private final DexItemFactory dexItemFactory;
 
-  private Map<DexType, DexProgramClass> newProgramClasses = null;
+  private final Map<DexType, DexProgramClass> programClassCache = new IdentityHashMap<>();
   private final Map<DexType, DexProgramClass> synthesizedFromClasses = new IdentityHashMap<>();
   private final Map<DexProto, DexProto> protoFixupCache = new IdentityHashMap<>();
 
@@ -46,6 +47,34 @@ public abstract class TreeFixerBase {
     return to;
   }
 
+  /** Rewrite missing references */
+  public void recordFailedResolutionChanges() {
+    // In order for optimizations to correctly rewrite field and method references that do not
+    // resolve, we create a mapping from each failed resolution target to its reference reference.
+    if (!appView.appInfo().hasLiveness()) {
+      return;
+    }
+    AppInfoWithLiveness appInfoWithLiveness = appView.appInfo().withLiveness();
+    appInfoWithLiveness
+        .getFailedFieldResolutionTargets()
+        .forEach(
+            field -> {
+              DexField fixedUpField = fixupFieldReference(field);
+              if (field != fixedUpField) {
+                recordFieldChange(field, fixedUpField);
+              }
+            });
+    appInfoWithLiveness
+        .getFailedMethodResolutionTargets()
+        .forEach(
+            method -> {
+              DexMethod fixedUpMethod = fixupMethodReference(method);
+              if (method != fixedUpMethod) {
+                recordMethodChange(method, fixedUpMethod);
+              }
+            });
+  }
+
   /** Callback to allow custom handling when an encoded method changes. */
   public DexEncodedMethod recordMethodChange(DexEncodedMethod from, DexEncodedMethod to) {
     recordMethodChange(from.method, to.method);
@@ -53,13 +82,13 @@ public abstract class TreeFixerBase {
   }
 
   /** Fixup a collection of classes. */
-  public Collection<DexProgramClass> fixupClasses(Collection<DexProgramClass> classes) {
-    assert newProgramClasses == null;
-    newProgramClasses = new IdentityHashMap<>();
+  public List<DexProgramClass> fixupClasses(Collection<DexProgramClass> classes) {
+    List<DexProgramClass> newProgramClasses = new ArrayList<>();
     for (DexProgramClass clazz : classes) {
-      newProgramClasses.computeIfAbsent(clazz.getType(), ignore -> fixupClass(clazz));
+      newProgramClasses.add(
+          programClassCache.computeIfAbsent(clazz.getType(), ignore -> fixupClass(clazz)));
     }
-    return newProgramClasses.values();
+    return newProgramClasses;
   }
 
   // Should remain private as the correctness of the fixup requires the lazy 'newProgramClasses'.
@@ -70,7 +99,7 @@ public abstract class TreeFixerBase {
             clazz.getOriginKind(),
             clazz.getOrigin(),
             clazz.getAccessFlags(),
-            fixupType(clazz.superType),
+            clazz.superType == null ? null : fixupType(clazz.superType),
             fixupTypeList(clazz.interfaces),
             clazz.getSourceFile(),
             fixupNestHost(clazz.getNestHostClassAttribute()),
@@ -250,7 +279,6 @@ public abstract class TreeFixerBase {
   // Should remain private as its correctness relies on the setup of 'newProgramClasses'.
   private Collection<DexProgramClass> fixupSynthesizedFrom(
       Collection<DexProgramClass> synthesizedFrom) {
-    assert newProgramClasses != null;
     if (synthesizedFrom.isEmpty()) {
       return synthesizedFrom;
     }
@@ -261,7 +289,7 @@ public abstract class TreeFixerBase {
       //  is no longer in the application?
       Map<DexType, DexProgramClass> classes =
           appView.appInfo().definitionForWithoutExistenceAssert(clazz.getType()) != null
-              ? newProgramClasses
+              ? programClassCache
               : synthesizedFromClasses;
       DexProgramClass newClass =
           classes.computeIfAbsent(clazz.getType(), ignore -> fixupClass(clazz));

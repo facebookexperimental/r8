@@ -7,8 +7,6 @@ import com.android.tools.r8.graph.DexApplication;
 import com.android.tools.r8.graph.DexClass;
 import com.android.tools.r8.graph.DexType;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
 import java.util.Collection;
 import java.util.function.Function;
 
@@ -28,23 +26,19 @@ public class CommittedItems implements SyntheticDefinitionsProvider {
   // Immutable package accessible fields to allow SyntheticItems creation.
   final DexApplication application;
   final int nextSyntheticId;
-  final ImmutableSet<DexType> legacySyntheticTypes;
-  final ImmutableMap<DexType, SyntheticReference> syntheticItems;
-  final ImmutableList<DexType> committedTypes;
+  final CommittedSyntheticsCollection committed;
+  final ImmutableList<DexType> committedProgramTypes;
 
   CommittedItems(
       int nextSyntheticId,
       DexApplication application,
-      ImmutableSet<DexType> legacySyntheticTypes,
-      ImmutableMap<DexType, SyntheticReference> syntheticItems,
-      ImmutableList<DexType> committedTypes) {
-    assert verifyTypesAreInApp(application, legacySyntheticTypes);
-    assert verifyTypesAreInApp(application, syntheticItems.keySet());
+      CommittedSyntheticsCollection committed,
+      ImmutableList<DexType> committedProgramTypes) {
     this.nextSyntheticId = nextSyntheticId;
     this.application = application;
-    this.legacySyntheticTypes = legacySyntheticTypes;
-    this.syntheticItems = syntheticItems;
-    this.committedTypes = committedTypes;
+    this.committed = committed;
+    this.committedProgramTypes = committedProgramTypes;
+    committed.verifyTypesAreInApp(application);
   }
 
   // Conversion to a mutable synthetic items collection. Should only be used in AppInfo creation.
@@ -56,25 +50,18 @@ public class CommittedItems implements SyntheticDefinitionsProvider {
     return application;
   }
 
-  public Collection<DexType> getCommittedTypes() {
-    return committedTypes;
+  public Collection<DexType> getCommittedProgramTypes() {
+    return committedProgramTypes;
   }
 
   @Deprecated
   public Collection<DexType> getLegacySyntheticTypes() {
-    return legacySyntheticTypes;
+    return committed.getLegacyTypes();
   }
 
   @Override
   public DexClass definitionFor(DexType type, Function<DexType, DexClass> baseDefinitionFor) {
     // All synthetic types are committed to the application so lookup is just the base lookup.
     return baseDefinitionFor.apply(type);
-  }
-
-  private static boolean verifyTypesAreInApp(DexApplication app, Collection<DexType> types) {
-    for (DexType type : types) {
-      assert app.programDefinitionFor(type) != null : "Missing synthetic: " + type;
-    }
-    return true;
   }
 }

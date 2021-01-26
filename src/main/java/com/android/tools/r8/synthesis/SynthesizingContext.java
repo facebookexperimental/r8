@@ -7,6 +7,7 @@ import static com.android.tools.r8.utils.DescriptorUtils.getBinaryNameFromDescri
 import static com.android.tools.r8.utils.DescriptorUtils.getDescriptorFromClassBinaryName;
 
 import com.android.tools.r8.graph.AppView;
+import com.android.tools.r8.graph.DexClass;
 import com.android.tools.r8.graph.DexItemFactory;
 import com.android.tools.r8.graph.DexProgramClass;
 import com.android.tools.r8.graph.DexType;
@@ -14,6 +15,7 @@ import com.android.tools.r8.graph.GraphLens.NonIdentityGraphLens;
 import com.android.tools.r8.graph.ProgramDefinition;
 import com.android.tools.r8.origin.Origin;
 import com.android.tools.r8.shaking.MainDexClasses;
+import com.android.tools.r8.synthesis.SyntheticNaming.Phase;
 import java.util.Comparator;
 import java.util.Set;
 
@@ -38,6 +40,13 @@ class SynthesizingContext implements Comparable<SynthesizingContext> {
   private final DexType inputContextType;
   private final Origin inputContextOrigin;
 
+  static SynthesizingContext fromNonSyntheticInputContext(DexClass context) {
+    // A context that is itself non-synthetic is the single context, thus both the input context
+    // and synthesizing context coincide.
+    return new SynthesizingContext(
+        context.getContextType(), context.getContextType(), context.getOrigin());
+  }
+
   static SynthesizingContext fromNonSyntheticInputContext(ProgramDefinition context) {
     // A context that is itself non-synthetic is the single context, thus both the input context
     // and synthesizing context coincide.
@@ -51,6 +60,20 @@ class SynthesizingContext implements Comparable<SynthesizingContext> {
     // A context that is itself synthetic must denote a synthesizing context from which to ensure
     // hygiene. This synthesizing context type is encoded on the synthetic for intermediate builds.
     return new SynthesizingContext(synthesizingContextType, clazz.type, clazz.origin);
+  }
+
+  static SynthesizingContext fromSyntheticContextChange(
+      DexType syntheticType, SynthesizingContext oldContext, DexItemFactory factory) {
+    String descriptor = syntheticType.toDescriptorString();
+    int i = descriptor.indexOf(SyntheticNaming.getPhaseSeparator(Phase.INTERNAL));
+    if (i <= 0) {
+      assert false : "Unexpected synthetic without internal separator: " + syntheticType;
+      return null;
+    }
+    DexType newContext = factory.createType(descriptor.substring(0, i) + ";");
+    return newContext == oldContext.getSynthesizingContextType()
+        ? oldContext
+        : new SynthesizingContext(newContext, newContext, oldContext.inputContextOrigin);
   }
 
   private SynthesizingContext(
@@ -73,14 +96,6 @@ class SynthesizingContext implements Comparable<SynthesizingContext> {
 
   Origin getInputContextOrigin() {
     return inputContextOrigin;
-  }
-
-  DexType createHygienicType(String syntheticId, DexItemFactory factory) {
-    // If the context is a synthetic input, then use its annotated context as the hygienic context.
-    String contextDesc = synthesizingContextType.toDescriptorString();
-    String prefix = contextDesc.substring(0, contextDesc.length() - 1);
-    String suffix = SyntheticItems.INTERNAL_SYNTHETIC_CLASS_SEPARATOR + syntheticId + ";";
-    return factory.createType(prefix + suffix);
   }
 
   SynthesizingContext rewrite(NonIdentityGraphLens lens) {
@@ -127,15 +142,17 @@ class SynthesizingContext implements Comparable<SynthesizingContext> {
   void addIfDerivedFromMainDexClass(
       DexProgramClass externalSyntheticClass,
       MainDexClasses mainDexClasses,
-      Set<DexType> allMainDexTypes,
-      Set<DexType> derivedMainDexTypesToIgnore) {
+      Set<DexType> allMainDexTypes) {
     // The input context type (not the annotated context) determines if the derived class is to be
     // in main dex.
     // TODO(b/168584485): Once resolved allMainDexTypes == mainDexClasses.
     if (allMainDexTypes.contains(inputContextType)) {
       mainDexClasses.add(externalSyntheticClass);
-      // Mark the type as to be ignored when computing main-dex placement for legacy types.
-      derivedMainDexTypesToIgnore.add(inputContextType);
     }
+  }
+
+  @Override
+  public String toString() {
+    return "SynthesizingContext{" + getSynthesizingContextType() + "}";
   }
 }

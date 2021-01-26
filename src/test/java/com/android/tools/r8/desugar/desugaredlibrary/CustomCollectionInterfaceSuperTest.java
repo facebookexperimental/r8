@@ -15,7 +15,6 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.function.Predicate;
-import org.jetbrains.annotations.NotNull;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -82,6 +81,12 @@ public class CustomCollectionInterfaceSuperTest extends DesugaredLibraryTestBase
     testForR8(parameters.getBackend())
         .addInnerClasses(CustomCollectionInterfaceSuperTest.class)
         .addKeepMainRule(Main.class)
+        .applyIf(
+            parameters.getApiLevel().isLessThan(AndroidApiLevel.N),
+            builder ->
+                builder
+                    .addDontWarnEmulatedLibraryClass(Collection.class)
+                    .addDontWarnVivifiedClass(Predicate.class))
         .setMinApi(parameters.getApiLevel())
         .enableCoreLibraryDesugaring(parameters.getApiLevel(), keepRuleConsumer)
         .compile()
@@ -153,21 +158,18 @@ public class CustomCollectionInterfaceSuperTest extends DesugaredLibraryTestBase
       return false;
     }
 
-    @NotNull
     @Override
     public Iterator<E> iterator() {
       return Collections.emptyIterator();
     }
 
-    @NotNull
     @Override
     public Object[] toArray() {
       return new Object[0];
     }
 
-    @NotNull
     @Override
-    public <T> T[] toArray(@NotNull T[] a) {
+    public <T> T[] toArray(T[] a) {
       return a;
     }
 
@@ -182,22 +184,22 @@ public class CustomCollectionInterfaceSuperTest extends DesugaredLibraryTestBase
     }
 
     @Override
-    public boolean containsAll(@NotNull Collection<?> c) {
+    public boolean containsAll(Collection<?> c) {
       return false;
     }
 
     @Override
-    public boolean addAll(@NotNull Collection<? extends E> c) {
+    public boolean addAll(Collection<? extends E> c) {
       return false;
     }
 
     @Override
-    public boolean removeAll(@NotNull Collection<?> c) {
+    public boolean removeAll(Collection<?> c) {
       return false;
     }
 
     @Override
-    public boolean retainAll(@NotNull Collection<?> c) {
+    public boolean retainAll(Collection<?> c) {
       return false;
     }
 
@@ -226,21 +228,18 @@ public class CustomCollectionInterfaceSuperTest extends DesugaredLibraryTestBase
       return false;
     }
 
-    @NotNull
     @Override
     public Iterator<E> iterator() {
       return Collections.emptyIterator();
     }
 
-    @NotNull
     @Override
     public Object[] toArray() {
       return new Object[0];
     }
 
-    @NotNull
     @Override
-    public <T> T[] toArray(@NotNull T[] a) {
+    public <T> T[] toArray(T[] a) {
       return a;
     }
 
@@ -255,22 +254,22 @@ public class CustomCollectionInterfaceSuperTest extends DesugaredLibraryTestBase
     }
 
     @Override
-    public boolean containsAll(@NotNull Collection<?> c) {
+    public boolean containsAll(Collection<?> c) {
       return false;
     }
 
     @Override
-    public boolean addAll(@NotNull Collection<? extends E> c) {
+    public boolean addAll(Collection<? extends E> c) {
       return false;
     }
 
     @Override
-    public boolean removeAll(@NotNull Collection<?> c) {
+    public boolean removeAll(Collection<?> c) {
       return false;
     }
 
     @Override
-    public boolean retainAll(@NotNull Collection<?> c) {
+    public boolean retainAll(Collection<?> c) {
       return false;
     }
 
@@ -299,21 +298,18 @@ public class CustomCollectionInterfaceSuperTest extends DesugaredLibraryTestBase
       return false;
     }
 
-    @NotNull
     @Override
     public Iterator<E> iterator() {
       return Collections.emptyIterator();
     }
 
-    @NotNull
     @Override
     public Object[] toArray() {
       return new Object[0];
     }
 
-    @NotNull
     @Override
-    public <T> T[] toArray(@NotNull T[] a) {
+    public <T> T[] toArray(T[] a) {
       return a;
     }
 
@@ -328,22 +324,22 @@ public class CustomCollectionInterfaceSuperTest extends DesugaredLibraryTestBase
     }
 
     @Override
-    public boolean containsAll(@NotNull Collection<?> c) {
+    public boolean containsAll(Collection<?> c) {
       return false;
     }
 
     @Override
-    public boolean addAll(@NotNull Collection<? extends E> c) {
+    public boolean addAll(Collection<? extends E> c) {
       return false;
     }
 
     @Override
-    public boolean removeAll(@NotNull Collection<?> c) {
+    public boolean removeAll(Collection<?> c) {
       return false;
     }
 
     @Override
-    public boolean retainAll(@NotNull Collection<?> c) {
+    public boolean retainAll(Collection<?> c) {
       return false;
     }
 

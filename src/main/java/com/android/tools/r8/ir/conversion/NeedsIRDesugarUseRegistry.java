@@ -18,7 +18,7 @@ import com.android.tools.r8.ir.desugar.TwrCloseResourceRewriter;
 
 class NeedsIRDesugarUseRegistry extends UseRegistry {
 
-  private boolean needsDesugarging = false;
+  private boolean needsDesugaring = false;
   private final AppView appView;
   private final BackportedMethodRewriter backportedMethodRewriter;
   private final DesugaredLibraryRetargeter desugaredLibraryRetargeter;
@@ -40,15 +40,15 @@ class NeedsIRDesugarUseRegistry extends UseRegistry {
   }
 
   public boolean needsDesugaring() {
-    return needsDesugarging;
+    return needsDesugaring;
   }
 
   @Override
   public void registerInitClass(DexType type) {
-    if (!needsDesugarging
+    if (!needsDesugaring
         && desugaredLibraryAPIConverter != null
         && desugaredLibraryAPIConverter.canConvert(type)) {
-      needsDesugarging = true;
+      needsDesugaring = true;
     }
   }
 
@@ -67,31 +67,38 @@ class NeedsIRDesugarUseRegistry extends UseRegistry {
     registerDesugaredLibraryAPIConverter(method);
   }
 
+  private void registerTwrCloseResourceRewriting(DexMethod method) {
+    if (!needsDesugaring) {
+      needsDesugaring =
+          TwrCloseResourceRewriter.isTwrCloseResourceMethod(method, appView.dexItemFactory());
+    }
+  }
+
   private void registerBackportedMethodRewriting(DexMethod method) {
-    if (!needsDesugarging) {
-      needsDesugarging = backportedMethodRewriter.needsDesugaring(method);
+    if (!needsDesugaring) {
+      needsDesugaring = backportedMethodRewriter.needsDesugaring(method);
     }
   }
 
   private void registerInterfaceMethodRewriting(DexMethod method, boolean isInvokeSuper) {
-    if (!needsDesugarging) {
-      needsDesugarging =
+    if (!needsDesugaring) {
+      needsDesugaring =
           interfaceMethodRewriter != null
               && interfaceMethodRewriter.needsRewriting(method, isInvokeSuper, appView);
     }
   }
 
   private void registerDesugaredLibraryAPIConverter(DexMethod method) {
-    if (!needsDesugarging) {
-      needsDesugarging =
+    if (!needsDesugaring) {
+      needsDesugaring =
           desugaredLibraryAPIConverter != null
               && desugaredLibraryAPIConverter.shouldRewriteInvoke(method);
     }
   }
 
   private void registerLibraryRetargeting(DexMethod method, boolean b) {
-    if (!needsDesugarging) {
-      needsDesugarging =
+    if (!needsDesugaring) {
+      needsDesugaring =
           desugaredLibraryRetargeter != null
               && desugaredLibraryRetargeter.getRetargetedMethod(method, b) != null;
     }
@@ -99,9 +106,7 @@ class NeedsIRDesugarUseRegistry extends UseRegistry {
 
   @Override
   public void registerInvokeStatic(DexMethod method) {
-    if (!needsDesugarging) {
-      needsDesugarging = TwrCloseResourceRewriter.isSynthesizedCloseResourceMethod(method, appView);
-    }
+    registerTwrCloseResourceRewriting(method);
     registerBackportedMethodRewriting(method);
     registerLibraryRetargeting(method, false);
     registerInterfaceMethodRewriting(method, false);
@@ -118,7 +123,7 @@ class NeedsIRDesugarUseRegistry extends UseRegistry {
   @Override
   public void registerInvokeStatic(DexMethod method, boolean itf) {
     if (itf) {
-      needsDesugarging = true;
+      needsDesugaring = true;
     }
     registerInvokeStatic(method);
   }
@@ -126,7 +131,7 @@ class NeedsIRDesugarUseRegistry extends UseRegistry {
   @Override
   public void registerCallSite(DexCallSite callSite) {
     super.registerCallSite(callSite);
-    needsDesugarging = true;
+    needsDesugaring = true;
   }
 
   @Override

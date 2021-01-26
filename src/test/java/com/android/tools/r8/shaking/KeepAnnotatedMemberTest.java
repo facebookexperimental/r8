@@ -18,6 +18,7 @@ import com.android.tools.r8.TestParametersCollection;
 import com.android.tools.r8.ToolHelper;
 import com.android.tools.r8.utils.codeinspector.ClassSubject;
 import com.android.tools.r8.utils.codeinspector.CodeInspector;
+import com.android.tools.r8.utils.codeinspector.FoundClassSubject;
 import com.android.tools.r8.utils.codeinspector.FoundMethodSubject;
 import com.android.tools.r8.utils.codeinspector.MethodSubject;
 import com.android.tools.r8.utils.graphinspector.GraphInspector;
@@ -73,6 +74,9 @@ public class KeepAnnotatedMemberTest extends TestBase {
     testForR8(Backend.CF)
         .addProgramFiles(R8_JAR)
         .addKeepRules("-keep class * { @" + PRESENT_ANNOTATION + " *; }")
+        .addDontWarnGoogle()
+        .addDontWarnJavax()
+        .addDontWarn("org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement")
         .compileWithExpectedDiagnostics(
             diagnostics ->
                 diagnostics.assertErrorsMatch(diagnosticException(AssertionError.class)));
@@ -85,6 +89,9 @@ public class KeepAnnotatedMemberTest extends TestBase {
         .addProgramFiles(R8_JAR)
         .addKeepRules(
             "-keep class *", "-keepclassmembers class * { @" + PRESENT_ANNOTATION + " *; }")
+        .addDontWarnGoogle()
+        .addDontWarnJavax()
+        .addDontWarn("org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement")
         .compile();
   }
 
@@ -103,6 +110,9 @@ public class KeepAnnotatedMemberTest extends TestBase {
     testForR8(Backend.CF)
         .addProgramFiles(R8_JAR)
         .addKeepRules("-keepclasseswithmembers class * { @" + PRESENT_ANNOTATION + " *** *(...); }")
+        .addDontWarnGoogle()
+        .addDontWarnJavax()
+        .addDontWarn("org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement")
         .compile()
         .inspect(
             inspector -> {
@@ -192,6 +202,8 @@ public class KeepAnnotatedMemberTest extends TestBase {
             // TODO(b/132318609): Remove keep annotation once fixed.
             .addKeepClassRules(PRESENT_ANNOTATION)
             .addKeepRules("-keepclassmembers class * { @" + PRESENT_ANNOTATION + " *** *(...); }")
+            .addDontWarnGoogle()
+            .addDontWarnJavaxNullableAnnotation()
             .compile()
             .graphInspector();
 
@@ -208,6 +220,8 @@ public class KeepAnnotatedMemberTest extends TestBase {
                     + "-keepclassmembers class <1> { @"
                     + PRESENT_ANNOTATION
                     + " *** *(...); }")
+            .addDontWarnGoogle()
+            .addDontWarnJavaxNullableAnnotation()
             .compile()
             .graphInspector();
     assertRetainedClassesEqual(referenceInspector, ifThenKeepClassMembersInspector, false, false);
@@ -225,6 +239,8 @@ public class KeepAnnotatedMemberTest extends TestBase {
                     + "-keepclasseswithmembers class <1> { @"
                     + PRESENT_ANNOTATION
                     + " *** *(...); }")
+            .addDontWarnGoogle()
+            .addDontWarnJavaxNullableAnnotation()
             .compile()
             .graphInspector();
     assertRetainedClassesEqual(
@@ -245,6 +261,8 @@ public class KeepAnnotatedMemberTest extends TestBase {
                     + "-keep class <1> { @"
                     + PRESENT_ANNOTATION
                     + " *** <2>(...); }")
+            .addDontWarnGoogle()
+            .addDontWarnJavaxNullableAnnotation()
             .compile()
             .graphInspector();
     // TODO(b/159418523): Should the reference be equal to the result with the conditional rule?
@@ -259,12 +277,12 @@ public class KeepAnnotatedMemberTest extends TestBase {
     Set<String> referenceClasses =
         new TreeSet<>(
             referenceResult.codeInspector().allClasses().stream()
-                .map(c -> c.getOriginalName())
+                .map(FoundClassSubject::getOriginalName)
                 .collect(Collectors.toSet()));
 
     Set<String> conditionalClasses =
         conditionalResult.codeInspector().allClasses().stream()
-            .map(c -> c.getOriginalName())
+            .map(FoundClassSubject::getOriginalName)
             .collect(Collectors.toSet());
     {
       SetView<String> notInReference = Sets.difference(conditionalClasses, referenceClasses);

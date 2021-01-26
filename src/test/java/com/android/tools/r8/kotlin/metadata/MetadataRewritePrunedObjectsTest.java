@@ -75,6 +75,7 @@ public class MetadataRewritePrunedObjectsTest extends KotlinMetadataTestBase {
             .addProgramFiles(libJars.getForConfiguration(kotlinc, targetVersion))
             .addKeepRules("-keep class " + PKG_LIB + ".Sub { <init>(); *** kept(); }")
             .addKeepRuntimeVisibleAnnotations()
+            .addDontWarnKotlinMetadata()
             .noMinification()
             .compile()
             .inspect(this::checkPruned)

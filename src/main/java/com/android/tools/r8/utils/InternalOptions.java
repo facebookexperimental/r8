@@ -3,7 +3,6 @@
 // BSD-style license that can be found in the LICENSE file.
 package com.android.tools.r8.utils;
 
-import static com.google.common.base.Predicates.not;
 
 import com.android.tools.r8.ClassFileConsumer;
 import com.android.tools.r8.CompilationMode;
@@ -32,10 +31,11 @@ import com.android.tools.r8.experimental.graphinfo.GraphConsumer;
 import com.android.tools.r8.features.FeatureSplitConfiguration;
 import com.android.tools.r8.graph.AppView;
 import com.android.tools.r8.graph.DexClass;
-import com.android.tools.r8.graph.DexDefinition;
+import com.android.tools.r8.graph.DexClasspathClass;
 import com.android.tools.r8.graph.DexEncodedMethod;
 import com.android.tools.r8.graph.DexItem;
 import com.android.tools.r8.graph.DexItemFactory;
+import com.android.tools.r8.graph.DexLibraryClass;
 import com.android.tools.r8.graph.DexMethod;
 import com.android.tools.r8.graph.DexProgramClass;
 import com.android.tools.r8.graph.DexType;
@@ -48,6 +48,7 @@ import com.android.tools.r8.inspector.internal.InspectorImpl;
 import com.android.tools.r8.ir.code.IRCode;
 import com.android.tools.r8.ir.conversion.MethodProcessingId;
 import com.android.tools.r8.ir.desugar.DesugaredLibraryConfiguration;
+import com.android.tools.r8.ir.desugar.nest.Nest;
 import com.android.tools.r8.ir.optimize.Inliner;
 import com.android.tools.r8.ir.optimize.enums.EnumDataMap;
 import com.android.tools.r8.ir.optimize.lambda.kotlin.KotlinLambdaGroupIdFactory;
@@ -73,13 +74,7 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import java.io.IOException;
 import java.io.PrintStream;
-import java.lang.reflect.GenericSignatureFormatError;
-import java.nio.file.Files;
-import java.nio.file.InvalidPathException;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -307,6 +302,7 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
   // the actual catch handler allowed when inlining. Threshold found empirically by testing on
   // GMS Core.
   public int inliningControlFlowResolutionBlocksThreshold = 15;
+  public boolean enableSwitchRewriting = true;
   public boolean enableStringSwitchConversion = true;
   public int minimumStringSwitchSize = 3;
   public boolean enableEnumValueOptimization = true;
@@ -492,7 +488,7 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     if (testing.enableForceNestBasedAccessDesugaringForTest) {
       return true;
     }
-    return enableNestBasedAccessDesugaring && !canUseNestBasedAccess();
+    return !canUseNestBasedAccess();
   }
 
   public Set<String> extensiveLoggingFilter = getExtensiveLoggingFilter();
@@ -513,10 +509,6 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
   public boolean enableLambdaMerging = false;
   // Flag to turn on/off desugaring in D8/R8.
   public DesugarState desugarState = DesugarState.ON;
-  // Flag to turn on/off desugaring of invoke-special to a virtual method on the current class.
-  public boolean enableInvokeSpecialToVirtualMethodDesugaring = true;
-  // Flag to turn on/off JDK11+ nest-access control
-  public boolean enableNestBasedAccessDesugaring = true;
   // Flag to turn on/off reduction of nest to improve class merging optimizations.
   public boolean enableNestReduction = true;
   // Defines interface method rewriter behavior.
@@ -611,6 +603,7 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
   public boolean printCfg = false;
   public String printCfgFile;
   public boolean ignoreMissingClasses = false;
+
   // EXPERIMENTAL flag to get behaviour as close to Proguard as possible.
   public boolean forceProguardCompatibility = false;
   public AssertionConfigurationWithDefault assertionsConfiguration = null;
@@ -680,19 +673,6 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     return ImmutableSet.of();
   }
 
-  private static Set<String> getExtensiveFieldMinifierLoggingFilter() {
-    String property =
-        System.getProperty("com.android.tools.r8.extensiveFieldMinifierLoggingFilter");
-    if (property != null) {
-      ImmutableSet.Builder<String> builder = ImmutableSet.builder();
-      for (String method : property.split(";")) {
-        builder.add(method);
-      }
-      return builder.build();
-    }
-    return ImmutableSet.of();
-  }
-
   private static Set<String> getExtensiveInterfaceMethodMinifierLoggingFilter() {
     String property =
         System.getProperty("com.android.tools.r8.extensiveInterfaceMethodMinifierLoggingFilter");
@@ -700,40 +680,6 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
       ImmutableSet.Builder<String> builder = ImmutableSet.builder();
       for (String method : property.split(";")) {
         builder.add(method);
-      }
-      return builder.build();
-    }
-    return ImmutableSet.of();
-  }
-
-  private static Set<String> getNullableReceiverInliningFilter() {
-    String property = System.getProperty("com.android.tools.r8.nullableReceiverInliningFilter");
-    if (property != null) {
-      // The property is allowed to be either (1) a path to a file where each line is a method
-      // signature, or (2) a semicolon separated list of method signatures.
-      Path path = null;
-      try {
-        Path tmp = Paths.get(property);
-        if (Files.exists(tmp)) {
-          path = tmp;
-        }
-      } catch (InvalidPathException | NullPointerException e) {
-        // Ignore, treat as a semicolon separated list of method signatures.
-      }
-      ImmutableSet.Builder<String> builder = ImmutableSet.builder();
-      if (path != null) {
-        try {
-          Files.readAllLines(path).stream()
-              .map(String::trim)
-              .filter(not(String::isEmpty))
-              .forEach(builder::add);
-        } catch (IOException e) {
-          throw new RuntimeException(e);
-        }
-      } else {
-        for (String method : property.split(";")) {
-          builder.add(method);
-        }
       }
       return builder.build();
     }
@@ -845,119 +791,62 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
 
   private final Set<DexItem> invalidLibraryClasses = Sets.newConcurrentHashSet();
 
-  public void errorMissingClassMissingNestHost(DexClass compiledClass) {
-    throw reporter.fatalError(messageErrorMissingNestHost(compiledClass));
-  }
-
-  public void warningMissingClassMissingNestHost(DexClass compiledClass) {
-    if (compiledClass.isLibraryClass()) {
-      errorMissingClassMissingNestHost(compiledClass);
-    }
-    reporter.warning(new StringDiagnostic(messageWarningMissingNestHost(compiledClass)));
-  }
-
-  public void nestDesugaringWarningMissingNestHost(DexClass compiledClass) {
-    if (compiledClass.isLibraryClass()) {
-      errorMissingClassMissingNestHost(compiledClass);
-    }
-    reporter.warning(
+  public RuntimeException errorMissingNestHost(DexClass clazz) {
+    throw reporter.fatalError(
         new MissingNestHostNestDesugarDiagnostic(
-            compiledClass.getOrigin(),
-            Position.UNKNOWN,
-            messageWarningMissingNestHost(compiledClass)));
+            clazz.getOrigin(), Position.UNKNOWN, messageErrorMissingNestHost(clazz)));
   }
 
-  public void errorMissingClassIncompleteNest(List<DexType> nest, AppView<?> appView) {
-    throw reporter.fatalError(messageErrorIncompleteNest(nest, appView));
-  }
-
-  public void warningMissingClassIncompleteNest(List<DexType> nest, AppView<?> appView) {
-    for (DexType type : nest) {
-      DexClass clazz = appView.definitionFor(type);
-      if (clazz != null && clazz.isLibraryClass()) {
-        errorMissingClassIncompleteNest(nest, appView);
-        return;
-      }
-    }
-    reporter.warning(new StringDiagnostic(messageWarningIncompleteNest(nest, appView)));
-  }
-
-  public void nestDesugaringWarningIncompleteNest(List<DexType> nest, AppView<?> appView) {
-    DexClass availableClass = null;
-    for (DexType type : nest) {
-      DexClass clazz = appView.definitionFor(type);
-      if (clazz != null && clazz.isProgramClass()) {
-        availableClass = clazz;
-      } else if (clazz != null && clazz.isLibraryClass()) {
-        errorMissingClassIncompleteNest(nest, appView);
-        return;
-      }
-    }
-    assert availableClass != null;
-    reporter.warning(
-        new IncompleteNestNestDesugarDiagnosic(
-            availableClass.getOrigin(),
-            Position.UNKNOWN,
-            messageWarningIncompleteNest(nest, appView)));
-  }
-
-  private String messageErrorMissingNestHost(DexClass compiledClass) {
+  private static String messageErrorMissingNestHost(DexClass compiledClass) {
     String nestHostName = compiledClass.getNestHost().getName();
     return "Class "
         + compiledClass.type.getName()
         + " requires its nest host "
         + nestHostName
-        + " to be on program or class path. ";
+        + " to be on program or class path.";
   }
 
-  private String messageWarningMissingNestHost(DexClass compiledClass) {
-    return messageErrorMissingNestHost(compiledClass)
-        + "Class "
-        + compiledClass.type.getName()
-        + " is considered as not being part of any nest.";
+  public RuntimeException errorMissingNestMember(Nest nest) {
+    throw reporter.fatalError(
+        new IncompleteNestNestDesugarDiagnosic(
+            nest.getHostClass().getOrigin(), Position.UNKNOWN, messageErrorIncompleteNest(nest)));
   }
 
-  private String messageErrorIncompleteNest(List<DexType> nest, AppView<?> appView) {
-    List<String> programClassesFromNest = new ArrayList<>();
-    List<String> unavailableClasses = new ArrayList<>();
-    List<String> classPathClasses = new ArrayList<>();
-    List<String> libraryClasses = new ArrayList<>();
-    for (DexType type : nest) {
-      DexClass clazz = appView.definitionFor(appView.graphLens().lookupType(type));
-      if (clazz == null) {
-        unavailableClasses.add(type.getName());
-      } else if (clazz.isLibraryClass()) {
-        libraryClasses.add(type.getName());
-      } else if (clazz.isProgramClass()) {
-        programClassesFromNest.add(type.getName());
-      } else {
-        assert clazz.isClasspathClass();
-        classPathClasses.add(type.getName());
-      }
+  private static String messageErrorIncompleteNest(Nest nest) {
+    List<DexProgramClass> programClassesFromNest = new ArrayList<>();
+    List<DexClasspathClass> classpathClassesFromNest = new ArrayList<>();
+    List<DexLibraryClass> libraryClassesFromNest = new ArrayList<>();
+    nest.getHostClass()
+        .accept(
+            programClassesFromNest::add,
+            classpathClassesFromNest::add,
+            libraryClassesFromNest::add);
+    for (DexClass memberClass : nest.getMembers()) {
+      memberClass.accept(
+          programClassesFromNest::add, classpathClassesFromNest::add, libraryClassesFromNest::add);
     }
     StringBuilder stringBuilder =
         new StringBuilder("Compilation of classes ")
-            .append(String.join(", ", programClassesFromNest))
+            .append(StringUtils.join(", ", programClassesFromNest, DexClass::getTypeName))
             .append(" requires its nest mates ");
-    if (!unavailableClasses.isEmpty()) {
-      stringBuilder.append(String.join(", ", unavailableClasses)).append(" (unavailable) ");
+    if (nest.hasMissingMembers()) {
+      stringBuilder
+          .append(StringUtils.join(", ", nest.getMissingMembers(), DexType::getTypeName))
+          .append(" (unavailable) ");
     }
-    if (!libraryClasses.isEmpty()) {
-      stringBuilder.append(String.join(", ", unavailableClasses)).append(" (on library path) ");
+    if (!libraryClassesFromNest.isEmpty()) {
+      stringBuilder
+          .append(StringUtils.join(", ", libraryClassesFromNest, DexClass::getTypeName))
+          .append(" (on library path) ");
     }
     stringBuilder.append("to be on program or class path.");
-    if (!classPathClasses.isEmpty()) {
+    if (!classpathClassesFromNest.isEmpty()) {
       stringBuilder
           .append("(Classes ")
-          .append(String.join(", ", classPathClasses))
+          .append(StringUtils.join(", ", classpathClassesFromNest, DexClass::getTypeName))
           .append(" from the same nest are on class path).");
     }
     return stringBuilder.toString();
-  }
-
-  private String messageWarningIncompleteNest(List<DexType> nest, AppView<?> appView) {
-    return messageErrorIncompleteNest(nest, appView)
-        + " Unavailable classes are considered as not being part of the nest.";
   }
 
   public void warningMissingTypeForDesugar(
@@ -1032,31 +921,6 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
       warningInvalidDebugInfo.computeIfAbsent(
           origin, k -> new ArrayList<>()).add(new Pair<>(method, e.getMessage()));
     }
-  }
-
-  public void warningInvalidSignature(
-      DexDefinition item, Origin origin, String signature, GenericSignatureFormatError e) {
-    StringBuilder message = new StringBuilder("Invalid signature '");
-    message.append(signature);
-    message.append("' for ");
-    if (item.isDexClass()) {
-      message.append("class ");
-      message.append((item.asDexClass()).getType().toSourceString());
-    } else if (item.isDexEncodedField()) {
-      message.append("field ");
-      message.append(item.toSourceString());
-    } else {
-      assert item.isDexEncodedMethod();
-      message.append("method ");
-      message.append(item.toSourceString());
-    }
-    message.append(".");
-    message.append(System.lineSeparator());
-    message.append("Signature is ignored and will not be present in the output.");
-    message.append(System.lineSeparator());
-    message.append("Parser error: ");
-    message.append(e.getMessage());
-    reporter.warning(new StringDiagnostic(message.toString(), origin));
   }
 
   private final Box<Boolean> reportedExperimentClassFileVersion = new Box<>(false);
@@ -1280,6 +1144,7 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
 
     public boolean enable = true;
     public boolean enableConstructorMerging = true;
+    // TODO(b/174809311): Update or remove the option and its tests after new lambdas synthetics.
     public boolean enableJavaLambdaMerging = false;
     public boolean enableKotlinLambdaMerging = true;
 
@@ -1429,14 +1294,15 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     public boolean addCallEdgesForLibraryInvokes = false;
 
     public boolean allowCheckDiscardedErrors = false;
+    public boolean allowDexInputForTesting = false;
     public boolean allowInjectedAnnotationMethods = false;
     public boolean allowTypeErrors =
         !Version.isDevelopmentVersion()
             || System.getProperty("com.android.tools.r8.allowTypeErrors") != null;
     public boolean allowInvokeErrors = false;
+    public boolean allowUnnecessaryDontWarnWildcards = true;
+    public boolean allowUnusedDontWarnRules = true;
     public boolean disableL8AnnotationRemoval = false;
-    public boolean allowClassInlinerGracefulExit =
-        System.getProperty("com.android.tools.r8.disallowClassInlinerGracefulExit") == null;
     public boolean reportUnusedProguardConfigurationRules = false;
     public boolean alwaysUseExistingAccessInfoCollectionsInMemberRebinding = true;
     public boolean alwaysUsePessimisticRegisterAllocation = false;
@@ -1458,7 +1324,6 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     public Consumer<IRCode> irModifier = null;
     public int basicBlockMuncherIterationLimit = NO_LIMIT;
     public boolean dontReportFailingCheckDiscarded = false;
-    public boolean deterministicSortingBasedOnDexType = true;
     public PrintStream whyAreYouNotInliningConsumer = System.out;
     public boolean trackDesugaredAPIConversions =
         System.getProperty("com.android.tools.r8.trackDesugaredAPIConversions") != null;
@@ -1472,6 +1337,10 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     public boolean disableMappingToOriginalProgramVerification = false;
     public boolean allowInvalidCfAccessFlags =
         System.getProperty("com.android.tools.r8.allowInvalidCfAccessFlags") != null;
+    // TODO(b/177333791): Set to true
+    public boolean checkForNotExpandingMainDexTracingResult = false;
+
+    public boolean allowConflictingSyntheticTypes = false;
 
     // Flag to allow processing of resources in D8. A data resource consumer still needs to be
     // specified.
@@ -1603,6 +1472,16 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     return !isDesugaring() || hasMinApi(AndroidApiLevel.K);
   }
 
+  public boolean enableTryWithResourcesDesugaring() {
+    switch (tryWithResourcesDesugaring) {
+      case Off:
+        return false;
+      case Auto:
+        return !canUseSuppressedExceptions();
+    }
+    throw new Unreachable();
+  }
+
   public boolean canUsePrivateInterfaceMethods() {
     return !isDesugaring() || hasMinApi(AndroidApiLevel.N);
   }
@@ -1620,6 +1499,10 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     return desugarState == DesugarState.ON
         && interfaceMethodDesugaring == OffOrAuto.Auto
         && !canUseDefaultAndStaticInterfaceMethods();
+  }
+
+  public boolean isSwitchRewritingEnabled() {
+    return enableSwitchRewriting && !debug;
   }
 
   public boolean isStringSwitchConversionEnabled() {
@@ -2008,5 +1891,12 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
   // See also b/134304597 and b/124152497.
   public boolean canHaveDalvikIntUsedAsNonIntPrimitiveTypeBug() {
     return isGeneratingClassFiles() || minApiLevel < AndroidApiLevel.L.getLevel();
+  }
+
+  // The standard library prior to API 19 did not contain a ZipFile that implemented Closable.
+  //
+  // See b/177532008.
+  public boolean canHaveZipFileWithMissingCloseableBug() {
+    return isGeneratingClassFiles() || minApiLevel < AndroidApiLevel.K.getLevel();
   }
 }

@@ -4,6 +4,8 @@
 
 package com.android.tools.r8;
 
+import static com.android.tools.r8.ir.desugar.InterfaceMethodRewriter.COMPANION_CLASS_NAME_SUFFIX;
+
 import com.android.tools.r8.TestBase.Backend;
 import com.android.tools.r8.dexsplitter.SplitterTestBase.RunInterface;
 import com.android.tools.r8.references.MethodReference;
@@ -38,6 +40,10 @@ public abstract class TestShrinkerBuilder<
 
   TestShrinkerBuilder(TestState state, B builder, Backend backend) {
     super(state, builder, backend);
+  }
+
+  public boolean isProguardTestBuilder() {
+    return false;
   }
 
   @Override
@@ -90,7 +96,7 @@ public abstract class TestShrinkerBuilder<
 
   public abstract T addKeepRuleFiles(List<Path> files);
 
-  public T addKeepRuleFiles(Path... files) throws IOException {
+  public T addKeepRuleFiles(Path... files) {
     return addKeepRuleFiles(Arrays.asList(files));
   }
 
@@ -101,7 +107,150 @@ public abstract class TestShrinkerBuilder<
   }
 
   public T addDontWarn(Class<?> clazz) {
-    return addKeepRules("-dontwarn " + clazz.getTypeName());
+    return addDontWarn(clazz.getTypeName());
+  }
+
+  public T addDontWarn(String className) {
+    return addKeepRules("-dontwarn " + className);
+  }
+
+  public T addDontWarn(String... classes) {
+    for (String clazz : classes) {
+      addKeepRules("-dontwarn " + clazz);
+    }
+    return self();
+  }
+
+  @Deprecated
+  public T addDontWarnCompanionClass(Class<?> clazz) {
+    return addDontWarn(clazz.getTypeName() + COMPANION_CLASS_NAME_SUFFIX);
+  }
+
+  @Deprecated
+  public T addDontWarnCompanionClasses() {
+    return addDontWarn("**" + COMPANION_CLASS_NAME_SUFFIX);
+  }
+
+  @Deprecated
+  public T addDontWarnCompilerSynthesizedAnnotations() {
+    return addDontWarnCompilerSynthesizedClassAnnotation()
+        .addDontWarnCompilerSynthesizedClassMapAnnotation();
+  }
+
+  @Deprecated
+  public T addDontWarnCompilerSynthesizedClassAnnotation() {
+    return addDontWarn("com.android.tools.r8.annotations.SynthesizedClass");
+  }
+
+  @Deprecated
+  public T addDontWarnCompilerSynthesizedClassMapAnnotation() {
+    return addDontWarn("com.android.tools.r8.annotations.SynthesizedClassMap");
+  }
+
+  // TODO(b/176143558): Should not report missing classes for compiler synthesized classes.
+  @Deprecated
+  public T addDontWarnEmulatedLibraryClass(Class<?> clazz) {
+    return addDontWarn(clazz.getTypeName() + "$-EL");
+  }
+
+  // TODO(b/176143558): Should not report missing classes for compiler synthesized classes.
+  @Deprecated
+  public T addDontWarnEmulatedLibraryClasses() {
+    return addDontWarn("**$-EL");
+  }
+
+  public T addDontWarnGoogle() {
+    return addDontWarn("com.google.**");
+  }
+
+  public T addDontWarnJavax() {
+    return addDontWarn("javax.**");
+  }
+
+  public T addDontWarnJavaxNullableAnnotation() {
+    return addDontWarn("javax.annotation.Nullable");
+  }
+
+  public T addDontWarnJavaLangInvoke() {
+    return addDontWarn("java.lang.invoke.*");
+  }
+
+  public T addDontWarnJavaLangInvoke(String className) {
+    return addDontWarn("java.lang.invoke." + className);
+  }
+
+  public T addDontWarnJavaNioFile() {
+    return addDontWarn("java.nio.file.**");
+  }
+
+  // TODO(b/176133676): Investigate why there are missing class references to org.jetbrains
+  @Deprecated
+  public T addDontWarnJetBrains() {
+    return addDontWarn("org.jetbrains.**");
+  }
+
+  public T addDontWarnJetBrainsAnnotations() {
+    return addDontWarnJetBrainsNotNullAnnotation().addDontWarnJetBrainsNullableAnnotation();
+  }
+
+  public T addDontWarnJetBrainsNotNullAnnotation() {
+    return addDontWarn("org.jetbrains.annotations.NotNull");
+  }
+
+  public T addDontWarnJetBrainsNullableAnnotation() {
+    return addDontWarn("org.jetbrains.annotations.Nullable");
+  }
+
+  // TODO(b/176133676): Should not report missing classes for Kotlin classes.
+  @Deprecated
+  public T addDontWarnKotlin() {
+    return addDontWarn("kotlin.**");
+  }
+
+  // TODO(b/176133676): Should not report missing classes for Kotlin metadata.
+  @Deprecated
+  public T addDontWarnKotlinMetadata() {
+    return addDontWarn("kotlin.Metadata");
+  }
+
+  // TODO(b/176133676): Investigate kotlinx missing class references.
+  @Deprecated
+  public T addDontWarnKotlinx() {
+    return addDontWarn("kotlinx.**");
+  }
+
+  // TODO(b/176144018): Should not report compiler synthesized references as missing.
+  @Deprecated
+  public T addDontWarnRetargetLibraryMembers() {
+    return addDontWarn("j$.retarget.$r8$retargetLibraryMember**");
+  }
+
+  @Deprecated
+  public T addDontWarnRetargetLibraryMember(String suffix) {
+    return addDontWarn("j$.retarget.$r8$retargetLibraryMember$" + suffix);
+  }
+
+  // TODO(b/154849103): Should not warn about SerializedLambda.
+  @Deprecated
+  public T addDontWarnSerializedLambda() {
+    return addDontWarn("java.lang.invoke.SerializedLambda");
+  }
+
+  // TODO(b/176781593): Should not be reported missing.
+  @Deprecated
+  public T addDontWarnTimeConversions() {
+    return addDontWarn("java.time.TimeConversions");
+  }
+
+  // TODO(b/176144018): Should not report compiler synthesized references as missing.
+  @Deprecated
+  public T addDontWarnVivifiedClass(Class<?> clazz) {
+    return addDontWarn("$-vivified-$." + clazz.getTypeName());
+  }
+
+  @Deprecated
+  public T addDontWarnVivifiedClasses() {
+    return addDontWarn("$-vivified-$.**");
   }
 
   public T addKeepKotlinMetadata() {
@@ -325,6 +474,10 @@ public abstract class TestShrinkerBuilder<
 
   public final T addInliningAnnotations() {
     return addTestingAnnotation(NeverInline.class);
+  }
+
+  public final T addKeepAnnotation() {
+    return addTestingAnnotation(Keep.class);
   }
 
   public final T addMemberValuePropagationAnnotations() {

@@ -45,9 +45,9 @@ import com.android.tools.r8.graph.SubtypingInfo;
 import com.android.tools.r8.ir.analysis.type.ClassTypeElement;
 import com.android.tools.r8.ir.code.Invoke.Type;
 import com.android.tools.r8.ir.desugar.DesugaredLibraryAPIConverter;
+import com.android.tools.r8.ir.desugar.DesugaredLibraryRetargeter;
 import com.android.tools.r8.ir.desugar.InterfaceMethodRewriter;
 import com.android.tools.r8.ir.desugar.LambdaDescriptor;
-import com.android.tools.r8.ir.desugar.TwrCloseResourceRewriter;
 import com.android.tools.r8.synthesis.CommittedItems;
 import com.android.tools.r8.utils.CollectionUtils;
 import com.android.tools.r8.utils.InternalOptions;
@@ -89,8 +89,11 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
    */
   private final Set<DexMethod> targetedMethods;
 
-  /** Set of targets that lead to resolution errors, such as non-existing or invalid targets. */
-  private final Set<DexMethod> failedResolutionTargets;
+  /** Method targets that lead to resolution errors such as non-existing or invalid targets. */
+  private final Set<DexMethod> failedMethodResolutionTargets;
+
+  /** Field targets that lead to resolution errors, such as non-existing or invalid targets. */
+  private final Set<DexField> failedFieldResolutionTargets;
 
   /**
    * Set of program methods that are used as the bootstrap method for an invoke-dynamic instruction.
@@ -197,7 +200,8 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
       MissingClasses missingClasses,
       Set<DexType> liveTypes,
       Set<DexMethod> targetedMethods,
-      Set<DexMethod> failedResolutionTargets,
+      Set<DexMethod> failedMethodResolutionTargets,
+      Set<DexField> failedFieldResolutionTargets,
       Set<DexMethod> bootstrapMethods,
       Set<DexMethod> methodsTargetedByInvokeDynamic,
       Set<DexMethod> virtualMethodsTargetedByInvokeDirect,
@@ -235,7 +239,8 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
     this.deadProtoTypes = deadProtoTypes;
     this.liveTypes = liveTypes;
     this.targetedMethods = targetedMethods;
-    this.failedResolutionTargets = failedResolutionTargets;
+    this.failedMethodResolutionTargets = failedMethodResolutionTargets;
+    this.failedFieldResolutionTargets = failedFieldResolutionTargets;
     this.bootstrapMethods = bootstrapMethods;
     this.methodsTargetedByInvokeDynamic = methodsTargetedByInvokeDynamic;
     this.virtualMethodsTargetedByInvokeDirect = virtualMethodsTargetedByInvokeDirect;
@@ -269,7 +274,7 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
     this.switchMaps = switchMaps;
     this.lockCandidates = lockCandidates;
     this.initClassReferences = initClassReferences;
-    verify();
+    assert verify();
   }
 
   private AppInfoWithLiveness(AppInfoWithLiveness previous, CommittedItems committedItems) {
@@ -279,9 +284,10 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
         previous.getMainDexClasses(),
         previous.deadProtoTypes,
         previous.getMissingClasses(),
-        CollectionUtils.mergeSets(previous.liveTypes, committedItems.getCommittedTypes()),
+        CollectionUtils.mergeSets(previous.liveTypes, committedItems.getCommittedProgramTypes()),
         previous.targetedMethods,
-        previous.failedResolutionTargets,
+        previous.failedMethodResolutionTargets,
+        previous.failedFieldResolutionTargets,
         previous.bootstrapMethods,
         previous.methodsTargetedByInvokeDynamic,
         previous.virtualMethodsTargetedByInvokeDirect,
@@ -328,7 +334,8 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
             ? Sets.difference(previous.liveTypes, prunedItems.getRemovedClasses())
             : previous.liveTypes,
         previous.targetedMethods,
-        previous.failedResolutionTargets,
+        previous.failedMethodResolutionTargets,
+        previous.failedFieldResolutionTargets,
         previous.bootstrapMethods,
         previous.methodsTargetedByInvokeDynamic,
         previous.virtualMethodsTargetedByInvokeDirect,
@@ -366,10 +373,11 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
         previous.initClassReferences);
   }
 
-  private void verify() {
+  private boolean verify() {
     assert keepInfo.verifyPinnedTypesAreLive(liveTypes);
     assert objectAllocationInfoCollection.verifyAllocatedTypesAreLive(
         liveTypes, getMissingClasses(), this);
+    return true;
   }
 
   private static KeepInfoCollection extendPinnedItems(
@@ -419,7 +427,8 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
     this.deadProtoTypes = previous.deadProtoTypes;
     this.liveTypes = previous.liveTypes;
     this.targetedMethods = previous.targetedMethods;
-    this.failedResolutionTargets = previous.failedResolutionTargets;
+    this.failedMethodResolutionTargets = previous.failedMethodResolutionTargets;
+    this.failedFieldResolutionTargets = previous.failedFieldResolutionTargets;
     this.bootstrapMethods = previous.bootstrapMethods;
     this.methodsTargetedByInvokeDynamic = previous.methodsTargetedByInvokeDynamic;
     this.virtualMethodsTargetedByInvokeDirect = previous.virtualMethodsTargetedByInvokeDirect;
@@ -454,7 +463,7 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
     this.lockCandidates = previous.lockCandidates;
     this.initClassReferences = previous.initClassReferences;
     previous.markObsolete();
-    verify();
+    assert verify();
   }
 
   public static AppInfoWithLivenessModifier modifier() {
@@ -470,8 +479,7 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
             // TODO(b/150693139): Remove these exceptions once fixed.
             || InterfaceMethodRewriter.isCompanionClassType(type)
             || InterfaceMethodRewriter.isEmulatedLibraryClassType(type)
-            || type.toDescriptorString().startsWith("Lj$/$r8$retargetLibraryMember$")
-            || TwrCloseResourceRewriter.isUtilityClassDescriptor(type)
+            || DesugaredLibraryRetargeter.isRetargetType(type, options())
             // TODO(b/150736225): Not sure how to remove these.
             || DesugaredLibraryAPIConverter.isVivifiedType(type)
         : "Failed lookup of non-missing type: " + type;
@@ -533,11 +541,15 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
   }
 
   public boolean isFailedResolutionTarget(DexMethod method) {
-    return failedResolutionTargets.contains(method);
+    return failedMethodResolutionTargets.contains(method);
   }
 
-  public Set<DexMethod> getFailedResolutionTargets() {
-    return failedResolutionTargets;
+  public Set<DexMethod> getFailedMethodResolutionTargets() {
+    return failedMethodResolutionTargets;
+  }
+
+  public Set<DexField> getFailedFieldResolutionTargets() {
+    return failedFieldResolutionTargets;
   }
 
   public boolean isBootstrapMethod(DexMethod method) {
@@ -604,8 +616,7 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
     return reprocess;
   }
 
-  public Collection<DexClass> computeReachableInterfaces() {
-    Set<DexClass> interfaces = Sets.newIdentityHashSet();
+  public void forEachReachableInterface(Consumer<DexClass> consumer) {
     WorkList<DexType> worklist = WorkList.newIdentityWorkList();
     worklist.addIfNotSeen(objectAllocationInfoCollection.getInstantiatedLambdaInterfaces());
     for (DexProgramClass clazz : classes()) {
@@ -618,14 +629,13 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
         continue;
       }
       if (definition.isInterface()) {
-        interfaces.add(definition);
+        consumer.accept(definition);
       }
       if (definition.superType != null) {
         worklist.addIfNotSeen(definition.superType);
       }
       worklist.addIfNotSeen(definition.interfaces.values);
     }
-    return interfaces;
   }
 
   /**
@@ -999,7 +1009,8 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
         getMissingClasses().commitSyntheticItems(committedItems),
         lens.rewriteTypes(liveTypes),
         lens.rewriteMethods(targetedMethods),
-        lens.rewriteMethods(failedResolutionTargets),
+        lens.rewriteMethods(failedMethodResolutionTargets),
+        lens.rewriteFields(failedFieldResolutionTargets),
         lens.rewriteMethods(bootstrapMethods),
         lens.rewriteMethods(methodsTargetedByInvokeDynamic),
         lens.rewriteMethods(virtualMethodsTargetedByInvokeDirect),
@@ -1351,12 +1362,7 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
         // The type java.lang.Object could be any instantiated type. Assume a finalizer exists.
         return true;
       }
-      for (DexType iface : type.getInterfaces()) {
-        if (mayHaveFinalizer(iface)) {
-          return true;
-        }
-      }
-      return false;
+      return type.getInterfaces().anyMatch((iface, isKnown) -> mayHaveFinalizer(iface));
     }
     return mayHaveFinalizer(type.getClassType());
   }

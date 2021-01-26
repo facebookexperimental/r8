@@ -44,6 +44,8 @@ public class ChromeProtoRewritingTest extends ChromeCompilationBase {
             keepAllProtosRule(),
             keepDynamicMethodSignatureRule(),
             keepNewMessageInfoSignatureRule())
+        .addDontWarn("android.content.pm.IPackageManager")
+        .allowUnusedDontWarnPatterns()
         .allowUnusedProguardConfigurationRules()
         .enableProtoShrinking(false)
         .setMinApi(AndroidApiLevel.N)

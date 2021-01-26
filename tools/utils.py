@@ -169,13 +169,12 @@ def RunCmd(cmd, env_vars=None, quiet=False, fail=True, logging=True):
   logger = ProgressLogger(quiet=quiet) if logging else None
   failed = False
   while True:
-    line = process.stdout.readline()
-    if line != b'':
+    line = process.stdout.readline().decode('utf-8')
+    if line != '':
       stripped = line.rstrip()
       stdout.append(stripped)
       if logger:
         logger.log(stripped)
-
       # TODO(christofferqa): r8 should fail with non-zero exit code.
       if ('AssertionError:' in stripped
           or 'CompilationError:' in stripped
@@ -269,7 +268,7 @@ def get_HEAD_sha1_for_checkout(checkout):
   cmd = ['git', 'rev-parse', 'HEAD']
   PrintCmd(cmd)
   with ChangedWorkingDirectory(checkout):
-    return subprocess.check_output(cmd).strip()
+    return subprocess.check_output(cmd).decode('utf-8').strip()
 
 def makedirs_if_needed(path):
   try:
@@ -512,7 +511,7 @@ def print_dexsegments(prefix, dex_files):
 def check_java_version():
   cmd= [jdk.GetJavaExecutable(), '-version']
   output = subprocess.check_output(cmd, stderr = subprocess.STDOUT)
-  m = re.search('openjdk version "([^"]*)"', output)
+  m = re.search('openjdk version "([^"]*)"', output.decode('utf-8'))
   if m is None:
     raise Exception("Can't check java version: no version string in output"
         " of 'java -version': '{}'".format(output))

@@ -94,9 +94,19 @@ public class L8 {
       ExceptionUtils.withD8CompilationHandler(
           options.reporter,
           () -> {
+            // Desugar to class file format and turn off switch optimizations, as the final
+            // compilation with D8 or R8 will do that.
             options.cfToCfDesugar = true;
+            assert options.enableSwitchRewriting;
+            options.enableSwitchRewriting = false;
+            assert options.enableStringSwitchConversion;
+            options.enableStringSwitchConversion = false;
+
             desugar(app, options, executorService);
+
             options.cfToCfDesugar = false;
+            options.enableSwitchRewriting = true;
+            options.enableStringSwitchConversion = true;
           });
       assert !options.cfToCfDesugar;
       if (shrink) {
@@ -133,6 +143,9 @@ public class L8 {
       if (result != null) {
         appView.setAppInfo(new AppInfo(result.commit, appView.appInfo().getMainDexClasses()));
         appView.pruneItems(result.prunedItems);
+        if (result.lens != null) {
+          appView.setGraphLens(result.lens);
+        }
       }
 
       NamingLens namingLens = PrefixRewritingNamingLens.createPrefixRewritingNamingLens(appView);

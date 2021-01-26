@@ -11,6 +11,7 @@ import static org.junit.Assert.assertTrue;
 
 import com.android.tools.r8.KotlinCompilerTool.KotlinCompiler;
 import com.android.tools.r8.R8TestBuilder;
+import com.android.tools.r8.TestShrinkerBuilder;
 import com.android.tools.r8.ToolHelper;
 import com.android.tools.r8.ToolHelper.KotlinTargetVersion;
 import com.android.tools.r8.ToolHelper.ProcessResult;
@@ -83,7 +84,10 @@ public class R8KotlinAccessorTest extends AbstractR8KotlinTestBase {
     final TestKotlinCompanionClass testedClass = COMPANION_PROPERTY_CLASS;
     String mainClass = addMainToClasspath("properties.CompanionPropertiesKt",
         "companionProperties_usePrimitiveProp");
-    runTest(PROPERTIES_PACKAGE_NAME, mainClass, R8TestBuilder::noClassStaticizing)
+    runTest(
+            PROPERTIES_PACKAGE_NAME,
+            mainClass,
+            builder -> builder.addDontWarnJetBrainsNotNullAnnotation().noClassStaticizing())
         .inspect(
             inspector -> {
               ClassSubject outerClass =
@@ -116,7 +120,10 @@ public class R8KotlinAccessorTest extends AbstractR8KotlinTestBase {
     final TestKotlinCompanionClass testedClass = COMPANION_PROPERTY_CLASS;
     String mainClass = addMainToClasspath("properties.CompanionPropertiesKt",
         "companionProperties_usePrivateProp");
-    runTest(PROPERTIES_PACKAGE_NAME, mainClass, R8TestBuilder::noClassStaticizing)
+    runTest(
+            PROPERTIES_PACKAGE_NAME,
+            mainClass,
+            builder -> builder.addDontWarnJetBrainsNotNullAnnotation().noClassStaticizing())
         .inspect(
             inspector -> {
               ClassSubject outerClass =
@@ -151,7 +158,10 @@ public class R8KotlinAccessorTest extends AbstractR8KotlinTestBase {
     final TestKotlinCompanionClass testedClass = COMPANION_PROPERTY_CLASS;
     String mainClass = addMainToClasspath("properties.CompanionPropertiesKt",
         "companionProperties_useInternalProp");
-    runTest(PROPERTIES_PACKAGE_NAME, mainClass, R8TestBuilder::noClassStaticizing)
+    runTest(
+            PROPERTIES_PACKAGE_NAME,
+            mainClass,
+            builder -> builder.addDontWarnJetBrainsNotNullAnnotation().noClassStaticizing())
         .inspect(
             inspector -> {
               ClassSubject outerClass =
@@ -185,7 +195,10 @@ public class R8KotlinAccessorTest extends AbstractR8KotlinTestBase {
     final TestKotlinCompanionClass testedClass = COMPANION_PROPERTY_CLASS;
     String mainClass = addMainToClasspath("properties.CompanionPropertiesKt",
         "companionProperties_usePublicProp");
-    runTest(PROPERTIES_PACKAGE_NAME, mainClass, R8TestBuilder::noClassStaticizing)
+    runTest(
+            PROPERTIES_PACKAGE_NAME,
+            mainClass,
+            builder -> builder.addDontWarnJetBrainsNotNullAnnotation().noClassStaticizing())
         .inspect(
             inspector -> {
               ClassSubject outerClass =
@@ -219,7 +232,10 @@ public class R8KotlinAccessorTest extends AbstractR8KotlinTestBase {
     final TestKotlinCompanionClass testedClass = COMPANION_LATE_INIT_PROPERTY_CLASS;
     String mainClass = addMainToClasspath("properties.CompanionLateInitPropertiesKt",
         "companionLateInitProperties_usePrivateLateInitProp");
-    runTest(PROPERTIES_PACKAGE_NAME, mainClass, R8TestBuilder::noClassStaticizing)
+    runTest(
+            PROPERTIES_PACKAGE_NAME,
+            mainClass,
+            builder -> builder.addDontWarnJetBrainsAnnotations().noClassStaticizing())
         .inspect(
             inspector -> {
               ClassSubject outerClass =
@@ -252,7 +268,10 @@ public class R8KotlinAccessorTest extends AbstractR8KotlinTestBase {
     final TestKotlinCompanionClass testedClass = COMPANION_LATE_INIT_PROPERTY_CLASS;
     String mainClass = addMainToClasspath("properties.CompanionLateInitPropertiesKt",
         "companionLateInitProperties_useInternalLateInitProp");
-    runTest(PROPERTIES_PACKAGE_NAME, mainClass)
+    runTest(
+            PROPERTIES_PACKAGE_NAME,
+            mainClass,
+            TestShrinkerBuilder::addDontWarnJetBrainsAnnotations)
         .inspect(
             inspector -> {
               ClassSubject outerClass =
@@ -281,7 +300,10 @@ public class R8KotlinAccessorTest extends AbstractR8KotlinTestBase {
     final TestKotlinCompanionClass testedClass = COMPANION_LATE_INIT_PROPERTY_CLASS;
     String mainClass = addMainToClasspath("properties.CompanionLateInitPropertiesKt",
         "companionLateInitProperties_usePublicLateInitProp");
-    runTest(PROPERTIES_PACKAGE_NAME, mainClass)
+    runTest(
+            PROPERTIES_PACKAGE_NAME,
+            mainClass,
+            TestShrinkerBuilder::addDontWarnJetBrainsAnnotations)
         .inspect(
             inspector -> {
               ClassSubject outerClass =
@@ -359,7 +381,7 @@ public class R8KotlinAccessorTest extends AbstractR8KotlinTestBase {
     String mainClass =
         addMainToClasspath(
             "accessors.PropertyAccessorForInnerClassKt", "noUseOfPropertyAccessorFromInnerClass");
-    runTest("accessors", mainClass)
+    runTest("accessors", mainClass, TestShrinkerBuilder::addDontWarnJetBrainsNotNullAnnotation)
         .inspect(
             inspector -> {
               // Class is removed because the instantiation of the inner class has no side effects.
