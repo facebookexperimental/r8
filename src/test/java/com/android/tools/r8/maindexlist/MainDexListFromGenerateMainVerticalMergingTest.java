@@ -9,20 +9,25 @@ import static com.android.tools.r8.utils.codeinspector.Matchers.isAbsent;
 import static com.android.tools.r8.utils.codeinspector.Matchers.isPresent;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
+import com.android.tools.r8.NeverClassInline;
 import com.android.tools.r8.NeverInline;
-import com.android.tools.r8.NoHorizontalClassMerging;
-import com.android.tools.r8.NoStaticClassMerging;
 import com.android.tools.r8.R8TestCompileResult;
 import com.android.tools.r8.TestBase;
 import com.android.tools.r8.TestParameters;
 import com.android.tools.r8.TestParametersCollection;
 import com.android.tools.r8.ToolHelper;
 import com.android.tools.r8.references.ClassReference;
+import com.android.tools.r8.references.TypeReference;
 import com.android.tools.r8.utils.codeinspector.ClassSubject;
 import com.android.tools.r8.utils.codeinspector.CodeInspector;
+import com.android.tools.r8.utils.codeinspector.FieldSubject;
 import com.android.tools.r8.utils.codeinspector.MethodSubject;
+import com.google.common.collect.ImmutableSet;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -30,7 +35,7 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 @RunWith(Parameterized.class)
-public class MainDexListFromGenerateMainDexInliningTest extends TestBase {
+public class MainDexListFromGenerateMainVerticalMergingTest extends TestBase {
 
   private static List<ClassReference> mainDexList;
 
@@ -48,38 +53,36 @@ public class MainDexListFromGenerateMainDexInliningTest extends TestBase {
   public static void setup() throws Exception {
     mainDexList =
         testForMainDexListGenerator(getStaticTemp())
-            .addInnerClasses(MainDexListFromGenerateMainDexInliningTest.class)
+            .addInnerClasses(MainDexListFromGenerateMainVerticalMergingTest.class)
             .addLibraryFiles(ToolHelper.getMostRecentAndroidJar())
             .addMainDexRules(
-                "-keep class " + Main.class.getTypeName() + " {",
-                "  public static void main(java.lang.String[]);",
-                "}")
+                "-keep class " + Main.class.getTypeName() + " { public static void foo(); }")
             .run()
             .getMainDexList();
   }
 
-  public MainDexListFromGenerateMainDexInliningTest(TestParameters parameters) {
+  public MainDexListFromGenerateMainVerticalMergingTest(TestParameters parameters) {
     this.parameters = parameters;
   }
 
   @Test
   public void test() throws Exception {
-    // The generated main dex list should contain Main (which is a root) and A (which is a direct
-    // dependency of Main).
-    assertEquals(2, mainDexList.size());
-    assertEquals(A.class.getTypeName(), mainDexList.get(0).getTypeName());
-    assertEquals(Main.class.getTypeName(), mainDexList.get(1).getTypeName());
+    assertEquals(3, mainDexList.size());
+    Set<String> mainDexReferences =
+        mainDexList.stream().map(TypeReference::getTypeName).collect(Collectors.toSet());
+    assertTrue(mainDexReferences.contains(A.class.getTypeName()));
+    assertTrue(mainDexReferences.contains(B.class.getTypeName()));
+    assertTrue(mainDexReferences.contains(Main.class.getTypeName()));
 
     R8TestCompileResult compileResult =
         testForR8(parameters.getBackend())
             .addInnerClasses(getClass())
             .addInliningAnnotations()
-            .addKeepClassAndMembersRules(Main.class)
+            .addKeepClassAndMembersRules(Main.class, Outside.class)
             .addMainDexListClassReferences(mainDexList)
             .collectMainDexClasses()
             .enableInliningAnnotations()
-            .enableNoHorizontalClassMergingAnnotations()
-            .enableNoStaticClassMergingAnnotations()
+            .enableNeverClassInliningAnnotations()
             .setMinApi(parameters.getApiLevel())
             .compile();
 
@@ -91,60 +94,66 @@ public class MainDexListFromGenerateMainDexInliningTest extends TestBase {
     assertThat(fooMethodSubject, isPresent());
 
     ClassSubject aClassSubject = inspector.clazz(A.class);
-    // TODO(b/178353726): Should be present, but was inlined.
+    // TODO(b/178460068): Should be present, but was merged with B.
     assertThat(aClassSubject, isAbsent());
-
-    MethodSubject barMethodSubject = aClassSubject.uniqueMethodWithName("bar");
-    // TODO(b/178353726): Should be present, but was inlined.
-    assertThat(barMethodSubject, isAbsent());
 
     ClassSubject bClassSubject = inspector.clazz(B.class);
     assertThat(bClassSubject, isPresent());
 
-    MethodSubject bazMethodSubject = bClassSubject.uniqueMethodWithName("baz");
-    assertThat(bazMethodSubject, isPresent());
+    FieldSubject outsideFieldSubject = bClassSubject.uniqueFieldWithName("outsideField");
+    assertThat(outsideFieldSubject, isPresent());
 
-    // TODO(b/178353726): foo() should invoke bar() and bar() should invoke baz().
-    assertThat(fooMethodSubject, invokesMethod(bazMethodSubject));
+    MethodSubject fooBMethodSubject = bClassSubject.uniqueMethodWithName("foo");
+    assertThat(fooBMethodSubject, isPresent());
 
-    // TODO(b/178353726): Main is the only class guaranteed to be in the main dex, but it has a
-    //  direct reference to B.
+    assertThat(fooMethodSubject, invokesMethod(fooBMethodSubject));
+
+    // TODO(b/178460068): B should not be in main dex.
     compileResult.inspectMainDexClasses(
         mainDexClasses -> {
-          assertEquals(1, mainDexClasses.size());
-          assertEquals(mainClassSubject.getFinalName(), mainDexClasses.iterator().next());
+          assertEquals(
+              ImmutableSet.of(mainClassSubject.getFinalName(), bClassSubject.getFinalName()),
+              mainDexClasses);
         });
+
+    compileResult.run(parameters.getRuntime(), Main.class).assertSuccessWithOutputLines("B::print");
   }
 
   static class Main {
 
     public static void main(String[] args) {
-      System.out.println("Main.main()");
+      new B().print();
     }
 
-    static void foo() {
-      // TODO(b/178353726): Should not allow inlining bar into foo(), since that adds B as a direct
-      //  dependence, and we don't include the direct dependencies of main dex list classes.
-      A.bar();
+    public static void foo() {
+      A.foo();
     }
   }
 
-  @NoHorizontalClassMerging
-  @NoStaticClassMerging
-  static class A {
+  public static class Outside {}
 
-    static void bar() {
-      B.baz();
-    }
-  }
-
-  @NoHorizontalClassMerging
-  @NoStaticClassMerging
-  static class B {
+  public static class A {
 
     @NeverInline
-    static void baz() {
-      System.out.println("B.baz");
+    public static void foo() {
+      System.out.println("A::foo");
+    }
+  }
+
+  @NeverClassInline
+  public static class B extends A {
+
+    public static Outside outsideField;
+
+    {
+      outsideField = System.currentTimeMillis() > 0 ? null : new Outside();
+    }
+
+    @NeverInline
+    public void print() {
+      if (outsideField == null) {
+        System.out.println("B::print");
+      }
     }
   }
 }

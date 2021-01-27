@@ -293,11 +293,6 @@ public class DexItemFactory {
       createString(Constants.TEMPORARY_INSTANCE_INITIALIZER_PREFIX);
 
   public final DexString thisName = createString("this");
-
-  // As much as possible, R8 should rely on the content of the static enum field, using
-  // enumMembers.isValuesFieldCandidate or checking the object state in the optimization info.
-  // The field name is unrealiable since the filed can be minified prior to this compilation.
-  // We keep enumValuesFieldName as a heuristic only.
   public final DexString enumValuesFieldName = createString("$VALUES");
 
   public final DexString enabledFieldName = createString("ENABLED");
@@ -440,6 +435,7 @@ public class DexItemFactory {
       createStaticallyKnownType("Ljava/util/logging/Logger;");
   public final DexType javaUtilSetType = createStaticallyKnownType("Ljava/util/Set;");
 
+  public final DexType androidAppActivity = createStaticallyKnownType("Landroid/app/Activity;");
   public final DexType androidOsBuildType = createStaticallyKnownType("Landroid/os/Build;");
   public final DexType androidOsBuildVersionType =
       createStaticallyKnownType("Landroid/os/Build$VERSION;");
@@ -683,6 +679,17 @@ public class DexItemFactory {
           createString("makeConcat")
       );
 
+  public Map<DexMethod, int[]> libraryMethodsNonNullParamOrThrow =
+      buildLibraryMethodsNonNullParamOrThrow();
+
+  private Map<DexMethod, int[]> buildLibraryMethodsNonNullParamOrThrow() {
+    ImmutableMap.Builder<DexMethod, int[]> builder = ImmutableMap.builder();
+    for (DexMethod requireNonNullMethod : objectsMethods.requireNonNullMethods()) {
+      builder.put(requireNonNullMethod, new int[] {0});
+    }
+    return builder.build();
+  }
+
   public Set<DexMethod> libraryMethodsReturningReceiver =
       ImmutableSet.<DexMethod>builder()
           .addAll(stringBufferMethods.appendMethods)
@@ -719,6 +726,7 @@ public class DexItemFactory {
   public Set<DexType> libraryTypesAssumedToBePresent =
       ImmutableSet.<DexType>builder()
           .add(
+              androidAppActivity,
               callableType,
               enumType,
               npeType,
@@ -1390,17 +1398,21 @@ public class DexItemFactory {
       return field == nameField || field == ordinalField;
     }
 
-    public boolean isEnumField(DexEncodedField staticField, DexType enumType) {
-      assert staticField.isStatic();
-      return staticField.getType() == enumType && staticField.isEnum() && staticField.isFinal();
+    public boolean isValuesMethod(DexMethod method, DexClass enumClass) {
+      assert enumClass.isEnum();
+      return method.holder == enumClass.type
+          && method.proto.returnType == enumClass.type.toArrayType(1, DexItemFactory.this)
+          && method.proto.parameters.size() == 0
+          && method.name == valuesMethodName;
     }
 
-    public boolean isValuesFieldCandidate(DexEncodedField staticField, DexType enumType) {
-      assert staticField.isStatic();
-      return staticField.getType().isArrayType()
-          && staticField.getType().toArrayElementType(DexItemFactory.this) == enumType
-          && staticField.isSynthetic()
-          && staticField.isFinal();
+    public boolean isValueOfMethod(DexMethod method, DexClass enumClass) {
+      assert enumClass.isEnum();
+      return method.holder == enumClass.type
+          && method.proto.returnType == enumClass.type
+          && method.proto.parameters.size() == 1
+          && method.proto.parameters.values[0] == stringType
+          && method.name == valueOfMethodName;
     }
   }
 
