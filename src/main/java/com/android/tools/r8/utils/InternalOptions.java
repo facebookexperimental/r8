@@ -41,7 +41,6 @@ import com.android.tools.r8.graph.DexProgramClass;
 import com.android.tools.r8.graph.DexType;
 import com.android.tools.r8.graph.ProgramMethod;
 import com.android.tools.r8.graph.classmerging.HorizontallyMergedLambdaClasses;
-import com.android.tools.r8.graph.classmerging.StaticallyMergedClasses;
 import com.android.tools.r8.graph.classmerging.VerticallyMergedClasses;
 import com.android.tools.r8.horizontalclassmerging.HorizontallyMergedClasses;
 import com.android.tools.r8.inspector.internal.InspectorImpl;
@@ -204,7 +203,6 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     enableDevirtualization = false;
     enableLambdaMerging = false;
     horizontalClassMergerOptions.disable();
-    enableStaticClassMerging = false;
     enableVerticalClassMerging = false;
     enableEnumUnboxing = false;
     enableUninstantiatedTypeOptimization = false;
@@ -238,7 +236,6 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
   public boolean enableFieldAssignmentTracker = true;
   public boolean enableFieldBitAccessAnalysis =
       System.getProperty("com.android.tools.r8.fieldBitAccessAnalysis") != null;
-  public boolean enableStaticClassMerging = true;
   public boolean enableVerticalClassMerging = true;
   public boolean enableArgumentRemoval = true;
   public boolean enableUnusedInterfaceRemoval = true;
@@ -1263,9 +1260,6 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     public BiConsumer<DexItemFactory, HorizontallyMergedLambdaClasses>
         horizontallyMergedLambdaClassesConsumer = ConsumerUtils.emptyBiConsumer();
 
-    public BiConsumer<DexItemFactory, StaticallyMergedClasses> staticallyMergedClassesConsumer =
-        ConsumerUtils.emptyBiConsumer();
-
     public BiConsumer<DexItemFactory, EnumDataMap> unboxedEnumsConsumer =
         ConsumerUtils.emptyBiConsumer();
 
@@ -1318,6 +1312,7 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     public boolean forceNameReflectionOptimization = false;
     public boolean enableNarrowAndWideningingChecksInD8 = false;
     public Consumer<IRCode> irModifier = null;
+    public Consumer<IRCode> inlineeIrModifier = null;
     public int basicBlockMuncherIterationLimit = NO_LIMIT;
     public boolean dontReportFailingCheckDiscarded = false;
     public PrintStream whyAreYouNotInliningConsumer = System.out;
@@ -1894,5 +1889,13 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
   // See b/177532008.
   public boolean canHaveZipFileWithMissingCloseableBug() {
     return isGeneratingClassFiles() || minApiLevel < AndroidApiLevel.K.getLevel();
+  }
+
+  // Some versions of Dalvik had a bug where a switch with a MAX_INT key would still go to
+  // the default case when switching on the value MAX_INT.
+  //
+  // See b/177790310.
+  public boolean canHaveSwitchMaxIntBug() {
+    return isGeneratingDex() && minApiLevel < AndroidApiLevel.K.getLevel();
   }
 }

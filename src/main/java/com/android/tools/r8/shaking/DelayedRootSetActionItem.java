@@ -5,6 +5,7 @@
 package com.android.tools.r8.shaking;
 
 import com.android.tools.r8.graph.ProgramMethod;
+import com.android.tools.r8.shaking.RootSetUtils.RootSetBuilder;
 import java.util.function.Consumer;
 
 public abstract class DelayedRootSetActionItem {

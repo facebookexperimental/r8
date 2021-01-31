@@ -47,7 +47,7 @@ import com.android.tools.r8.references.TypeReference;
 import com.android.tools.r8.shaking.AppInfoWithLiveness;
 import com.android.tools.r8.shaking.EnqueuerFactory;
 import com.android.tools.r8.shaking.MainDexClasses;
-import com.android.tools.r8.shaking.NoStaticClassMergingRule;
+import com.android.tools.r8.shaking.NoHorizontalClassMergingRule;
 import com.android.tools.r8.shaking.NoVerticalClassMergingRule;
 import com.android.tools.r8.shaking.ProguardClassNameList;
 import com.android.tools.r8.shaking.ProguardConfiguration;
@@ -58,8 +58,7 @@ import com.android.tools.r8.shaking.ProguardKeepRuleType;
 import com.android.tools.r8.shaking.ProguardMemberRule;
 import com.android.tools.r8.shaking.ProguardMemberType;
 import com.android.tools.r8.shaking.ProguardTypeMatcher;
-import com.android.tools.r8.shaking.RootSetBuilder;
-import com.android.tools.r8.shaking.RootSetBuilder.RootSet;
+import com.android.tools.r8.shaking.RootSetUtils.RootSet;
 import com.android.tools.r8.shaking.serviceloader.ServiceLoaderMultipleTest.Greeter;
 import com.android.tools.r8.transformers.ClassFileTransformer;
 import com.android.tools.r8.utils.AndroidApiLevel;
@@ -763,9 +762,9 @@ public class TestBase {
     ExecutorService executor = Executors.newSingleThreadExecutor();
     SubtypingInfo subtypingInfo = new SubtypingInfo(appView);
     RootSet rootSet =
-        new RootSetBuilder(
+        RootSet.builder(
                 appView, subtypingInfo, appView.options().getProguardConfiguration().getRules())
-            .run(executor);
+            .build(executor);
     appView.setRootSet(rootSet);
     AppInfoWithLiveness appInfoWithLiveness =
         EnqueuerFactory.createForInitialTreeShaking(appView, executor, subtypingInfo)
@@ -1128,8 +1127,9 @@ public class TestBase {
   }
 
   @Deprecated
-  public static String noStaticClassMergingRule() {
-    return matchInterfaceRule(NoStaticClassMergingRule.RULE_NAME, NoStaticClassMerging.class);
+  public static String noHorizontalClassMerging() {
+    return matchInterfaceRule(
+        NoHorizontalClassMergingRule.RULE_NAME, NoHorizontalClassMerging.class);
   }
 
   /**

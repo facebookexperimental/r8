@@ -63,6 +63,7 @@ import com.android.tools.r8.ir.optimize.info.OptimizationFeedback.OptimizationIn
 import com.android.tools.r8.ir.optimize.info.OptimizationFeedbackDelayed;
 import com.android.tools.r8.ir.optimize.info.UpdatableMethodOptimizationInfo;
 import com.android.tools.r8.shaking.AppInfoWithLiveness;
+import com.android.tools.r8.shaking.FieldAccessInfoCollectionModifier;
 import com.android.tools.r8.shaking.KeepInfoCollection;
 import com.android.tools.r8.utils.BooleanUtils;
 import com.android.tools.r8.utils.Reporter;
@@ -388,11 +389,17 @@ public class EnumUnboxer {
     // Update keep info on any of the enum methods of the removed classes.
     updateKeepInfo(enumsToUnbox);
     DirectMappedDexApplication.Builder appBuilder = appView.appInfo().app().asDirect().builder();
+    FieldAccessInfoCollectionModifier.Builder fieldAccessInfoCollectionModifierBuilder =
+        FieldAccessInfoCollectionModifier.builder();
     UnboxedEnumMemberRelocator relocator =
         UnboxedEnumMemberRelocator.builder(appView)
             .synthesizeEnumUnboxingUtilityClasses(
-                enumClassesToUnbox, enumsToUnboxWithPackageRequirement, appBuilder)
+                enumClassesToUnbox,
+                enumsToUnboxWithPackageRequirement,
+                appBuilder,
+                fieldAccessInfoCollectionModifierBuilder)
             .build();
+    fieldAccessInfoCollectionModifierBuilder.build().modify(appView);
     enumUnboxerRewriter = new EnumUnboxingRewriter(appView, enumDataMap, relocator);
     EnumUnboxingLens enumUnboxingLens =
         new EnumUnboxingTreeFixer(appView, enumsToUnbox, relocator, enumUnboxerRewriter)
@@ -491,34 +498,38 @@ public class EnumUnboxer {
     // Step 1: We iterate over the field to find direct enum instance information and the values
     // fields.
     for (DexEncodedField staticField : enumClass.staticFields()) {
-      if (EnumUnboxingCandidateAnalysis.isEnumField(staticField, enumClass.type)) {
+      if (factory.enumMembers.isEnumField(staticField, enumClass.type)) {
         ObjectState enumState =
             enumStaticFieldValues.getObjectStateForPossiblyPinnedField(staticField.field);
-        if (enumState != null) {
-          OptionalInt optionalOrdinal = getOrdinal(enumState);
-          if (!optionalOrdinal.isPresent()) {
-            return null;
+        if (enumState == null) {
+          if (staticField.getOptimizationInfo().isDead()) {
+            // We don't care about unused field data.
+            continue;
           }
-          int ordinal = optionalOrdinal.getAsInt();
-          unboxedValues.put(staticField.field, ordinalToUnboxedInt(ordinal));
-          ordinalToObjectState.put(ordinal, enumState);
-        }
-      } else if (EnumUnboxingCandidateAnalysis.matchesValuesField(
-          staticField, enumClass.type, factory)) {
-        AbstractValue valuesValue =
-            enumStaticFieldValues.getValuesAbstractValueForPossiblyPinnedField(staticField.field);
-        if (valuesValue == null || valuesValue.isZero()) {
-          // Unused field
-          continue;
-        }
-        if (valuesValue.isUnknown()) {
+          // We could not track the content of that field. We bail out.
           return null;
         }
-        assert valuesValue.isSingleFieldValue();
-        ObjectState valuesState = valuesValue.asSingleFieldValue().getState();
-        if (!valuesState.isEnumValuesObjectState()) {
+        OptionalInt optionalOrdinal = getOrdinal(enumState);
+        if (!optionalOrdinal.isPresent()) {
           return null;
         }
+        int ordinal = optionalOrdinal.getAsInt();
+        unboxedValues.put(staticField.field, ordinalToUnboxedInt(ordinal));
+        ordinalToObjectState.put(ordinal, enumState);
+      } else if (factory.enumMembers.isValuesFieldCandidate(staticField, enumClass.type)) {
+        ObjectState valuesState =
+            enumStaticFieldValues.getObjectStateForPossiblyPinnedField(staticField.field);
+        if (valuesState == null) {
+          if (staticField.getOptimizationInfo().isDead()) {
+            // We don't care about unused field data.
+            continue;
+          }
+          // We could not track the content of that field. We bail out.
+          // We could not track the content of that field, and the field could be a values field.
+          // We conservatively bail out.
+          return null;
+        }
+        assert valuesState.isEnumValuesObjectState();
         assert valuesContents == null
             || valuesContents.equals(valuesState.asEnumValuesObjectState());
         valuesContents = valuesState.asEnumValuesObjectState();
@@ -562,6 +573,13 @@ public class EnumUnboxer {
         unboxedValues.build(),
         valuesField.build(),
         valuesContents == null ? EnumData.INVALID_VALUES_SIZE : valuesContents.getEnumValuesSize());
+  }
+
+  private boolean isFinalFieldInitialized(DexEncodedField staticField, DexProgramClass enumClass) {
+    assert staticField.isFinal();
+    return appView
+        .appInfo()
+        .isFieldOnlyWrittenInMethodIgnoringPinning(staticField, enumClass.getClassInitializer());
   }
 
   private EnumInstanceFieldData computeEnumFieldData(

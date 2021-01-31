@@ -748,17 +748,15 @@ public class IRConverter {
     if (inliner != null) {
       postMethodProcessorBuilder.put(inliner);
     }
+    if (!options.debug) {
+      new TrivialFieldAccessReprocessor(appView.withLiveness(), postMethodProcessorBuilder)
+          .run(executorService, feedback, timing);
+    }
     if (enumUnboxer != null) {
       enumUnboxer.unboxEnums(postMethodProcessorBuilder, executorService, feedback);
     } else {
       appView.setUnboxedEnums(EnumDataMap.empty());
     }
-
-    if (!options.debug) {
-      new TrivialFieldAccessReprocessor(appView.withLiveness(), postMethodProcessorBuilder)
-          .run(executorService, feedback, timing);
-    }
-
     timing.begin("IR conversion phase 2");
     graphLensForIR = appView.graphLens();
     PostMethodProcessor postMethodProcessor =
@@ -1759,6 +1757,8 @@ public class IRConverter {
     DexEncodedMethod method = code.method();
     // Workaround massive dex2oat memory use for self-recursive methods.
     CodeRewriter.disableDex2OatInliningForSelfRecursiveMethods(appView, code);
+    // Workaround MAX_INT switch issue.
+    codeRewriter.rewriteSwitchForMaxInt(code);
     // Perform register allocation.
     RegisterAllocator registerAllocator = performRegisterAllocation(code, method, timing);
     timing.begin("Build DEX code");

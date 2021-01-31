@@ -13,6 +13,7 @@ import com.android.tools.r8.features.ClassToFeatureSplitMap;
 import com.android.tools.r8.graph.AppInfoWithClassHierarchy;
 import com.android.tools.r8.graph.DexCallSite;
 import com.android.tools.r8.graph.DexClass;
+import com.android.tools.r8.graph.DexClassAndMember;
 import com.android.tools.r8.graph.DexClassAndMethod;
 import com.android.tools.r8.graph.DexClasspathClass;
 import com.android.tools.r8.graph.DexDefinition;
@@ -161,7 +162,6 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
   private final Set<DexType> noClassMerging;
   private final Set<DexType> noHorizontalClassMerging;
   private final Set<DexType> noVerticalClassMerging;
-  private final Set<DexType> noStaticClassMerging;
 
   /**
    * Set of lock candidates (i.e., types whose class reference may flow to a monitor instruction).
@@ -228,7 +228,6 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
       Set<DexType> noClassMerging,
       Set<DexType> noVerticalClassMerging,
       Set<DexType> noHorizontalClassMerging,
-      Set<DexType> noStaticClassMerging,
       Set<DexReference> neverPropagateValue,
       Object2BooleanMap<DexReference> identifierNameStrings,
       Set<DexType> prunedTypes,
@@ -267,7 +266,6 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
     this.noClassMerging = noClassMerging;
     this.noVerticalClassMerging = noVerticalClassMerging;
     this.noHorizontalClassMerging = noHorizontalClassMerging;
-    this.noStaticClassMerging = noStaticClassMerging;
     this.neverPropagateValue = neverPropagateValue;
     this.identifierNameStrings = identifierNameStrings;
     this.prunedTypes = prunedTypes;
@@ -314,7 +312,6 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
         previous.noClassMerging,
         previous.noVerticalClassMerging,
         previous.noHorizontalClassMerging,
-        previous.noStaticClassMerging,
         previous.neverPropagateValue,
         previous.identifierNameStrings,
         previous.prunedTypes,
@@ -362,7 +359,6 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
         previous.noClassMerging,
         previous.noVerticalClassMerging,
         previous.noHorizontalClassMerging,
-        previous.noStaticClassMerging,
         previous.neverPropagateValue,
         previous.identifierNameStrings,
         prunedItems.hasRemovedClasses()
@@ -455,7 +451,6 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
     this.noClassMerging = previous.noClassMerging;
     this.noVerticalClassMerging = previous.noVerticalClassMerging;
     this.noHorizontalClassMerging = previous.noHorizontalClassMerging;
-    this.noStaticClassMerging = previous.noStaticClassMerging;
     this.neverPropagateValue = previous.neverPropagateValue;
     this.identifierNameStrings = previous.identifierNameStrings;
     this.prunedTypes = previous.prunedTypes;
@@ -590,6 +585,10 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
 
   public boolean isAssumeNoSideEffectsMethod(DexMethod method) {
     return noSideEffects.containsKey(method);
+  }
+
+  public boolean isAssumeNoSideEffectsMethod(DexClassAndMethod method) {
+    return isAssumeNoSideEffectsMethod(method.getReference());
   }
 
   public boolean isWhyAreYouNotInliningMethod(DexMethod method) {
@@ -743,7 +742,7 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
     DexType type = clazz.type;
     return
     // TODO(b/165224388): Synthetic classes should be represented in the allocation info.
-    getSyntheticItems().isSyntheticClass(clazz)
+    getSyntheticItems().isLegacySyntheticClass(clazz)
         || (!clazz.isInterface() && objectAllocationInfoCollection.isInstantiatedDirectly(clazz))
         // TODO(b/145344105): Model annotations in the object allocation info.
         || (clazz.isAnnotation() && liveTypes.contains(type));
@@ -769,11 +768,6 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
     if (keepInfo.isPinned(field, this)) {
       return true;
     }
-    // Fields in the class that is synthesized by D8/R8 would be used soon.
-    // TODO(b/165229577): Do we need this special handling of synthetics?
-    if (getSyntheticItems().isSyntheticClass(field.holder)) {
-      return true;
-    }
     // For library classes we don't know whether a field is read.
     return isLibraryOrClasspathField(encodedField);
   }
@@ -789,10 +783,6 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
     FieldAccessInfo info = getFieldAccessInfoCollection().get(field);
     if (info != null && info.isWritten()) {
       // The field is written directly by the program itself.
-      return true;
-    }
-    // TODO(b/165229577): Do we need this special handling of synthetics?
-    if (getSyntheticItems().isSyntheticClass(field.holder)) {
       return true;
     }
     // For library classes we don't know whether a field is rewritten.
@@ -853,9 +843,9 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
         && !keepInfo.getMethodInfo(method).isPinned();
   }
 
-  public boolean mayPropagateValueFor(DexMember<?, ?> reference) {
+  public boolean mayPropagateValueFor(DexClassAndMember<?, ?> member) {
     assert checkIfObsolete();
-    return reference.apply(this::mayPropagateValueFor, this::mayPropagateValueFor);
+    return member.getReference().apply(this::mayPropagateValueFor, this::mayPropagateValueFor);
   }
 
   public boolean mayPropagateValueFor(DexField field) {
@@ -942,6 +932,11 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
   public boolean isPinned(DexDefinition definition) {
     assert definition != null;
     return isPinned(definition.getReference());
+  }
+
+  public boolean isPinned(DexClassAndMember<?, ?> member) {
+    assert member != null;
+    return isPinned(member.getReference());
   }
 
   public boolean hasPinnedInstanceInitializer(DexType type) {
@@ -1037,7 +1032,6 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
         lens.rewriteTypes(noClassMerging),
         lens.rewriteTypes(noVerticalClassMerging),
         lens.rewriteTypes(noHorizontalClassMerging),
-        lens.rewriteTypes(noStaticClassMerging),
         lens.rewriteReferences(neverPropagateValue),
         lens.rewriteReferenceKeys(identifierNameStrings),
         // Don't rewrite pruned types - the removed types are identified by their original name.
@@ -1401,13 +1395,5 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
   /** Predicate on types that *must* never be merged vertically. */
   public boolean isNoVerticalClassMergingOfType(DexType type) {
     return noClassMerging.contains(type) || noVerticalClassMerging.contains(type);
-  }
-
-  /**
-   * All types that *must* never be merged by the static class merger due to a configuration
-   * directive (testing only).
-   */
-  public Set<DexType> getNoStaticClassMergingSet() {
-    return noStaticClassMerging;
   }
 }

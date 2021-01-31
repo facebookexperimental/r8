@@ -38,7 +38,6 @@ import com.android.tools.r8.graph.PrunedItems;
 import com.android.tools.r8.graph.SubtypingInfo;
 import com.android.tools.r8.graph.analysis.ClassInitializerAssertionEnablingAnalysis;
 import com.android.tools.r8.graph.analysis.InitializedClassesInInstanceMethodsAnalysis;
-import com.android.tools.r8.graph.classmerging.StaticallyMergedClasses;
 import com.android.tools.r8.graph.classmerging.VerticallyMergedClasses;
 import com.android.tools.r8.horizontalclassmerging.HorizontalClassMerger;
 import com.android.tools.r8.horizontalclassmerging.HorizontalClassMergerResult;
@@ -95,10 +94,9 @@ import com.android.tools.r8.shaking.MainDexTracingResult;
 import com.android.tools.r8.shaking.MissingClasses;
 import com.android.tools.r8.shaking.ProguardConfigurationRule;
 import com.android.tools.r8.shaking.ProguardConfigurationUtils;
-import com.android.tools.r8.shaking.RootSetBuilder;
-import com.android.tools.r8.shaking.RootSetBuilder.RootSet;
+import com.android.tools.r8.shaking.RootSetUtils.RootSet;
+import com.android.tools.r8.shaking.RootSetUtils.RootSetBuilder;
 import com.android.tools.r8.shaking.RuntimeTypeCheckInfo;
-import com.android.tools.r8.shaking.StaticClassMerger;
 import com.android.tools.r8.shaking.TreePruner;
 import com.android.tools.r8.shaking.TreePrunerConfiguration;
 import com.android.tools.r8.shaking.VerticalClassMerger;
@@ -343,12 +341,12 @@ public class R8 {
         }
         SubtypingInfo subtypingInfo = new SubtypingInfo(appView);
         appView.setRootSet(
-            new RootSetBuilder(
+            RootSet.builder(
                     appView,
                     subtypingInfo,
                     Iterables.concat(
                         options.getProguardConfiguration().getRules(), synthesizedProguardRules))
-                .run(executorService));
+                .build(executorService));
 
         AnnotationRemover.Builder annotationRemoverBuilder =
             options.isShrinking() ? AnnotationRemover.builder() : null;
@@ -430,8 +428,8 @@ public class R8 {
         // Find classes which may have code executed before secondary dex files installation.
         SubtypingInfo subtypingInfo = new SubtypingInfo(appView);
         mainDexRootSet =
-            new RootSetBuilder(appView, subtypingInfo, options.mainDexKeepRules)
-                .run(executorService);
+            RootSet.builder(appView, subtypingInfo, options.mainDexKeepRules)
+                .build(executorService);
         // Live types is the tracing result.
         Set<DexProgramClass> mainDexBaseClasses =
             EnqueuerFactory.createForInitialMainDexTracing(appView, executorService, subtypingInfo)
@@ -477,18 +475,6 @@ public class R8 {
       RuntimeTypeCheckInfo runtimeTypeCheckInfo = classMergingEnqueuerExtensionBuilder.build();
       if (!isKotlinLibraryCompilationWithInlinePassThrough
           && options.getProguardConfiguration().isOptimizing()) {
-        if (options.enableStaticClassMerging) {
-          timing.begin("HorizontalStaticClassMerger");
-          StaticClassMerger staticClassMerger =
-              new StaticClassMerger(appViewWithLiveness, options, mainDexTracingResult);
-          NestedGraphLens lens = staticClassMerger.run();
-          appView.rewriteWithLens(lens);
-          timing.end();
-        } else {
-          appView.setStaticallyMergedClasses(StaticallyMergedClasses.empty());
-        }
-        assert appView.staticallyMergedClasses() != null;
-
         if (options.enableVerticalClassMerging) {
           timing.begin("VerticalClassMerger");
           VerticalClassMerger verticalClassMerger =
@@ -822,25 +808,10 @@ public class R8 {
         appView.appInfo().getMainDexClasses().addAll(mainDexTracingResult);
       }
 
-      SyntheticFinalization.Result result =
-          appView.getSyntheticItems().computeFinalSynthetics(appView);
-      if (result != null) {
-        if (appView.appInfo().hasLiveness()) {
-          if (result.lens == null) {
-            appViewWithLiveness.setAppInfo(
-                appViewWithLiveness.appInfo().rebuildWithLiveness(result.commit));
-          } else {
-            appViewWithLiveness.rewriteWithLensAndApplication(
-                result.lens, result.commit.getApplication().asDirect());
-          }
-          appViewWithLiveness.pruneItems(result.prunedItems);
-        } else {
-          appView.setAppInfo(appView.appInfo().rebuildWithClassHierarchy(result.commit));
-          appView.pruneItems(result.prunedItems);
-          if (result.lens != null) {
-            appView.setGraphLens(result.lens);
-          }
-        }
+      if (appView.appInfo().hasLiveness()) {
+        SyntheticFinalization.finalizeWithLiveness(appView.withLiveness());
+      } else {
+        SyntheticFinalization.finalizeWithClassHierarchy(appView);
       }
 
       // Perform minification.

@@ -12,6 +12,7 @@ import com.android.tools.r8.graph.DexItemFactory;
 import com.android.tools.r8.graph.DexMethod;
 import com.android.tools.r8.graph.DexType;
 import com.android.tools.r8.shaking.ProguardConfigurationParser.IdentifierPatternWithWildcards;
+import com.android.tools.r8.shaking.RootSetUtils.RootSetBuilder;
 import com.android.tools.r8.utils.StringUtils;
 import com.google.common.collect.Iterables;
 import java.util.Collections;

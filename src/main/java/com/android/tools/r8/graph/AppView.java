@@ -11,7 +11,6 @@ import com.android.tools.r8.graph.GraphLens.NonIdentityGraphLens;
 import com.android.tools.r8.graph.analysis.InitializedClassesInInstanceMethodsAnalysis.InitializedClassesInInstanceMethods;
 import com.android.tools.r8.graph.classmerging.HorizontallyMergedLambdaClasses;
 import com.android.tools.r8.graph.classmerging.MergedClassesCollection;
-import com.android.tools.r8.graph.classmerging.StaticallyMergedClasses;
 import com.android.tools.r8.graph.classmerging.VerticallyMergedClasses;
 import com.android.tools.r8.horizontalclassmerging.HorizontallyMergedClasses;
 import com.android.tools.r8.ir.analysis.inlining.SimpleInliningConstraintFactory;
@@ -34,7 +33,8 @@ import com.android.tools.r8.shaking.AppInfoWithLiveness;
 import com.android.tools.r8.shaking.KeepInfoCollection;
 import com.android.tools.r8.shaking.LibraryModeledPredicate;
 import com.android.tools.r8.shaking.MainDexClasses;
-import com.android.tools.r8.shaking.RootSetBuilder.RootSet;
+import com.android.tools.r8.shaking.ProguardCompatibilityActions;
+import com.android.tools.r8.shaking.RootSetUtils.RootSet;
 import com.android.tools.r8.synthesis.SyntheticItems;
 import com.android.tools.r8.utils.InternalOptions;
 import com.android.tools.r8.utils.InternalOptions.TestingOptions;
@@ -62,10 +62,12 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
   private final WholeProgramOptimizations wholeProgramOptimizations;
   private GraphLens graphLens;
   private InitClassLens initClassLens;
+  private ProguardCompatibilityActions proguardCompatibilityActions;
   private RootSet rootSet;
   // This should perferably always be obtained via AppInfoWithLiveness.
   // Currently however the liveness may be downgraded thus loosing the computed keep info.
   private KeepInfoCollection keepInfo = null;
+
   private final AbstractValueFactory abstractValueFactory = new AbstractValueFactory();
   private final InstanceFieldInitializationInfoFactory instanceFieldInitializationInfoFactory =
       new InstanceFieldInitializationInfoFactory();
@@ -91,7 +93,6 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
   private InitializedClassesInInstanceMethods initializedClassesInInstanceMethods;
   private HorizontallyMergedLambdaClasses horizontallyMergedLambdaClasses;
   private HorizontallyMergedClasses horizontallyMergedClasses;
-  private StaticallyMergedClasses staticallyMergedClasses;
   private VerticallyMergedClasses verticallyMergedClasses;
   private EnumDataMap unboxedEnums = EnumDataMap.empty();
   // TODO(b/169115389): Remove
@@ -199,6 +200,10 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
   public T appInfo() {
     assert !appInfo.hasClassHierarchy() || enableWholeProgramOptimizations();
     return appInfo;
+  }
+
+  public AppInfoWithLiveness appInfoWithLiveness() {
+    return appInfo.hasLiveness() ? appInfo.withLiveness() : null;
   }
 
   public AppInfoWithClassHierarchy appInfoForDesugaring() {
@@ -459,6 +464,20 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
     return keepInfo;
   }
 
+  public boolean hasProguardCompatibilityActions() {
+    return proguardCompatibilityActions != null;
+  }
+
+  public ProguardCompatibilityActions getProguardCompatibilityActions() {
+    return proguardCompatibilityActions;
+  }
+
+  public void setProguardCompatibilityActions(
+      ProguardCompatibilityActions proguardCompatibilityActions) {
+    assert options().forceProguardCompatibility;
+    this.proguardCompatibilityActions = proguardCompatibilityActions;
+  }
+
   public MergedClassesCollection allMergedClasses() {
     MergedClassesCollection collection = new MergedClassesCollection();
     if (horizontallyMergedClasses != null) {
@@ -505,19 +524,6 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
   }
 
   /**
-   * Get the result of static class merging. Returns null if static class merging has not been run.
-   */
-  public StaticallyMergedClasses staticallyMergedClasses() {
-    return staticallyMergedClasses;
-  }
-
-  public void setStaticallyMergedClasses(StaticallyMergedClasses staticallyMergedClasses) {
-    assert this.staticallyMergedClasses == null;
-    this.staticallyMergedClasses = staticallyMergedClasses;
-    testing().staticallyMergedClassesConsumer.accept(dexItemFactory(), staticallyMergedClasses);
-  }
-
-  /**
    * Get the result of vertical class merging. Returns null if vertical class merging has not been
    * run.
    */
@@ -556,6 +562,10 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
     return appInfo.hasClassHierarchy()
         ? (AppView<AppInfoWithClassHierarchy>) this
         : null;
+  }
+
+  public boolean hasLiveness() {
+    return appInfo().hasLiveness();
   }
 
   public AppView<AppInfoWithLiveness> withLiveness() {
@@ -604,6 +614,10 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
     }
     if (appServices() != null) {
       setAppServices(appServices().prunedCopy(prunedItems));
+    }
+    if (hasProguardCompatibilityActions()) {
+      setProguardCompatibilityActions(
+          getProguardCompatibilityActions().withoutPrunedItems(prunedItems));
     }
   }
 
@@ -669,6 +683,10 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
           appView.setAppServices(appView.appServices().rewrittenWithLens(lens));
           if (appView.hasInitClassLens()) {
             appView.setInitClassLens(appView.initClassLens().rewrittenWithLens(lens));
+          }
+          if (appView.hasProguardCompatibilityActions()) {
+            appView.setProguardCompatibilityActions(
+                appView.getProguardCompatibilityActions().rewrittenWithLens(lens));
           }
         });
   }
