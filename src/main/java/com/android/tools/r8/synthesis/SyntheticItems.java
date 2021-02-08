@@ -134,7 +134,7 @@ public class SyntheticItems implements SyntheticDefinitionsProvider {
     CommittedItems commit =
         new CommittedItems(
             synthetics.nextSyntheticId, appView.appInfo().app(), committed, ImmutableList.of());
-    appView.setAppInfo(new AppInfo(commit, appView.appInfo().getMainDexClasses()));
+    appView.setAppInfo(new AppInfo(commit, appView.appInfo().getMainDexInfo()));
   }
 
   // Internal synthetic id creation helpers.
@@ -298,6 +298,36 @@ public class SyntheticItems implements SyntheticDefinitionsProvider {
     // Obtain the outer synthesizing context in the case the context itself is synthetic.
     // This is to ensure a flat input-type -> synthetic-item mapping.
     SynthesizingContext outerContext = SynthesizingContext.fromNonSyntheticInputContext(context);
+    SyntheticClasspathClassBuilder classBuilder =
+        new SyntheticClasspathClassBuilder(type, outerContext, factory);
+    DexClasspathClass clazz = classBuilder.build();
+    addPendingDefinition(new SyntheticClasspathClassDefinition(kind, outerContext, clazz));
+    return clazz;
+  }
+
+  public DexProgramClass createFixedClass(
+      SyntheticKind kind,
+      DexProgramClass context,
+      DexItemFactory factory,
+      Consumer<SyntheticProgramClassBuilder> fn) {
+    // Obtain the outer synthesizing context in the case the context itself is synthetic.
+    // This is to ensure a flat input-type -> synthetic-item mapping.
+    SynthesizingContext outerContext = getSynthesizingContext(context);
+    DexType type = SyntheticNaming.createFixedType(kind, outerContext, factory);
+    SyntheticProgramClassBuilder classBuilder =
+        new SyntheticProgramClassBuilder(type, outerContext, factory);
+    fn.accept(classBuilder);
+    DexProgramClass clazz = classBuilder.build();
+    addPendingDefinition(new SyntheticProgramClassDefinition(kind, outerContext, clazz));
+    return clazz;
+  }
+
+  public DexClasspathClass createFixedClasspathClass(
+      SyntheticKind kind, DexClasspathClass context, DexItemFactory factory) {
+    // Obtain the outer synthesizing context in the case the context itself is synthetic.
+    // This is to ensure a flat input-type -> synthetic-item mapping.
+    SynthesizingContext outerContext = SynthesizingContext.fromNonSyntheticInputContext(context);
+    DexType type = SyntheticNaming.createFixedType(kind, outerContext, factory);
     SyntheticClasspathClassBuilder classBuilder =
         new SyntheticClasspathClassBuilder(type, outerContext, factory);
     DexClasspathClass clazz = classBuilder.build();

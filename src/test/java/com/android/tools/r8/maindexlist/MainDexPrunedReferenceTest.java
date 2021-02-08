@@ -6,8 +6,7 @@ package com.android.tools.r8.maindexlist;
 
 import static com.android.tools.r8.utils.codeinspector.Matchers.isPresent;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assume.assumeFalse;
 import static org.junit.Assume.assumeTrue;
 
@@ -20,6 +19,7 @@ import com.android.tools.r8.TestParameters;
 import com.android.tools.r8.TestParametersCollection;
 import com.android.tools.r8.ThrowableConsumer;
 import com.android.tools.r8.utils.codeinspector.ClassSubject;
+import com.google.common.collect.ImmutableSet;
 import java.util.Set;
 import java.util.function.Consumer;
 import org.junit.Assert;
@@ -53,10 +53,7 @@ public class MainDexPrunedReferenceTest extends TestBase {
     assumeTrue(parameters.getDexRuntimeVersion().isDalvik());
     testMainDex(
         builder -> builder.addMainDexListClasses(Main.class),
-        mainDexClasses -> {
-          assertTrue(mainDexClasses.contains(Main.class.getTypeName()));
-          assertFalse(mainDexClasses.contains(Outside.class.getTypeName()));
-        });
+        mainDexClasses -> assertEquals(ImmutableSet.of(Main.class.getTypeName()), mainDexClasses));
   }
 
   @Test
@@ -66,11 +63,7 @@ public class MainDexPrunedReferenceTest extends TestBase {
         builder ->
             builder.addMainDexRules(
                 "-keep class " + Main.class.getTypeName() + " { public static void notMain(); }"),
-        mainDexClasses -> {
-          assertTrue(mainDexClasses.contains(Main.class.getTypeName()));
-          // TODO(b/178362682): This should be false.
-          assertTrue(mainDexClasses.contains(Outside.class.getTypeName()));
-        });
+        mainDexClasses -> assertEquals(ImmutableSet.of(Main.class.getTypeName()), mainDexClasses));
   }
 
   private void testMainDex(
@@ -89,7 +82,7 @@ public class MainDexPrunedReferenceTest extends TestBase {
             parameters.getDexRuntimeVersion().isDalvik(),
             TestCompilerBuilder::collectMainDexClasses)
         .compile()
-        .apply(compileResult -> compileResult.inspectMainDexClasses(mainDexListConsumer))
+        .inspectMainDexClasses(mainDexListConsumer)
         .run(parameters.getRuntime(), Main.class)
         .inspect(
             inspector -> {

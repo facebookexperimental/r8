@@ -4,51 +4,47 @@
 
 package com.android.tools.r8.missingclasses;
 
-import static com.android.tools.r8.DiagnosticsMatcher.diagnosticType;
-import static org.junit.Assert.assertEquals;
-
+import com.android.tools.r8.CompilationFailedException;
 import com.android.tools.r8.TestDiagnosticMessages;
 import com.android.tools.r8.TestParameters;
-import com.android.tools.r8.references.TypeReference;
-import com.android.tools.r8.shaking.MissingClassesDiagnostic;
-import com.android.tools.r8.utils.codeinspector.AssertUtils;
+import com.android.tools.r8.references.MethodReference;
+import com.android.tools.r8.references.Reference;
+import com.android.tools.r8.utils.MethodReferenceUtils;
 import org.junit.Test;
 
 public class MissingClassReferencedFromNewInstanceTest extends MissingClassesTestBase {
 
-  public MissingClassReferencedFromNewInstanceTest(
-      DontWarnConfiguration dontWarnConfiguration, TestParameters parameters) {
-    super(dontWarnConfiguration, parameters);
+  private static final MethodReference referencedFrom =
+      MethodReferenceUtils.mainMethod(Reference.classFromClass(Main.class));
+
+  public MissingClassReferencedFromNewInstanceTest(TestParameters parameters) {
+    super(parameters);
+  }
+
+  @Test(expected = CompilationFailedException.class)
+  public void testNoRules() throws Exception {
+    compileWithExpectedDiagnostics(
+        Main.class, diagnostics -> inspectDiagnosticsWithNoRules(diagnostics, referencedFrom));
   }
 
   @Test
-  public void test() throws Exception {
-    AssertUtils.assertFailsCompilationIf(
-        // TODO(b/175542052): Should not fail compilation with -dontwarn Main.
-        !getDontWarnConfiguration().isDontWarnMissingClass(),
-        () ->
-            compileWithExpectedDiagnostics(
-                Main.class, MissingClass.class, this::inspectDiagnostics));
+  public void testDontWarnMainClass() throws Exception {
+    compileWithExpectedDiagnostics(
+        Main.class, TestDiagnosticMessages::assertNoMessages, addDontWarn(Main.class));
   }
 
-  private void inspectDiagnostics(TestDiagnosticMessages diagnostics) {
-    // TODO(b/175542052): Should also not have any diagnostics with -dontwarn Main.
-    if (getDontWarnConfiguration().isDontWarnMissingClass()) {
-      diagnostics.assertNoMessages();
-      return;
-    }
+  @Test
+  public void testDontWarnMissingClass() throws Exception {
+    compileWithExpectedDiagnostics(
+        Main.class, TestDiagnosticMessages::assertNoMessages, addDontWarn(MissingClass.class));
+  }
 
-    diagnostics
-        .assertOnlyErrors()
-        .assertErrorsCount(1)
-        .assertAllErrorsMatch(diagnosticType(MissingClassesDiagnostic.class));
-
-    MissingClassesDiagnostic diagnostic = (MissingClassesDiagnostic) diagnostics.getErrors().get(0);
-    assertEquals(
-        !getDontWarnConfiguration().isDontWarnMissingClass(),
-        diagnostic.getMissingClasses().stream()
-            .map(TypeReference::getTypeName)
-            .anyMatch(MissingClass.class.getTypeName()::equals));
+  @Test
+  public void testIgnoreWarnings() throws Exception {
+    compileWithExpectedDiagnostics(
+        Main.class,
+        diagnostics -> inspectDiagnosticsWithIgnoreWarnings(diagnostics, referencedFrom),
+        addIgnoreWarnings());
   }
 
   static class Main {
@@ -57,6 +53,4 @@ public class MissingClassReferencedFromNewInstanceTest extends MissingClassesTes
       new MissingClass();
     }
   }
-
-  static class MissingClass {}
 }

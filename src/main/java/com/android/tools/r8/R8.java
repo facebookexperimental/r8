@@ -88,12 +88,12 @@ import com.android.tools.r8.shaking.DiscardedChecker;
 import com.android.tools.r8.shaking.Enqueuer;
 import com.android.tools.r8.shaking.Enqueuer.Mode;
 import com.android.tools.r8.shaking.EnqueuerFactory;
-import com.android.tools.r8.shaking.MainDexClasses;
+import com.android.tools.r8.shaking.MainDexInfo;
 import com.android.tools.r8.shaking.MainDexListBuilder;
-import com.android.tools.r8.shaking.MainDexTracingResult;
 import com.android.tools.r8.shaking.MissingClasses;
 import com.android.tools.r8.shaking.ProguardConfigurationRule;
 import com.android.tools.r8.shaking.ProguardConfigurationUtils;
+import com.android.tools.r8.shaking.RootSetUtils.MainDexRootSet;
 import com.android.tools.r8.shaking.RootSetUtils.RootSet;
 import com.android.tools.r8.shaking.RootSetUtils.RootSetBuilder;
 import com.android.tools.r8.shaking.RuntimeTypeCheckInfo;
@@ -284,12 +284,12 @@ public class R8 {
       {
         ApplicationReader applicationReader = new ApplicationReader(inputApp, options, timing);
         DirectMappedDexApplication application = applicationReader.read(executorService).toDirect();
-        MainDexClasses mainDexClasses = applicationReader.readMainDexClasses(application);
+        MainDexInfo mainDexInfo = applicationReader.readMainDexClasses(application);
 
         // Now that the dex-application is fully loaded, close any internal archive providers.
         inputApp.closeInternalArchiveProviders();
 
-        appView = AppView.createForR8(application, mainDexClasses);
+        appView = AppView.createForR8(application, mainDexInfo);
         appView.setAppServices(AppServices.builder(appView).build());
       }
 
@@ -326,7 +326,8 @@ public class R8 {
                   .appInfo()
                   .rebuildWithClassHierarchy(
                       MissingClasses.builderForInitialMissingClasses()
-                          .addNewMissingClasses(new SubtypingInfo(appView).getMissingClasses())
+                          .legacyAddNewMissingClasses(
+                              new SubtypingInfo(appView).getMissingClasses())
                           .reportMissingClasses(appView)));
         }
 
@@ -421,23 +422,7 @@ public class R8 {
       // Build conservative main dex content after first round of tree shaking. This is used
       // by certain optimizations to avoid introducing additional class references into main dex
       // classes, as that can cause the final number of main dex methods to grow.
-      RootSet mainDexRootSet = null;
-      MainDexTracingResult mainDexTracingResult = MainDexTracingResult.NONE;
-      if (!options.mainDexKeepRules.isEmpty()) {
-        assert appView.graphLens().isIdentityLens();
-        // Find classes which may have code executed before secondary dex files installation.
-        SubtypingInfo subtypingInfo = new SubtypingInfo(appView);
-        mainDexRootSet =
-            RootSet.builder(appView, subtypingInfo, options.mainDexKeepRules)
-                .build(executorService);
-        // Live types is the tracing result.
-        Set<DexProgramClass> mainDexBaseClasses =
-            EnqueuerFactory.createForInitialMainDexTracing(appView, executorService, subtypingInfo)
-                .traceMainDex(mainDexRootSet, executorService, timing);
-        // Calculate the automatic main dex list according to legacy multidex constraints.
-        mainDexTracingResult = new MainDexListBuilder(mainDexBaseClasses, appView).run();
-        appView.appInfo().unsetObsolete();
-      }
+      performInitialMainDexTracing(appView, executorService);
 
       // The class type lattice elements include information about the interfaces that a class
       // implements. This information can change as a result of vertical class merging, so we need
@@ -479,11 +464,7 @@ public class R8 {
           timing.begin("VerticalClassMerger");
           VerticalClassMerger verticalClassMerger =
               new VerticalClassMerger(
-                  getDirectApp(appViewWithLiveness),
-                  appViewWithLiveness,
-                  executorService,
-                  timing,
-                  mainDexTracingResult);
+                  getDirectApp(appViewWithLiveness), appViewWithLiveness, executorService, timing);
           VerticalClassMergerGraphLens lens = verticalClassMerger.run();
           if (lens != null) {
             appView.rewriteWithLens(lens);
@@ -530,7 +511,7 @@ public class R8 {
           DirectMappedDexApplication.Builder appBuilder =
               appView.appInfo().app().asDirect().builder();
           HorizontalClassMergerResult horizontalClassMergerResult =
-              merger.run(appBuilder, mainDexTracingResult, runtimeTypeCheckInfo);
+              merger.run(appBuilder, runtimeTypeCheckInfo);
           if (horizontalClassMergerResult != null) {
             // Must rewrite AppInfoWithLiveness before pruning the merged classes, to ensure that
             // allocations sites, fields accesses, etc. are correctly transferred to the target
@@ -547,14 +528,15 @@ public class R8 {
                     .addRemovedClasses(appView.horizontallyMergedClasses().getSources())
                     .addNoLongerSyntheticItems(appView.horizontallyMergedClasses().getTargets())
                     .build());
-
-            mainDexTracingResult = horizontalClassMergerResult.getMainDexTracingResult();
           }
           timing.end();
         } else {
           appView.setHorizontallyMergedClasses(HorizontallyMergedClasses.empty());
         }
       }
+
+      // Clear traced methods roots to not hold on to the main dex live method set.
+      appView.appInfo().getMainDexInfo().clearTracedMethodRoots();
 
       // None of the optimizations above should lead to the creation of type lattice elements.
       assert appView.dexItemFactory().verifyNoCachedTypeElements();
@@ -571,7 +553,7 @@ public class R8 {
       timing.begin("Create IR");
       CfgPrinter printer = options.printCfg ? new CfgPrinter() : null;
       try {
-        IRConverter converter = new IRConverter(appView, timing, printer, mainDexTracingResult);
+        IRConverter converter = new IRConverter(appView, timing, printer);
         DexApplication application =
             converter.optimize(appViewWithLiveness, executorService).asDirect();
         appView.setAppInfo(appView.appInfo().rebuildWithClassHierarchy(previous -> application));
@@ -599,55 +581,6 @@ public class R8 {
             writer.write(printer.toString());
           }
         }
-      }
-
-      if (!options.mainDexKeepRules.isEmpty()) {
-        // No need to build a new main dex root set
-        assert mainDexRootSet != null;
-        GraphConsumer mainDexKeptGraphConsumer = options.mainDexKeptGraphConsumer;
-        WhyAreYouKeepingConsumer whyAreYouKeepingConsumer = null;
-        if (!mainDexRootSet.reasonAsked.isEmpty()) {
-          whyAreYouKeepingConsumer = new WhyAreYouKeepingConsumer(mainDexKeptGraphConsumer);
-          mainDexKeptGraphConsumer = whyAreYouKeepingConsumer;
-        }
-
-        Enqueuer enqueuer =
-            EnqueuerFactory.createForFinalMainDexTracing(
-                appView,
-                executorService,
-                new SubtypingInfo(appView),
-                mainDexKeptGraphConsumer,
-                mainDexTracingResult);
-        // Find classes which may have code executed before secondary dex files installation.
-        // Live types is the tracing result.
-        Set<DexProgramClass> mainDexBaseClasses =
-            enqueuer.traceMainDex(mainDexRootSet, executorService, timing);
-        // Calculate the automatic main dex list according to legacy multidex constraints.
-        mainDexTracingResult = new MainDexListBuilder(mainDexBaseClasses, appView).run();
-        final MainDexTracingResult finalMainDexClasses = mainDexTracingResult;
-
-        processWhyAreYouKeepingAndCheckDiscarded(
-            mainDexRootSet,
-            () -> {
-              ArrayList<DexProgramClass> classes = new ArrayList<>();
-              // TODO(b/131668850): This is not a deterministic order!
-              finalMainDexClasses
-                  .getClasses()
-                  .forEach(
-                      type -> {
-                        DexClass clazz = appView.definitionFor(type);
-                        assert clazz.isProgramClass();
-                        classes.add(clazz.asProgramClass());
-                      });
-              return classes;
-            },
-            whyAreYouKeepingConsumer,
-            appView,
-            enqueuer,
-            true,
-            options,
-            timing,
-            executorService);
       }
 
       if (options.shouldRerunEnqueuer()) {
@@ -731,12 +664,6 @@ public class R8 {
                 .setClassesToRetainInnerClassAttributeFor(classesToRetainInnerClassAttributeFor)
                 .build(appView.withLiveness(), removedClasses)
                 .run();
-            if (!mainDexTracingResult.isEmpty()) {
-              // Remove types that no longer exists from the computed main dex list.
-              mainDexTracingResult =
-                  mainDexTracingResult.prunedCopy(appView.appInfo().withLiveness());
-            }
-
             // Synthesize fields for triggering class initializers.
             new ClassInitFieldSynthesizer(appViewWithLiveness).run(executorService);
           }
@@ -749,7 +676,7 @@ public class R8 {
             appView.protoShrinker().enumLiteProtoShrinker.verifyDeadEnumLiteMapsAreDead();
           }
 
-          IRConverter converter = new IRConverter(appView, timing, null, mainDexTracingResult);
+          IRConverter converter = new IRConverter(appView, timing, null);
 
           // If proto shrinking is enabled, we need to reprocess every dynamicMethod(). This ensures
           // that proto fields that have been removed by the second round of tree shaking are also
@@ -766,6 +693,8 @@ public class R8 {
                       converter, executorService, timing));
         }
       }
+
+      performFinalMainDexTracing(appView, executorService);
 
       // Remove unneeded visibility bridges that have been inserted for member rebinding.
       // This can only be done if we have AppInfoWithLiveness.
@@ -801,11 +730,6 @@ public class R8 {
       }
       if (appView.appInfo().hasLiveness()) {
         assert Repackaging.verifyIdentityRepackaging(appView.withLiveness());
-      }
-
-      // Add automatic main dex classes to an eventual manual list of classes.
-      if (!options.mainDexKeepRules.isEmpty()) {
-        appView.appInfo().getMainDexClasses().addAll(mainDexTracingResult);
       }
 
       if (appView.appInfo().hasLiveness()) {
@@ -911,6 +835,71 @@ public class R8 {
         timing.report();
       }
     }
+  }
+
+  private void performInitialMainDexTracing(
+      AppView<AppInfoWithClassHierarchy> appView, ExecutorService executorService)
+      throws ExecutionException {
+    if (options.mainDexKeepRules.isEmpty()) {
+      return;
+    }
+    assert appView.graphLens().isIdentityLens();
+    // Find classes which may have code executed before secondary dex files installation.
+    SubtypingInfo subtypingInfo = new SubtypingInfo(appView);
+    MainDexRootSet mainDexRootSet =
+        MainDexRootSet.builder(appView, subtypingInfo, options.mainDexKeepRules)
+            .build(executorService);
+    appView.setMainDexRootSet(mainDexRootSet);
+    appView.appInfo().unsetObsolete();
+    // Live types is the tracing result.
+    MainDexInfo mainDexInfo =
+        EnqueuerFactory.createForInitialMainDexTracing(appView, executorService, subtypingInfo)
+            .traceMainDex(executorService, timing);
+    appView.setAppInfo(appView.appInfo().rebuildWithMainDexInfo(mainDexInfo));
+  }
+
+  private void performFinalMainDexTracing(
+      AppView<AppInfoWithClassHierarchy> appView, ExecutorService executorService)
+      throws ExecutionException {
+    if (options.mainDexKeepRules.isEmpty()) {
+      return;
+    }
+    // No need to build a new main dex root set
+    assert appView.getMainDexRootSet() != null;
+    GraphConsumer mainDexKeptGraphConsumer = options.mainDexKeptGraphConsumer;
+    WhyAreYouKeepingConsumer whyAreYouKeepingConsumer = null;
+    if (!appView.getMainDexRootSet().reasonAsked.isEmpty()) {
+      whyAreYouKeepingConsumer = new WhyAreYouKeepingConsumer(mainDexKeptGraphConsumer);
+      mainDexKeptGraphConsumer = whyAreYouKeepingConsumer;
+    }
+
+    Enqueuer enqueuer =
+        EnqueuerFactory.createForFinalMainDexTracing(
+            appView, executorService, new SubtypingInfo(appView), mainDexKeptGraphConsumer);
+    // Find classes which may have code executed before secondary dex files installation.
+    MainDexInfo mainDexInfo = enqueuer.traceMainDex(executorService, timing);
+    appView.setAppInfo(appView.appInfo().rebuildWithMainDexInfo(mainDexInfo));
+
+    processWhyAreYouKeepingAndCheckDiscarded(
+        appView.getMainDexRootSet(),
+        () -> {
+          ArrayList<DexProgramClass> classes = new ArrayList<>();
+          // TODO(b/131668850): This is not a deterministic order!
+          mainDexInfo.forEach(
+              type -> {
+                DexClass clazz = appView.definitionFor(type);
+                assert clazz.isProgramClass();
+                classes.add(clazz.asProgramClass());
+              });
+          return classes;
+        },
+        whyAreYouKeepingConsumer,
+        appView,
+        enqueuer,
+        true,
+        options,
+        timing,
+        executorService);
   }
 
   private static boolean verifyMovedMethodsHaveOriginalMethodPosition(
@@ -1042,12 +1031,8 @@ public class R8 {
       if (forMainDex) {
         enqueuer =
             EnqueuerFactory.createForFinalMainDexTracing(
-                appView,
-                executorService,
-                subtypingInfo,
-                whyAreYouKeepingConsumer,
-                MainDexTracingResult.NONE);
-        enqueuer.traceMainDex(rootSet, executorService, timing);
+                appView, executorService, subtypingInfo, whyAreYouKeepingConsumer);
+        enqueuer.traceMainDex(executorService, timing);
       } else {
         enqueuer =
             EnqueuerFactory.createForWhyAreYouKeeping(

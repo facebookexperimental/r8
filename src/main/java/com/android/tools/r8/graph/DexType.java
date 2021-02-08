@@ -4,11 +4,11 @@
 package com.android.tools.r8.graph;
 
 import static com.android.tools.r8.graph.DexProgramClass.asProgramClassOrNull;
-import static com.android.tools.r8.ir.desugar.LambdaRewriter.LAMBDA_GROUP_CLASS_NAME_PREFIX;
 
 import com.android.tools.r8.dex.IndexedItemCollection;
 import com.android.tools.r8.errors.Unreachable;
-import com.android.tools.r8.ir.desugar.nest.NestBasedAccessDesugaring;
+import com.android.tools.r8.references.ClassReference;
+import com.android.tools.r8.references.Reference;
 import com.android.tools.r8.shaking.AppInfoWithLiveness;
 import com.android.tools.r8.utils.DescriptorUtils;
 import com.android.tools.r8.utils.structural.CompareToVisitor;
@@ -36,7 +36,9 @@ public class DexType extends DexReference implements NamingLensComparable<DexTyp
           "$-DC",
           "$$ServiceLoaderMethods",
           "com.android.tools.r8.GeneratedOutlineSupport",
-          "-$$Lambda$");
+          "-$$Nest$Constructor",
+          "-$$Lambda$",
+          "-$$LambdaGroup$");
 
   public final DexString descriptor;
   private String toStringCache = null;
@@ -44,6 +46,10 @@ public class DexType extends DexReference implements NamingLensComparable<DexTyp
   DexType(DexString descriptor) {
     assert !descriptor.toString().contains(".") : "Malformed descriptor: " + descriptor.toString();
     this.descriptor = descriptor;
+  }
+
+  public ClassReference asClassReference() {
+    return Reference.classFromDescriptor(toDescriptorString());
   }
 
   @Override
@@ -301,15 +307,7 @@ public class DexType extends DexReference implements NamingLensComparable<DexTyp
   }
 
   public boolean isLegacySynthesizedTypeAllowedDuplication() {
-    String name = toSourceString();
-    return isSynthesizedTypeThatCouldBeDuplicated(name) || oldSynthesizedName(name);
-  }
-
-  private static boolean isSynthesizedTypeThatCouldBeDuplicated(String name) {
-    // Any entry that is removed from here must be added to OLD_SYNTHESIZED_NAMES to ensure that
-    // newer releases can be used to merge previous builds.
-    return name.contains(LAMBDA_GROUP_CLASS_NAME_PREFIX) // Could collide.
-        || name.contains(NestBasedAccessDesugaring.NEST_CONSTRUCTOR_NAME); // Global singleton.
+    return oldSynthesizedName(toSourceString());
   }
 
   private boolean oldSynthesizedName(String name) {

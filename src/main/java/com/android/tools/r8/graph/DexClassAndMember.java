@@ -7,8 +7,8 @@ package com.android.tools.r8.graph;
 import com.android.tools.r8.errors.Unreachable;
 import com.android.tools.r8.origin.Origin;
 
-public abstract class DexClassAndMember<
-    D extends DexEncodedMember<D, R>, R extends DexMember<D, R>> {
+public abstract class DexClassAndMember<D extends DexEncodedMember<D, R>, R extends DexMember<D, R>>
+    implements Definition {
 
   private final DexClass holder;
   private final D definition;
@@ -23,6 +23,7 @@ public abstract class DexClassAndMember<
 
   public abstract AccessFlags<?> getAccessFlags();
 
+  @Override
   public DexType getContextType() {
     return getHolderType();
   }
@@ -43,6 +44,7 @@ public abstract class DexClassAndMember<
     return getReference().getName();
   }
 
+  @Override
   public R getReference() {
     return definition.getReference();
   }

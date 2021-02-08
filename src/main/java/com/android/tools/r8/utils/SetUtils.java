@@ -37,6 +37,14 @@ public class SetUtils {
     return result;
   }
 
+  public static <T> Set<T> newIdentityHashSet(Iterable<T> c1, Iterable<T> c2, Iterable<T> c3) {
+    Set<T> result = Sets.newIdentityHashSet();
+    c1.forEach(result::add);
+    c2.forEach(result::add);
+    c3.forEach(result::add);
+    return result;
+  }
+
   public static <T> Set<T> newIdentityHashSet(int capacity) {
     return Collections.newSetFromMap(new IdentityHashMap<>(capacity));
   }
@@ -53,5 +61,12 @@ public class SetUtils {
       out.add(fn.apply(element));
     }
     return out;
+  }
+
+  public static <T> Set<T> unionIdentityHashSet(Set<T> one, Set<T> other) {
+    Set<T> union = Sets.newIdentityHashSet();
+    union.addAll(one);
+    union.addAll(other);
+    return union;
   }
 }

@@ -57,10 +57,9 @@ import com.android.tools.r8.ir.optimize.inliner.InliningIRProvider;
 import com.android.tools.r8.ir.optimize.inliner.InliningReasonStrategy;
 import com.android.tools.r8.ir.optimize.inliner.NopWhyAreYouNotInliningReporter;
 import com.android.tools.r8.ir.optimize.inliner.WhyAreYouNotInliningReporter;
-import com.android.tools.r8.ir.optimize.lambda.LambdaMerger;
 import com.android.tools.r8.kotlin.Kotlin;
 import com.android.tools.r8.shaking.AppInfoWithLiveness;
-import com.android.tools.r8.shaking.MainDexTracingResult;
+import com.android.tools.r8.shaking.MainDexInfo;
 import com.android.tools.r8.utils.InternalOptions;
 import com.android.tools.r8.utils.IteratorUtils;
 import com.android.tools.r8.utils.ListUtils;
@@ -84,9 +83,8 @@ public class Inliner implements PostOptimization {
 
   protected final AppView<AppInfoWithLiveness> appView;
   private final Set<DexMethod> extraNeverInlineMethods;
-  private final LambdaMerger lambdaMerger;
   private final LensCodeRewriter lensCodeRewriter;
-  final MainDexTracingResult mainDexClasses;
+  final MainDexInfo mainDexInfo;
 
   // State for inlining methods which are known to be called twice.
   private boolean applyDoubleInlining = false;
@@ -99,8 +97,6 @@ public class Inliner implements PostOptimization {
 
   public Inliner(
       AppView<AppInfoWithLiveness> appView,
-      MainDexTracingResult mainDexClasses,
-      LambdaMerger lambdaMerger,
       LensCodeRewriter lensCodeRewriter) {
     Kotlin.Intrinsics intrinsics = appView.dexItemFactory().kotlin.intrinsics;
     this.appView = appView;
@@ -108,9 +104,8 @@ public class Inliner implements PostOptimization {
         appView.options().kotlinOptimizationOptions().disableKotlinSpecificOptimizations
             ? ImmutableSet.of()
             : ImmutableSet.of(intrinsics.throwNpe, intrinsics.throwParameterIsNullException);
-    this.lambdaMerger = lambdaMerger;
     this.lensCodeRewriter = lensCodeRewriter;
-    this.mainDexClasses = mainDexClasses;
+    this.mainDexInfo = appView.appInfo().getMainDexInfo();
     availableApiExceptions =
         appView.options().canHaveDalvikCatchHandlerVerificationBug()
             ? new AvailableApiExceptions(appView.options())
@@ -596,7 +591,6 @@ public class Inliner implements PostOptimization {
         InvokeMethod invoke,
         ProgramMethod context,
         InliningIRProvider inliningIRProvider,
-        LambdaMerger lambdaMerger,
         LensCodeRewriter lensCodeRewriter) {
       DexItemFactory dexItemFactory = appView.dexItemFactory();
       InternalOptions options = appView.options();
@@ -742,9 +736,6 @@ public class Inliner implements PostOptimization {
       if (inliningIRProvider.shouldApplyCodeRewritings(target)) {
         assert lensCodeRewriter != null;
         lensCodeRewriter.rewrite(code, target);
-      }
-      if (lambdaMerger != null) {
-        lambdaMerger.rewriteCodeForInlining(target, code, context, inliningIRProvider);
       }
       if (options.testing.inlineeIrModifier != null) {
         options.testing.inlineeIrModifier.accept(code);
@@ -1040,7 +1031,7 @@ public class Inliner implements PostOptimization {
 
           InlineeWithReason inlinee =
               action.buildInliningIR(
-                  appView, invoke, context, inliningIRProvider, lambdaMerger, lensCodeRewriter);
+                  appView, invoke, context, inliningIRProvider, lensCodeRewriter);
           if (strategy.willExceedBudget(
               code, invoke, inlinee, block, whyAreYouNotInliningReporter)) {
             assert whyAreYouNotInliningReporter.unsetReasonHasBeenReportedFlag();

@@ -23,14 +23,14 @@ import com.android.tools.r8.horizontalclassmerging.policies.NoIndirectRuntimeTyp
 import com.android.tools.r8.horizontalclassmerging.policies.NoInnerClasses;
 import com.android.tools.r8.horizontalclassmerging.policies.NoInterfaces;
 import com.android.tools.r8.horizontalclassmerging.policies.NoKeepRules;
-import com.android.tools.r8.horizontalclassmerging.policies.NoKotlinLambdas;
 import com.android.tools.r8.horizontalclassmerging.policies.NoKotlinMetadata;
 import com.android.tools.r8.horizontalclassmerging.policies.NoNativeMethods;
 import com.android.tools.r8.horizontalclassmerging.policies.NoServiceLoaders;
 import com.android.tools.r8.horizontalclassmerging.policies.NotMatchedByNoHorizontalClassMerging;
 import com.android.tools.r8.horizontalclassmerging.policies.NotVerticallyMergedIntoSubtype;
 import com.android.tools.r8.horizontalclassmerging.policies.PreserveMethodCharacteristics;
-import com.android.tools.r8.horizontalclassmerging.policies.PreventMergeIntoMainDex;
+import com.android.tools.r8.horizontalclassmerging.policies.PreventMergeIntoDifferentMainDexGroups;
+import com.android.tools.r8.horizontalclassmerging.policies.PreventMergeIntoMainDexList;
 import com.android.tools.r8.horizontalclassmerging.policies.PreventMethodImplementation;
 import com.android.tools.r8.horizontalclassmerging.policies.RespectPackageBoundaries;
 import com.android.tools.r8.horizontalclassmerging.policies.SameFeatureSplit;
@@ -40,7 +40,6 @@ import com.android.tools.r8.horizontalclassmerging.policies.SameParentClass;
 import com.android.tools.r8.shaking.AppInfoWithLiveness;
 import com.android.tools.r8.shaking.FieldAccessInfoCollectionModifier;
 import com.android.tools.r8.shaking.KeepInfoCollection;
-import com.android.tools.r8.shaking.MainDexTracingResult;
 import com.android.tools.r8.shaking.RuntimeTypeCheckInfo;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
@@ -61,12 +60,11 @@ public class HorizontalClassMerger {
   // TODO(b/165577835): replace Collection<DexProgramClass> with MergeGroup
   public HorizontalClassMergerResult run(
       DirectMappedDexApplication.Builder appBuilder,
-      MainDexTracingResult mainDexTracingResult,
       RuntimeTypeCheckInfo runtimeTypeCheckInfo) {
     MergeGroup initialGroup = new MergeGroup(appView.appInfo().classesWithDeterministicOrder());
 
     // Run the policies on all program classes to produce a final grouping.
-    List<Policy> policies = getPolicies(mainDexTracingResult, runtimeTypeCheckInfo);
+    List<Policy> policies = getPolicies(runtimeTypeCheckInfo);
     Collection<MergeGroup> groups =
         new SimplePolicyExecutor().run(Collections.singletonList(initialGroup), policies);
 
@@ -80,8 +78,6 @@ public class HorizontalClassMerger {
         new HorizontallyMergedClasses.Builder();
     HorizontalClassMergerGraphLens.Builder lensBuilder =
         new HorizontalClassMergerGraphLens.Builder();
-    MainDexTracingResult.Builder mainDexTracingResultBuilder =
-        mainDexTracingResult.extensionBuilder(appView.appInfo());
 
     // Set up a class merger for each group.
     List<ClassMerger> classMergers =
@@ -92,9 +88,7 @@ public class HorizontalClassMerger {
 
     // Merge the classes.
     SyntheticArgumentClass syntheticArgumentClass =
-        new SyntheticArgumentClass.Builder(
-                appBuilder, appView, mainDexTracingResult, mainDexTracingResultBuilder)
-            .build(allMergeClasses);
+        new SyntheticArgumentClass.Builder(appBuilder, appView).build(allMergeClasses);
     applyClassMergers(classMergers, syntheticArgumentClass);
 
     // Generate the graph lens.
@@ -107,8 +101,7 @@ public class HorizontalClassMerger {
     KeepInfoCollection keepInfo = appView.appInfo().getKeepInfo();
     keepInfo.mutate(mutator -> mutator.removeKeepInfoForPrunedItems(mergedClasses.getSources()));
 
-    return new HorizontalClassMergerResult(
-        createFieldAccessInfoCollectionModifier(groups), lens, mainDexTracingResultBuilder.build());
+    return new HorizontalClassMergerResult(createFieldAccessInfoCollectionModifier(groups), lens);
   }
 
   private FieldAccessInfoCollectionModifier createFieldAccessInfoCollectionModifier(
@@ -127,9 +120,7 @@ public class HorizontalClassMerger {
     return builder.build();
   }
 
-  private List<Policy> getPolicies(
-      MainDexTracingResult mainDexTracingResult,
-      RuntimeTypeCheckInfo runtimeTypeCheckInfo) {
+  private List<Policy> getPolicies(RuntimeTypeCheckInfo runtimeTypeCheckInfo) {
     return ImmutableList.of(
         new NotMatchedByNoHorizontalClassMerging(appView),
         new SameInstanceFields(appView),
@@ -138,20 +129,20 @@ public class HorizontalClassMerger {
         new NoEnums(appView),
         new CheckAbstractClasses(appView),
         new IgnoreSynthetics(appView),
-        new NoClassesOrMembersWithAnnotations(),
+        new NoClassesOrMembersWithAnnotations(appView),
         new NoInnerClasses(),
         new NoClassInitializerWithObservableSideEffects(),
         new NoNativeMethods(),
         new NoKeepRules(appView),
         new NoKotlinMetadata(),
-        new NoKotlinLambdas(appView),
         new NoServiceLoaders(appView),
         new NotVerticallyMergedIntoSubtype(appView),
         new NoDirectRuntimeTypeChecks(runtimeTypeCheckInfo),
         new NoIndirectRuntimeTypeChecks(appView, runtimeTypeCheckInfo),
         new PreventMethodImplementation(appView),
-        new DontInlinePolicy(appView, mainDexTracingResult),
-        new PreventMergeIntoMainDex(appView, mainDexTracingResult),
+        new DontInlinePolicy(appView),
+        new PreventMergeIntoMainDexList(appView),
+        new PreventMergeIntoDifferentMainDexGroups(appView),
         new AllInstantiatedOrUninstantiated(appView),
         new SameParentClass(),
         new SameNestHost(),

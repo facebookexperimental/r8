@@ -25,7 +25,6 @@ import com.android.tools.r8.ir.analysis.type.ReferenceTypeElement;
 import com.android.tools.r8.ir.analysis.type.TypeElement;
 import com.android.tools.r8.ir.code.Position;
 import com.android.tools.r8.ir.code.Value;
-import com.android.tools.r8.ir.desugar.nest.NestBasedAccessDesugaring;
 import com.android.tools.r8.kotlin.Kotlin;
 import com.android.tools.r8.utils.ArrayUtils;
 import com.android.tools.r8.utils.DescriptorUtils;
@@ -214,6 +213,7 @@ public class DexItemFactory {
   public final DexString stringDescriptor = createString("Ljava/lang/String;");
   public final DexString stringArrayDescriptor = createString("[Ljava/lang/String;");
   public final DexString objectDescriptor = createString("Ljava/lang/Object;");
+  public final DexString recordDescriptor = createString("Ljava/lang/Record;");
   public final DexString objectArrayDescriptor = createString("[Ljava/lang/Object;");
   public final DexString classDescriptor = createString("Ljava/lang/Class;");
   public final DexString classLoaderDescriptor = createString("Ljava/lang/ClassLoader;");
@@ -343,6 +343,7 @@ public class DexItemFactory {
   public final DexType stringType = createStaticallyKnownType(stringDescriptor);
   public final DexType stringArrayType = createStaticallyKnownType(stringArrayDescriptor);
   public final DexType objectType = createStaticallyKnownType(objectDescriptor);
+  public final DexType recordType = createStaticallyKnownType(recordDescriptor);
   public final DexType objectArrayType = createStaticallyKnownType(objectArrayDescriptor);
   public final DexType classArrayType = createStaticallyKnownType(classArrayDescriptor);
   public final DexType enumType = createStaticallyKnownType(enumDescriptor);
@@ -424,6 +425,26 @@ public class DexItemFactory {
       createStaticallyKnownType(reflectiveOperationExceptionDescriptor);
   public final DexType kotlinMetadataType = createStaticallyKnownType(kotlinMetadataDescriptor);
 
+  public final DexType doubleSummaryStatisticsConversionsType =
+      createStaticallyKnownType("Ljava/util/DoubleSummaryStatisticsConversions;");
+  public final DexType intSummaryStatisticsConversionsType =
+      createStaticallyKnownType("Ljava/util/IntSummaryStatisticsConversions;");
+  public final DexType longSummaryStatisticsConversionsType =
+      createStaticallyKnownType("Ljava/util/LongSummaryStatisticsConversions;");
+  public final DexType optionalConversionsType =
+      createStaticallyKnownType("Ljava/util/OptionalConversions;");
+  public final DexType timeConversionsType =
+      createStaticallyKnownType("Ljava/time/TimeConversions;");
+
+  public Iterable<DexType> getConversionTypes() {
+    return ImmutableList.of(
+        doubleSummaryStatisticsConversionsType,
+        intSummaryStatisticsConversionsType,
+        longSummaryStatisticsConversionsType,
+        optionalConversionsType,
+        timeConversionsType);
+  }
+
   public final DexType javaIoFileType = createStaticallyKnownType("Ljava/io/File;");
   public final DexType javaMathBigIntegerType = createStaticallyKnownType("Ljava/math/BigInteger;");
   public final DexType javaNioByteOrderType = createStaticallyKnownType("Ljava/nio/ByteOrder;");
@@ -453,10 +474,6 @@ public class DexItemFactory {
   public final DexType androidUtilPropertyType =
       createStaticallyKnownType("Landroid/util/Property;");
   public final DexType androidViewViewType = createStaticallyKnownType("Landroid/view/View;");
-
-  public final DexString nestConstructorDescriptor =
-      createString("L" + NestBasedAccessDesugaring.NEST_CONSTRUCTOR_NAME + ";");
-  public final DexType nestConstructorType = createStaticallyKnownType(nestConstructorDescriptor);
 
   public final StringBuildingMethods stringBuilderMethods =
       new StringBuildingMethods(stringBuilderType);
@@ -540,8 +557,10 @@ public class DexItemFactory {
       createProto(voidType, throwableType, autoCloseableType);
 
   public final DexString deserializeLambdaMethodName = createString("$deserializeLambda$");
+  public final DexType serializedLambdaType =
+      createStaticallyKnownType("Ljava/lang/invoke/SerializedLambda;");
   public final DexProto deserializeLambdaMethodProto =
-      createProto(objectType, createStaticallyKnownType("Ljava/lang/invoke/SerializedLambda;"));
+      createProto(objectType, serializedLambdaType);
 
   // Dex system annotations.
   // See https://source.android.com/devices/tech/dalvik/dex-format.html#system-annotation

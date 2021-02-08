@@ -9,7 +9,6 @@ import com.android.tools.r8.features.ClassToFeatureSplitMap;
 import com.android.tools.r8.graph.DexValue.DexValueString;
 import com.android.tools.r8.graph.GraphLens.NonIdentityGraphLens;
 import com.android.tools.r8.graph.analysis.InitializedClassesInInstanceMethodsAnalysis.InitializedClassesInInstanceMethods;
-import com.android.tools.r8.graph.classmerging.HorizontallyMergedLambdaClasses;
 import com.android.tools.r8.graph.classmerging.MergedClassesCollection;
 import com.android.tools.r8.graph.classmerging.VerticallyMergedClasses;
 import com.android.tools.r8.horizontalclassmerging.HorizontallyMergedClasses;
@@ -32,8 +31,9 @@ import com.android.tools.r8.optimize.MemberRebindingLens;
 import com.android.tools.r8.shaking.AppInfoWithLiveness;
 import com.android.tools.r8.shaking.KeepInfoCollection;
 import com.android.tools.r8.shaking.LibraryModeledPredicate;
-import com.android.tools.r8.shaking.MainDexClasses;
+import com.android.tools.r8.shaking.MainDexInfo;
 import com.android.tools.r8.shaking.ProguardCompatibilityActions;
+import com.android.tools.r8.shaking.RootSetUtils.MainDexRootSet;
 import com.android.tools.r8.shaking.RootSetUtils.RootSet;
 import com.android.tools.r8.synthesis.SyntheticItems;
 import com.android.tools.r8.utils.InternalOptions;
@@ -64,6 +64,7 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
   private InitClassLens initClassLens;
   private ProguardCompatibilityActions proguardCompatibilityActions;
   private RootSet rootSet;
+  private MainDexRootSet mainDexRootSet = null;
   // This should perferably always be obtained via AppInfoWithLiveness.
   // Currently however the liveness may be downgraded thus loosing the computed keep info.
   private KeepInfoCollection keepInfo = null;
@@ -91,13 +92,11 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
   private boolean allCodeProcessed = false;
   private Predicate<DexType> classesEscapingIntoLibrary = Predicates.alwaysTrue();
   private InitializedClassesInInstanceMethods initializedClassesInInstanceMethods;
-  private HorizontallyMergedLambdaClasses horizontallyMergedLambdaClasses;
   private HorizontallyMergedClasses horizontallyMergedClasses;
   private VerticallyMergedClasses verticallyMergedClasses;
   private EnumDataMap unboxedEnums = EnumDataMap.empty();
   // TODO(b/169115389): Remove
   private Set<DexMethod> cfByteCodePassThrough = ImmutableSet.of();
-
   private Map<DexType, DexValueString> sourceDebugExtensions = new IdentityHashMap<>();
 
   // When input has been (partially) desugared these are the classes which has been library
@@ -157,16 +156,16 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
   }
 
   public static AppView<AppInfoWithClassHierarchy> createForR8(DexApplication application) {
-    return createForR8(application, MainDexClasses.createEmptyMainDexClasses());
+    return createForR8(application, MainDexInfo.none());
   }
 
   public static AppView<AppInfoWithClassHierarchy> createForR8(
-      DexApplication application, MainDexClasses mainDexClasses) {
+      DexApplication application, MainDexInfo mainDexInfo) {
     ClassToFeatureSplitMap classToFeatureSplitMap =
         ClassToFeatureSplitMap.createInitialClassToFeatureSplitMap(application.options);
     AppInfoWithClassHierarchy appInfo =
         AppInfoWithClassHierarchy.createInitialAppInfoWithClassHierarchy(
-            application, classToFeatureSplitMap, mainDexClasses);
+            application, classToFeatureSplitMap, mainDexInfo);
     return new AppView<>(
         appInfo, WholeProgramOptimizations.ON, defaultPrefixRewritingMapper(appInfo));
   }
@@ -460,6 +459,15 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
     this.rootSet = rootSet;
   }
 
+  public void setMainDexRootSet(MainDexRootSet mainDexRootSet) {
+    assert mainDexRootSet != null : "Root set should never be recomputed";
+    this.mainDexRootSet = mainDexRootSet;
+  }
+
+  public MainDexRootSet getMainDexRootSet() {
+    return mainDexRootSet;
+  }
+
   public KeepInfoCollection getKeepInfo() {
     return keepInfo;
   }
@@ -483,30 +491,10 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
     if (horizontallyMergedClasses != null) {
       collection.add(horizontallyMergedClasses);
     }
-    if (horizontallyMergedLambdaClasses != null) {
-      collection.add(horizontallyMergedLambdaClasses);
-    }
     if (verticallyMergedClasses != null) {
       collection.add(verticallyMergedClasses);
     }
     return collection;
-  }
-
-  /**
-   * Get the result of horizontal lambda class merging. Returns null if horizontal lambda class
-   * merging has not been run.
-   */
-  public HorizontallyMergedLambdaClasses horizontallyMergedLambdaClasses() {
-    return horizontallyMergedLambdaClasses;
-  }
-
-  public void setHorizontallyMergedLambdaClasses(
-      HorizontallyMergedLambdaClasses horizontallyMergedLambdaClasses) {
-    assert this.horizontallyMergedLambdaClasses == null;
-    this.horizontallyMergedLambdaClasses = horizontallyMergedLambdaClasses;
-    testing()
-        .horizontallyMergedLambdaClassesConsumer
-        .accept(dexItemFactory(), horizontallyMergedLambdaClasses);
   }
 
   /**
@@ -619,6 +607,9 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
       setProguardCompatibilityActions(
           getProguardCompatibilityActions().withoutPrunedItems(prunedItems));
     }
+    if (mainDexRootSet != null) {
+      setMainDexRootSet(mainDexRootSet.withoutPrunedItems(prunedItems));
+    }
   }
 
   @SuppressWarnings("unchecked")
@@ -687,6 +678,9 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
           if (appView.hasProguardCompatibilityActions()) {
             appView.setProguardCompatibilityActions(
                 appView.getProguardCompatibilityActions().rewrittenWithLens(lens));
+          }
+          if (appView.getMainDexRootSet() != null) {
+            appView.setMainDexRootSet(appView.getMainDexRootSet().rewrittenWithLens(lens));
           }
         });
   }
