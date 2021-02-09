@@ -81,12 +81,12 @@ public class GeneratedMessageLiteShrinker {
     SortedProgramMethodSet wave = SortedProgramMethodSet.create(this::forEachDynamicMethod);
     OneTimeMethodProcessor methodProcessor = OneTimeMethodProcessor.create(wave, appView);
     methodProcessor.forEachWaveWithExtension(
-        (method, methodProcessingId) ->
-            converter.processMethod(
+        (method, methodProcessingContext) ->
+            converter.processDesugaredMethod(
                 method,
                 OptimizationFeedbackIgnore.getInstance(),
                 methodProcessor,
-                methodProcessingId),
+                methodProcessingContext),
         executorService);
     timing.end();
   }

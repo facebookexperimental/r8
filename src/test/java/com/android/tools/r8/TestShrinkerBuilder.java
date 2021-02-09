@@ -114,11 +114,15 @@ public abstract class TestShrinkerBuilder<
     return addKeepRules("-dontwarn " + className);
   }
 
-  public T addDontWarn(String... classes) {
+  public T addDontWarn(Collection<String> classes) {
     for (String clazz : classes) {
       addKeepRules("-dontwarn " + clazz);
     }
     return self();
+  }
+
+  public T addDontWarn(String... classes) {
+    return addDontWarn(Arrays.asList(classes));
   }
 
   @Deprecated
@@ -146,12 +150,6 @@ public abstract class TestShrinkerBuilder<
     return addDontWarn("java.nio.file.**");
   }
 
-  // TODO(b/176133676): Investigate why there are missing class references to org.jetbrains
-  @Deprecated
-  public T addDontWarnJetBrains() {
-    return addDontWarn("org.jetbrains.**");
-  }
-
   public T addDontWarnJetBrainsAnnotations() {
     return addDontWarnJetBrainsNotNullAnnotation().addDontWarnJetBrainsNullableAnnotation();
   }
@@ -162,18 +160,6 @@ public abstract class TestShrinkerBuilder<
 
   public T addDontWarnJetBrainsNullableAnnotation() {
     return addDontWarn("org.jetbrains.annotations.Nullable");
-  }
-
-  // TODO(b/176133676): Should not report missing classes for Kotlin classes.
-  @Deprecated
-  public T addDontWarnKotlin() {
-    return addDontWarn("kotlin.**");
-  }
-
-  // TODO(b/176133676): Should not report missing classes for Kotlin metadata.
-  @Deprecated
-  public T addDontWarnKotlinMetadata() {
-    return addDontWarn("kotlin.Metadata");
   }
 
   public T addIgnoreWarnings() {

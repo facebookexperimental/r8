@@ -15,13 +15,13 @@ import com.android.tools.r8.Diagnostic;
 import com.android.tools.r8.cf.code.CfInstruction;
 import com.android.tools.r8.cf.code.CfInvoke;
 import com.android.tools.r8.code.CfOrDexInstruction;
+import com.android.tools.r8.contexts.CompilationContext.MethodProcessingContext;
+import com.android.tools.r8.contexts.CompilationContext.ProcessorContext;
 import com.android.tools.r8.dex.IndexedItemCollection;
 import com.android.tools.r8.errors.Unreachable;
 import com.android.tools.r8.experimental.graphinfo.GraphConsumer;
 import com.android.tools.r8.graph.AppInfoWithClassHierarchy;
 import com.android.tools.r8.graph.AppView;
-import com.android.tools.r8.graph.CfCode;
-import com.android.tools.r8.graph.Code;
 import com.android.tools.r8.graph.DexAnnotation;
 import com.android.tools.r8.graph.DexAnnotationSet;
 import com.android.tools.r8.graph.DexApplication;
@@ -87,12 +87,15 @@ import com.android.tools.r8.ir.code.InvokeMethod;
 import com.android.tools.r8.ir.code.InvokeVirtual;
 import com.android.tools.r8.ir.code.Value;
 import com.android.tools.r8.ir.desugar.BackportedMethodRewriter;
+import com.android.tools.r8.ir.desugar.CfInstructionDesugaringCollection;
+import com.android.tools.r8.ir.desugar.CfInstructionDesugaringEventConsumer;
+import com.android.tools.r8.ir.desugar.CfInstructionDesugaringEventConsumer.R8CfInstructionDesugaringEventConsumer;
 import com.android.tools.r8.ir.desugar.DesugaredLibraryAPIConverter;
 import com.android.tools.r8.ir.desugar.LambdaClass;
 import com.android.tools.r8.ir.desugar.LambdaDescriptor;
 import com.android.tools.r8.ir.desugar.LambdaRewriter;
+import com.android.tools.r8.ir.desugar.NonEmptyCfInstructionDesugaringCollection;
 import com.android.tools.r8.ir.desugar.TwrCloseResourceRewriter;
-import com.android.tools.r8.ir.desugar.nest.NestBasedAccessDesugaring;
 import com.android.tools.r8.kotlin.KotlinMetadataEnqueuerExtension;
 import com.android.tools.r8.logging.Log;
 import com.android.tools.r8.naming.identifiernamestring.IdentifierNameStringLookupResult;
@@ -113,7 +116,6 @@ import com.android.tools.r8.utils.Action;
 import com.android.tools.r8.utils.InternalOptions;
 import com.android.tools.r8.utils.InternalOptions.DesugarState;
 import com.android.tools.r8.utils.IteratorUtils;
-import com.android.tools.r8.utils.ListUtils;
 import com.android.tools.r8.utils.MethodSignatureEquivalence;
 import com.android.tools.r8.utils.OptionalBool;
 import com.android.tools.r8.utils.Pair;
@@ -126,7 +128,6 @@ import com.android.tools.r8.utils.WorkList;
 import com.android.tools.r8.utils.collections.ProgramFieldSet;
 import com.android.tools.r8.utils.collections.ProgramMethodMap;
 import com.android.tools.r8.utils.collections.ProgramMethodSet;
-import com.android.tools.r8.utils.collections.SortedProgramMethodSet;
 import com.google.common.base.Equivalence.Wrapper;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
@@ -384,19 +385,28 @@ public class Enqueuer {
 
   private final GraphReporter graphReporter;
 
+  private static final class LambdaInfo {
+    final ProgramMethod context;
+    final DexCallSite callsite;
+    final LambdaDescriptor descriptor;
+
+    public LambdaInfo(ProgramMethod context, DexCallSite callsite, LambdaDescriptor descriptor) {
+      this.context = context;
+      this.callsite = callsite;
+      this.descriptor = descriptor;
+    }
+  }
+
+  private final CfInstructionDesugaringCollection desugaring;
   private final LambdaRewriter lambdaRewriter;
+  private final List<LambdaInfo> lambdasForDesugaring = new ArrayList<>();
+
   private final BackportedMethodRewriter backportRewriter;
-  private final NestBasedAccessDesugaring nestBasedAccessRewriter;
   private final TwrCloseResourceRewriter twrCloseResourceRewriter;
 
   private final DesugaredLibraryConversionWrapperAnalysis desugaredLibraryWrapperAnalysis;
-  private final Map<DexType, Pair<LambdaClass, ProgramMethod>> lambdaClasses =
-      new IdentityHashMap<>();
-  private final ProgramMethodMap<Map<DexCallSite, LambdaClass>> lambdaCallSites =
-      ProgramMethodMap.create();
   private final Map<DexMethod, ProgramMethod> methodsWithBackports = new IdentityHashMap<>();
   private final Map<DexMethod, ProgramMethod> methodsWithTwrCloseResource = new IdentityHashMap<>();
-  private final Set<DexProgramClass> classesWithSerializableLambdas = Sets.newIdentityHashSet();
   private final ProgramMethodSet pendingDesugaring = ProgramMethodSet.create();
 
   Enqueuer(
@@ -439,9 +449,11 @@ public class Enqueuer {
     failedFieldResolutionTargets = SetUtils.newIdentityHashSet(0);
     liveMethods = new LiveMethodsSet(graphReporter::registerMethod);
     liveFields = new LiveFieldsSet(graphReporter::registerField);
+    desugaring =
+        mode.isInitialTreeShaking()
+            ? new NonEmptyCfInstructionDesugaringCollection(appView)
+            : CfInstructionDesugaringCollection.empty();
     lambdaRewriter = options.desugarState == DesugarState.ON ? new LambdaRewriter(appView) : null;
-    nestBasedAccessRewriter =
-        options.shouldDesugarNests() ? new NestBasedAccessDesugaring(appView) : null;
     backportRewriter =
         options.desugarState == DesugarState.ON ? new BackportedMethodRewriter(appView) : null;
     twrCloseResourceRewriter =
@@ -968,19 +980,10 @@ public class Enqueuer {
       return;
     }
 
-    DexEncodedMethod contextMethod = context.getDefinition();
     if (lambdaRewriter != null) {
-      assert contextMethod.getCode().isCfCode() : "Unexpected input type with lambdas";
-      CfCode code = contextMethod.getCode().asCfCode();
-      if (code != null) {
-        LambdaClass lambdaClass = lambdaRewriter.createLambdaClass(descriptor, context);
-        lambdaClasses.put(lambdaClass.type, new Pair<>(lambdaClass, context));
-        lambdaCallSites
-            .computeIfAbsent(context, k -> new IdentityHashMap<>())
-            .put(callSite, lambdaClass);
-        if (lambdaClass.descriptor.interfaces.contains(appView.dexItemFactory().serializableType)) {
-          classesWithSerializableLambdas.add(context.getHolder());
-        }
+      assert context.getDefinition().getCode().isCfCode() : "Unexpected input type with lambdas";
+      if (context.getDefinition().getCode().isCfCode()) {
+        lambdasForDesugaring.add(new LambdaInfo(context, callSite, descriptor));
       }
     } else {
       markLambdaAsInstantiated(descriptor, context);
@@ -3066,8 +3069,6 @@ public class Enqueuer {
       registerAnalysis(new GenericSignatureEnqueuerAnalysis(enqueuerDefinitionSupplier));
     }
     if (mode.isInitialTreeShaking()) {
-      registerInvokeAnalysis(
-          appView.getInvokeSpecialBridgeSynthesizer().getEnqueuerInvokeAnalysis());
       // This is simulating the effect of the "root set" applied rules.
       // This is done only in the initial pass, in subsequent passes the "rules" are reapplied
       // by iterating the instances.
@@ -3167,6 +3168,10 @@ public class Enqueuer {
 
   private static class SyntheticAdditions {
 
+    private final ProcessorContext processorContext;
+    private Map<DexMethod, MethodProcessingContext> methodProcessingContexts =
+        new IdentityHashMap<>();
+
     List<ProgramMethod> desugaredMethods = new LinkedList<>();
 
     Map<DexType, Pair<DexProgramClass, ProgramMethod>> syntheticInstantiations =
@@ -3185,6 +3190,15 @@ public class Enqueuer {
 
     // Subset of synthesized classes that need to be added to the main-dex file.
     Set<DexProgramClass> mainDexTypes = Sets.newIdentityHashSet();
+
+    SyntheticAdditions(ProcessorContext processorContext) {
+      this.processorContext = processorContext;
+    }
+
+    MethodProcessingContext getMethodContext(ProgramMethod method) {
+      return methodProcessingContexts.computeIfAbsent(
+          method.getReference(), k -> processorContext.createMethodProcessingContext(method));
+    }
 
     boolean isEmpty() {
       boolean empty =
@@ -3289,9 +3303,8 @@ public class Enqueuer {
     // First part of synthesis is to create and register all reachable synthetic additions.
     // In particular these additions are order independent, i.e., it does not matter which are
     // registered first and no dependencies may exist among them.
-    SyntheticAdditions additions = new SyntheticAdditions();
+    SyntheticAdditions additions = new SyntheticAdditions(appView.createProcessorContext());
     desugar(additions);
-    synthesizeInvokeSpecialBridges(additions);
     synthesizeInterfaceMethodBridges(additions);
     synthesizeLambdas(additions);
     synthesizeLibraryConversionWrappers(additions);
@@ -3319,53 +3332,15 @@ public class Enqueuer {
   }
 
   private void desugar(SyntheticAdditions additions) throws ExecutionException {
-    ThreadUtils.processItems(pendingDesugaring, this::desugar, executorService);
+    R8CfInstructionDesugaringEventConsumer desugaringEventConsumer =
+        CfInstructionDesugaringEventConsumer.createForR8();
+    ThreadUtils.processItems(
+        pendingDesugaring,
+        method -> desugaring.desugar(method, desugaringEventConsumer),
+        executorService);
+    desugaringEventConsumer.finalizeDesugaring(appView);
     Iterables.addAll(additions.desugaredMethods, pendingDesugaring);
     pendingDesugaring.clear();
-  }
-
-  private void desugar(ProgramMethod method) {
-    Code code = method.getDefinition().getCode();
-    if (!code.isCfCode()) {
-      appView
-          .options()
-          .reporter
-          .error(
-              new StringDiagnostic(
-                  "Unsupported attempt to desugar non-CF code",
-                  method.getOrigin(),
-                  method.getPosition()));
-      return;
-    }
-
-    CfCode cfCode = code.asCfCode();
-    List<CfInstruction> desugaredInstructions =
-        ListUtils.flatMap(
-            cfCode.getInstructions(),
-            instruction -> {
-              // TODO(b/177810578): Migrate other cf-to-cf based desugaring here, and assert that
-              //  that at most one instruction desugarer applies to each instruction.
-              if (nestBasedAccessRewriter != null) {
-                List<CfInstruction> replacement =
-                    nestBasedAccessRewriter.desugarInstruction(instruction, method, null);
-                if (replacement != null) {
-                  return replacement;
-                }
-              }
-              return null;
-            },
-            null);
-    if (desugaredInstructions != null) {
-      cfCode.setInstructions(desugaredInstructions);
-    } else {
-      assert false : "Expected code to be desugared";
-    }
-  }
-
-  private void synthesizeInvokeSpecialBridges(SyntheticAdditions additions) {
-    SortedProgramMethodSet bridges =
-        appView.getInvokeSpecialBridgeSynthesizer().insertBridgesForR8();
-    bridges.forEach(additions::addLiveMethod);
   }
 
   private void synthesizeInterfaceMethodBridges(SyntheticAdditions additions) {
@@ -3380,26 +3355,31 @@ public class Enqueuer {
 
   private void synthesizeBackports(SyntheticAdditions additions) {
     for (ProgramMethod method : methodsWithBackports.values()) {
-      backportRewriter.desugar(method, appInfo, additions::addLiveMethod);
+      backportRewriter.desugar(
+          method, appInfo, additions.getMethodContext(method), additions::addLiveMethod);
     }
   }
 
   private void synthesizeTwrCloseResource(SyntheticAdditions additions) {
     for (ProgramMethod method : methodsWithTwrCloseResource.values()) {
-      twrCloseResourceRewriter.rewriteCf(method, additions::addLiveMethod);
+      twrCloseResourceRewriter.rewriteCf(
+          method, additions::addLiveMethod, additions.getMethodContext(method));
     }
   }
 
   private void synthesizeLambdas(SyntheticAdditions additions) {
-    if (lambdaRewriter == null || lambdaClasses.isEmpty()) {
-      assert lambdaCallSites.isEmpty();
-      assert classesWithSerializableLambdas.isEmpty();
+    if (lambdasForDesugaring.isEmpty()) {
       return;
     }
-    for (Pair<LambdaClass, ProgramMethod> lambdaClassAndContext : lambdaClasses.values()) {
+    assert lambdaRewriter != null;
+    ProgramMethodMap<Map<DexCallSite, LambdaClass>> lambdaCallSites = ProgramMethodMap.create();
+    Set<DexProgramClass> classesWithSerializableLambdas = Sets.newIdentityHashSet();
+    for (LambdaInfo lambdaInfo : lambdasForDesugaring) {
       // Add all desugared classes to the application, main-dex list, and mark them instantiated.
-      LambdaClass lambdaClass = lambdaClassAndContext.getFirst();
-      ProgramMethod context = lambdaClassAndContext.getSecond();
+      ProgramMethod context = lambdaInfo.context;
+      LambdaClass lambdaClass =
+          lambdaRewriter.createLambdaClass(
+              lambdaInfo.descriptor, context, additions.getMethodContext(context));
       DexProgramClass programClass = lambdaClass.getLambdaProgramClass();
       additions.addInstantiatedClass(programClass, context);
       // Mark the instance constructor targeted and live.
@@ -3408,6 +3388,14 @@ public class Enqueuer {
       ProgramMethod method = new ProgramMethod(programClass, constructor);
       markMethodAsTargeted(method, reason);
       markDirectStaticOrConstructorMethodAsLive(method, reason);
+      // Populate method -> info mapping for method rewriting.
+      lambdaCallSites
+          .computeIfAbsent(context, k -> new IdentityHashMap<>())
+          .put(lambdaInfo.callsite, lambdaClass);
+      // Populate set of types with serialized lambda method for removal.
+      if (lambdaInfo.descriptor.interfaces.contains(appView.dexItemFactory().serializableType)) {
+        classesWithSerializableLambdas.add(context.getHolder());
+      }
     }
 
     // Rewrite all of the invoke-dynamic instructions to lambda class instantiations.
@@ -3420,9 +3408,7 @@ public class Enqueuer {
     }
 
     // Clear state before next fixed point iteration.
-    lambdaClasses.clear();
-    lambdaCallSites.clear();
-    classesWithSerializableLambdas.clear();
+    lambdasForDesugaring.clear();
   }
 
   private void finalizeLibraryMethodOverrideInformation() {
@@ -4054,11 +4040,9 @@ public class Enqueuer {
   }
 
   private void traceNonDesugaredCode(ProgramMethod method) {
-    if (getMode().isInitialTreeShaking()) {
-      if (nestBasedAccessRewriter != null && nestBasedAccessRewriter.needsDesugaring(method)) {
-        pendingDesugaring.add(method);
-        return;
-      }
+    if (getMode().isInitialTreeShaking() && desugaring.needsDesugaring(method)) {
+      pendingDesugaring.add(method);
+      return;
     }
 
     traceCode(method);

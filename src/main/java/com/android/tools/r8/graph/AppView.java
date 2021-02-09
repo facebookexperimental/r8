@@ -4,6 +4,8 @@
 
 package com.android.tools.r8.graph;
 
+import com.android.tools.r8.contexts.CompilationContext;
+import com.android.tools.r8.contexts.CompilationContext.ProcessorContext;
 import com.android.tools.r8.errors.dontwarn.DontWarnConfiguration;
 import com.android.tools.r8.features.ClassToFeatureSplitMap;
 import com.android.tools.r8.graph.DexValue.DexValueString;
@@ -19,8 +21,6 @@ import com.android.tools.r8.ir.analysis.proto.GeneratedMessageLiteBuilderShrinke
 import com.android.tools.r8.ir.analysis.proto.GeneratedMessageLiteShrinker;
 import com.android.tools.r8.ir.analysis.proto.ProtoShrinker;
 import com.android.tools.r8.ir.analysis.value.AbstractValueFactory;
-import com.android.tools.r8.ir.conversion.MethodProcessingId;
-import com.android.tools.r8.ir.desugar.InvokeSpecialBridgeSynthesizer;
 import com.android.tools.r8.ir.desugar.PrefixRewritingMapper;
 import com.android.tools.r8.ir.optimize.CallSiteOptimizationInfoPropagator;
 import com.android.tools.r8.ir.optimize.enums.EnumDataMap;
@@ -72,13 +72,11 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
   private final AbstractValueFactory abstractValueFactory = new AbstractValueFactory();
   private final InstanceFieldInitializationInfoFactory instanceFieldInitializationInfoFactory =
       new InstanceFieldInitializationInfoFactory();
-  private final MethodProcessingId.Factory methodProcessingIdFactory;
   private final SimpleInliningConstraintFactory simpleInliningConstraintFactory =
       new SimpleInliningConstraintFactory();
 
   // Desugaring.
   public final PrefixRewritingMapper rewritePrefix;
-  private final InvokeSpecialBridgeSynthesizer invokeSpecialBridgeSynthesizer;
 
   // Modeling.
   private final LibraryMethodSideEffectModelCollection libraryMethodSideEffectModelCollection;
@@ -103,20 +101,22 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
   // desugared. This information is populated in the IR converter.
   private Set<DexType> alreadyLibraryDesugared = null;
 
+  private final CompilationContext context;
+
+  private final Thread mainThread = Thread.currentThread();
+
   private AppView(
       T appInfo,
       WholeProgramOptimizations wholeProgramOptimizations,
       PrefixRewritingMapper mapper) {
     assert appInfo != null;
+    this.context = CompilationContext.createInitialContext(appInfo.options());
     this.appInfo = appInfo;
     this.dontWarnConfiguration = DontWarnConfiguration.create(options().getProguardConfiguration());
     this.wholeProgramOptimizations = wholeProgramOptimizations;
     this.graphLens = GraphLens.getIdentityLens();
     this.initClassLens = InitClassLens.getDefault();
-    this.methodProcessingIdFactory =
-        new MethodProcessingId.Factory(options().testing.methodProcessingIdConsumer);
     this.rewritePrefix = mapper;
-    this.invokeSpecialBridgeSynthesizer = new InvokeSpecialBridgeSynthesizer(this);
 
     if (enableWholeProgramOptimizations() && options().callSiteOptimizationOptions().isEnabled()) {
       this.callSiteOptimizationInfoPropagator =
@@ -133,6 +133,11 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
     } else {
       this.protoShrinker = null;
     }
+  }
+
+  public boolean verifyMainThread() {
+    assert mainThread == Thread.currentThread();
+    return true;
   }
 
   @Override
@@ -186,10 +191,6 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
 
   public InstanceFieldInitializationInfoFactory instanceFieldInitializationInfoFactory() {
     return instanceFieldInitializationInfoFactory;
-  }
-
-  public MethodProcessingId.Factory methodProcessingIdFactory() {
-    return methodProcessingIdFactory;
   }
 
   public SimpleInliningConstraintFactory simpleInliningConstraintFactory() {
@@ -306,16 +307,23 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
     return wholeProgramOptimizations == WholeProgramOptimizations.ON;
   }
 
+  /**
+   * Create a new processor context.
+   *
+   * <p>The order of processor contexts for a compilation must be deterministic so this is required
+   * to be called on the main thread only.
+   */
+  public ProcessorContext createProcessorContext() {
+    assert verifyMainThread();
+    return context.createProcessorContext();
+  }
+
   public SyntheticItems getSyntheticItems() {
     return appInfo.getSyntheticItems();
   }
 
   public CallSiteOptimizationInfoPropagator callSiteOptimizationInfoPropagator() {
     return callSiteOptimizationInfoPropagator;
-  }
-
-  public InvokeSpecialBridgeSynthesizer getInvokeSpecialBridgeSynthesizer() {
-    return invokeSpecialBridgeSynthesizer;
   }
 
   public LibraryMemberOptimizer libraryMethodOptimizer() {
