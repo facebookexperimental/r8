@@ -31,12 +31,14 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.objectweb.asm.AnnotationVisitor;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.FieldVisitor;
+import org.objectweb.asm.Handle;
 import org.objectweb.asm.Label;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Type;
@@ -330,6 +332,10 @@ public class ClassFileTransformer {
   }
 
   public ClassFileTransformer setGenericSignature(String newGenericSignature) {
+    return setGenericSignature(signature -> newGenericSignature);
+  }
+
+  public ClassFileTransformer setGenericSignature(Function<String, String> newGenericSignature) {
     return addClassTransformer(
         new ClassTransformer() {
           @Override
@@ -340,7 +346,8 @@ public class ClassFileTransformer {
               String signature,
               String superName,
               String[] interfaces) {
-            super.visit(version, access, name, newGenericSignature, superName, interfaces);
+            super.visit(
+                version, access, name, newGenericSignature.apply(signature), superName, interfaces);
           }
         });
   }
@@ -586,6 +593,21 @@ public class ClassFileTransformer {
         });
   }
 
+  public ClassFileTransformer setGenericSignature(
+      MethodPredicate predicate, Function<String, String> newSignature) {
+    return addClassTransformer(
+        new ClassTransformer() {
+          @Override
+          public MethodVisitor visitMethod(
+              int access, String name, String descriptor, String signature, String[] exceptions) {
+            return predicate.test(access, name, descriptor, signature, exceptions)
+                ? super.visitMethod(
+                    access, name, descriptor, newSignature.apply(signature), exceptions)
+                : super.visitMethod(access, name, descriptor, signature, exceptions);
+          }
+        });
+  }
+
   public ClassFileTransformer removeFields(FieldPredicate predicate) {
     return addClassTransformer(
         new ClassTransformer() {
@@ -647,6 +669,17 @@ public class ClassFileTransformer {
             return super.visitField(access, name, descriptor, signature, value);
           }
         });
+  }
+
+  /** Abstraction of the MethodVisitor.visitInvokeDynamicInsn method with its sub visitor. */
+  @FunctionalInterface
+  public interface InvokeDynamicInsnTransform {
+    void visitInvokeDynamicInsn(
+        String name,
+        String descriptor,
+        Handle bootstrapMethodHandle,
+        List<Object> bootstrapMethodArguments,
+        MethodVisitor visitor);
   }
 
   /** Abstraction of the MethodVisitor.visitMethodInsn method with its sub visitor. */
@@ -737,6 +770,55 @@ public class ClassFileTransformer {
                     replaceAll(
                         Type.getObjectType(type).getDescriptor(), oldDescriptor, newDescriptor))
                 .getInternalName();
+          }
+        });
+  }
+
+  @FunctionalInterface
+  private interface VisitInvokeDynamicInsnCallback {
+    void visitInvokeDynamicInsn(
+        String name,
+        String descriptor,
+        Handle bootstrapMethodHandle,
+        Object... bootstrapMethodArguments);
+  }
+
+  private MethodVisitor redirectVisitInvokeDynamicInsn(
+      MethodVisitor visitor, VisitInvokeDynamicInsnCallback callback) {
+    return new MethodVisitor(ASM7, visitor) {
+      @Override
+      public void visitInvokeDynamicInsn(
+          String name,
+          String descriptor,
+          Handle bootstrapMethodHandle,
+          Object... bootstrapMethodArguments) {
+        callback.visitInvokeDynamicInsn(
+            name, descriptor, bootstrapMethodHandle, bootstrapMethodArguments);
+      }
+    };
+  }
+
+  public ClassFileTransformer transformInvokeDynamicInsnInMethod(
+      String methodName, InvokeDynamicInsnTransform transform) {
+    return addMethodTransformer(
+        new MethodTransformer() {
+          @Override
+          public void visitInvokeDynamicInsn(
+              String name,
+              String descriptor,
+              Handle bootstrapMethodHandle,
+              Object... bootstrapMethodArguments) {
+            if (getContext().method.getMethodName().equals(methodName)) {
+              transform.visitInvokeDynamicInsn(
+                  name,
+                  descriptor,
+                  bootstrapMethodHandle,
+                  Arrays.asList(bootstrapMethodArguments),
+                  redirectVisitInvokeDynamicInsn(this, super::visitInvokeDynamicInsn));
+            } else {
+              super.visitInvokeDynamicInsn(
+                  name, descriptor, bootstrapMethodHandle, bootstrapMethodArguments);
+            }
           }
         });
   }

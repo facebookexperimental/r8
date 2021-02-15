@@ -4,7 +4,6 @@
 
 package com.android.tools.r8;
 
-import static com.android.tools.r8.ir.desugar.InterfaceMethodRewriter.COMPANION_CLASS_NAME_SUFFIX;
 
 import com.android.tools.r8.TestBase.Backend;
 import com.android.tools.r8.dexsplitter.SplitterTestBase.RunInterface;
@@ -106,8 +105,11 @@ public abstract class TestShrinkerBuilder<
     return addKeepRules(Arrays.asList(rules));
   }
 
-  public T addDontWarn(Class<?> clazz) {
-    return addDontWarn(clazz.getTypeName());
+  public T addDontWarn(Class<?>... classes) {
+    for (Class<?> clazz : classes) {
+      addDontWarn(clazz.getTypeName());
+    }
+    return self();
   }
 
   public T addDontWarn(String className) {
@@ -123,11 +125,6 @@ public abstract class TestShrinkerBuilder<
 
   public T addDontWarn(String... classes) {
     return addDontWarn(Arrays.asList(classes));
-  }
-
-  @Deprecated
-  public T addDontWarnCompanionClass(Class<?> clazz) {
-    return addDontWarn(clazz.getTypeName() + COMPANION_CLASS_NAME_SUFFIX);
   }
 
   public T addDontWarnGoogle() {
@@ -247,7 +244,11 @@ public abstract class TestShrinkerBuilder<
   }
 
   public T addKeepPackageNamesRule(Package pkg) {
-    return addKeepRules("-keeppackagenames " + pkg.getName());
+    return addKeepPackageNamesRule(pkg.getName());
+  }
+
+  public T addKeepPackageNamesRule(String packageName) {
+    return addKeepRules("-keeppackagenames " + packageName);
   }
 
   public T addKeepMainRule(Class<?> mainClass) {

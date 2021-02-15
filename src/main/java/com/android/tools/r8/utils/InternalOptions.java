@@ -76,6 +76,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -486,7 +487,7 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
   }
 
   public boolean shouldDesugarNests() {
-    return testing.enableForceNestBasedAccessDesugaringForTest || !canUseNestBasedAccess();
+    return !canUseNestBasedAccess();
   }
 
   public boolean canUseRecords() {
@@ -1323,6 +1324,7 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
         System.getProperty("com.android.tools.r8.allowInvalidCfAccessFlags") != null;
     // TODO(b/177333791): Set to true
     public boolean checkForNotExpandingMainDexTracingResult = false;
+    public Set<String> allowedUnusedDontWarnPatterns = new HashSet<>();
 
     public boolean allowConflictingSyntheticTypes = false;
 
@@ -1333,8 +1335,6 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     // TODO(b/144781417): This is disabled by default as some test apps appear to have such classes.
     public boolean allowNonAbstractClassesWithAbstractMethods = true;
 
-    // Flag to turn on/off JDK11+ nest-access control even when not required (Cf backend)
-    public boolean enableForceNestBasedAccessDesugaringForTest = false;
     public boolean verifyKeptGraphInfo = false;
 
     public boolean readInputStackMaps = true;
@@ -1392,6 +1392,15 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
 
   private boolean hasMinApi(AndroidApiLevel level) {
     return minApiLevel >= level.getLevel();
+  }
+
+  /**
+   * Allow access modification of synthetic lambda implementation methods in D8 to avoid generating
+   * an excessive amount of accessibility bridges. In R8, the lambda implementation methods are
+   * inlined into the synthesized accessibility bridges, thus we don't allow access modification.
+   */
+  public boolean canAccessModifyLambdaImplementationMethods(AppView<?> appView) {
+    return !appView.enableWholeProgramOptimizations();
   }
 
   /**

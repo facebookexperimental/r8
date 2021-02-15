@@ -337,6 +337,7 @@ def cloudDependencies = [
                 "kotlin/kotlin-compiler-1.3.11",
                 "kotlin/kotlin-compiler-1.3.41",
                 "kotlin/kotlin-compiler-1.3.72",
+                "kotlin/kotlin-compiler-1.4.20",
                 "kotlinx-coroutines-1.3.6",
                 "openjdk/openjdk-rt-1.8",
                 "openjdk/desugar_jdk_libs",
@@ -2004,6 +2005,10 @@ test {
 
     if (project.hasProperty('slow_tests')) {
         systemProperty 'slow_tests', project.property('slow_tests')
+    }
+
+    if (project.hasProperty('desugar_jdk_libs')) {
+        systemProperty 'desugar_jdk_libs', project.property('desugar_jdk_libs')
     }
 
     if (project.hasProperty('one_line_per_test')) {
