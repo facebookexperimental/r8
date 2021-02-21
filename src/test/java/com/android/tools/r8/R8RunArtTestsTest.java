@@ -1195,17 +1195,38 @@ public abstract class R8RunArtTestsTest {
       "435-new-instance"
   );
 
-  private static List<String> hasMissingClasses = ImmutableList.of(
-      "091-override-package-private-method",
-      "003-omnibus-opcodes",
-      "608-checker-unresolved-lse",
-      "529-checker-unresolved",
-      "803-no-super",
-      "127-checker-secondarydex",
-      "952-invoke-custom-kinds",
-      // Depends on java.lang.invoke.Transformers, which is hidden.
-      "958-methodhandle-stackframe"
-  );
+  private static List<String> hasMissingClasses =
+      ImmutableList.of(
+          "003-omnibus-opcodes",
+          "004-UnsafeTest",
+          "004-checker-UnsafeTest18",
+          "005-annotations",
+          "067-preemptive-unpark",
+          "071-dexfile-map-clean",
+          "091-override-package-private-method",
+          "111-unresolvable-exception",
+          "124-missing-classes",
+          "127-checker-secondarydex",
+          "138-duplicate-classes-check2",
+          "140-field-packing",
+          "143-string-value",
+          "151-OpenFileLimit",
+          "435-new-instance",
+          "528-long-hint",
+          "529-checker-unresolved",
+          "555-UnsafeGetLong-regression",
+          "585-inline-unresolved",
+          "606-erroneous-class",
+          "608-checker-unresolved-lse",
+          "659-unpadded-array",
+          "706-checker-scheduler",
+          "709-checker-varhandles",
+          "803-no-super",
+          "912-classes",
+          "952-invoke-custom-kinds",
+          // Depends on java.lang.invoke.Transformers, which is hidden.
+          "958-methodhandle-stackframe",
+          "1338-gc-no-los");
 
   private static Map<String, List<String>> keepRules =
       ImmutableMap.of(
@@ -1352,6 +1373,7 @@ public abstract class R8RunArtTestsTest {
         boolean skipRun,
         boolean failsOnRun,
         boolean disableInlining,
+        boolean hasMissingClasses,
         DexVm dexVm) {
       this(
           name,
@@ -1368,7 +1390,7 @@ public abstract class R8RunArtTestsTest {
           false,
           disableInlining,
           true, // Disable class inlining for JCTF tests.
-          false,
+          hasMissingClasses,
           true, // Disable desugaring for JCTF tests.
           ImmutableList.of(),
           null);
@@ -1380,7 +1402,8 @@ public abstract class R8RunArtTestsTest {
         File directory,
         boolean skipRun,
         boolean failsOnRun,
-        boolean disableInlining) {
+        boolean disableInlining,
+        boolean hasMissingClasses) {
       this(
           name,
           dexTool,
@@ -1396,7 +1419,7 @@ public abstract class R8RunArtTestsTest {
           false,
           disableInlining,
           true, // Disable class inlining for JCTF tests.
-          false,
+          hasMissingClasses,
           true, // Disable desugaring for JCTF tests.
           ImmutableList.of(),
           null);
@@ -1917,6 +1940,7 @@ public abstract class R8RunArtTestsTest {
                 || outcome == JctfTestSpecifications.Outcome.FLAKY_WHEN_RUN,
             outcome == JctfTestSpecifications.Outcome.FAILS_WHEN_RUN,
             noInlining,
+            JctfTestSpecifications.hasMissingClasses.contains(name),
             dexVm);
   }
 
@@ -1930,7 +1954,8 @@ public abstract class R8RunArtTestsTest {
             outcome == JctfTestSpecifications.Outcome.TIMEOUTS_WHEN_RUN
                 || outcome == JctfTestSpecifications.Outcome.FLAKY_WHEN_RUN,
             outcome == JctfTestSpecifications.Outcome.FAILS_WHEN_RUN,
-            noInlining);
+            noInlining,
+            JctfTestSpecifications.hasMissingClasses.contains(name));
   }
 
   private static Runtime getRuntime(TestRuntime vm) {

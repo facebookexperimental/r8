@@ -138,7 +138,8 @@ public class ToolHelper {
 
   public static final String JAVA_8_RUNTIME = "third_party/openjdk/openjdk-rt-1.8/rt.jar";
   public static final String DESUGAR_JDK_LIBS =
-      System.getProperty("desugar_jdk_libs", "third_party/openjdk/desugar_jdk_libs/libjava.jar");
+      System.getProperty(
+          "desugar_jdk_libs", "third_party/openjdk/desugar_jdk_libs/desugar_jdk_libs.jar");
   public static final String CORE_LAMBDA_STUBS =
       "third_party/core-lambda-stubs/core-lambda-stubs.jar";
   public static final String JSR223_RI_JAR = "third_party/jsr223-api-1.0/jsr223-api-1.0.jar";
@@ -867,6 +868,10 @@ public class ToolHelper {
     Path annotationJar = kotlinc.getFolder().resolve("annotations-13.0.jar");
     assert Files.exists(annotationJar) : "Expected annotation jar";
     return annotationJar;
+  }
+
+  public static Path getMostRecentKotlinAnnotationJar() {
+    return getKotlinAnnotationJar(KotlinCompiler.latest());
   }
 
   public static Path getJdwpTestsCfJarPath(AndroidApiLevel minSdk) {
@@ -2147,8 +2152,7 @@ public class ToolHelper {
     return new KotlinCompiler[] {getKotlinC_1_3_72(), getKotlinC_1_4_20()};
   }
 
-  public static void disassemble(AndroidApp app, PrintStream ps)
-      throws IOException, ExecutionException {
+  public static void disassemble(AndroidApp app, PrintStream ps) throws IOException {
     DexApplication application =
         new ApplicationReader(app, new InternalOptions(), Timing.empty()).read().toDirect();
     new AssemblyWriter(application, new InternalOptions(), true, false, true).write(ps);

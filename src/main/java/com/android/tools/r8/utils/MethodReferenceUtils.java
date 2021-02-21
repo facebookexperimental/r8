@@ -4,19 +4,78 @@
 
 package com.android.tools.r8.utils;
 
+import static com.android.tools.r8.utils.ClassReferenceUtils.getClassReferenceComparator;
+import static com.android.tools.r8.utils.TypeReferenceUtils.getTypeReferenceComparator;
+
 import com.android.tools.r8.references.ArrayReference;
 import com.android.tools.r8.references.ClassReference;
 import com.android.tools.r8.references.MethodReference;
 import com.android.tools.r8.references.Reference;
 import com.android.tools.r8.references.TypeReference;
 import com.google.common.collect.ImmutableList;
+import java.util.Comparator;
 import java.util.Iterator;
 
 public class MethodReferenceUtils {
 
+  private static final Comparator<MethodReference> COMPARATOR =
+      (method, other) -> {
+        CompareResult holderClassCompareResult =
+            CompareResult.compare(
+                method.getHolderClass(), other.getHolderClass(), getClassReferenceComparator());
+        if (!holderClassCompareResult.isEqual()) {
+          return holderClassCompareResult.getComparisonResult();
+        }
+        CompareResult methodNameCompareResult =
+            CompareResult.compare(method.getMethodName(), other.getMethodName());
+        if (!methodNameCompareResult.isEqual()) {
+          return methodNameCompareResult.getComparisonResult();
+        }
+        CompareResult returnTypeCompareResult =
+            CompareResult.compare(
+                method.getReturnType(), other.getReturnType(), getTypeReferenceComparator());
+        if (!returnTypeCompareResult.isEqual()) {
+          return returnTypeCompareResult.getComparisonResult();
+        }
+        for (int i = 0;
+            i < Math.min(method.getFormalTypes().size(), other.getFormalTypes().size());
+            i++) {
+          CompareResult formalTypeCompareResult =
+              CompareResult.compare(
+                  method.getFormalTypes().get(i),
+                  other.getFormalTypes().get(i),
+                  getTypeReferenceComparator());
+          if (!formalTypeCompareResult.isEqual()) {
+            return formalTypeCompareResult.getComparisonResult();
+          }
+        }
+        return method.getFormalTypes().size() - other.getFormalTypes().size();
+      };
+
+  public static int compare(MethodReference methodReference, MethodReference other) {
+    return getMethodReferenceComparator().compare(methodReference, other);
+  }
+
+  public static Comparator<MethodReference> getMethodReferenceComparator() {
+    return COMPARATOR;
+  }
+
+  public static MethodReference mainMethod(Class<?> clazz) {
+    return mainMethod(Reference.classFromClass(clazz));
+  }
+
   public static MethodReference mainMethod(ClassReference type) {
     ArrayReference stringArrayType = Reference.array(Reference.classFromClass(String.class), 1);
     return Reference.method(type, "main", ImmutableList.of(stringArrayType), null);
+  }
+
+  public static MethodReference methodFromMethod(
+      Class<?> clazz, String name, Class<?>... parameterTypes) {
+    try {
+      return Reference.methodFromMethod(clazz.getDeclaredMethod(name, parameterTypes));
+    } catch (NoSuchMethodException e) {
+      throw new RuntimeException(e);
+    }
   }
 
   public static String toSourceStringWithoutHolderAndReturnType(MethodReference methodReference) {

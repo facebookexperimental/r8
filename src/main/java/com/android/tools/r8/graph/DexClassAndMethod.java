@@ -4,6 +4,8 @@
 
 package com.android.tools.r8.graph;
 
+import com.android.tools.r8.references.MethodReference;
+
 public abstract class DexClassAndMethod extends DexClassAndMember<DexEncodedMethod, DexMethod>
     implements LookupTarget {
 
@@ -42,8 +44,20 @@ public abstract class DexClassAndMethod extends DexClassAndMember<DexEncodedMeth
     return getDefinition().getAccessFlags();
   }
 
+  public MethodReference getMethodReference() {
+    return getReference().asMethodReference();
+  }
+
+  public DexTypeList getParameters() {
+    return getReference().getParameters();
+  }
+
   public DexProto getProto() {
     return getReference().getProto();
+  }
+
+  public DexType getReturnType() {
+    return getReference().getReturnType();
   }
 
   @Override
@@ -53,6 +67,16 @@ public abstract class DexClassAndMethod extends DexClassAndMember<DexEncodedMeth
 
   @Override
   public DexClassAndMethod asMethodTarget() {
+    return this;
+  }
+
+  @Override
+  public boolean isMethod() {
+    return true;
+  }
+
+  @Override
+  public DexClassAndMethod asMethod() {
     return this;
   }
 

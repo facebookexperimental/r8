@@ -13,6 +13,57 @@ import java.util.Collection;
 @Keep
 public interface MissingDefinitionInfo {
 
+  /**
+   * Predicate that is true iff the MissingDefinitionInfo is an instance of {@link
+   * MissingClassInfo}.
+   */
+  default boolean isMissingClass() {
+    return false;
+  }
+
+  /**
+   * Predicate that is true iff the MissingDefinitionInfo is an instance of {@link
+   * MissingFieldInfo}.
+   */
+  default boolean isMissingField() {
+    return false;
+  }
+
+  /**
+   * Predicate that is true iff the MissingDefinitionInfo is an instance of {@link
+   * MissingMethodInfo}.
+   */
+  default boolean isMissingMethod() {
+    return false;
+  }
+
+  /**
+   * Return a non-null {@link MissingClassInfo} if this type is {@link MissingClassInfo}.
+   *
+   * @return this with static type of {@link MissingClassInfo}.
+   */
+  default MissingClassInfo asMissingClass() {
+    return null;
+  }
+
+  /**
+   * Return a non-null {@link MissingFieldInfo} if this type is {@link MissingFieldInfo}.
+   *
+   * @return this with static type of {@link MissingFieldInfo}.
+   */
+  default MissingFieldInfo asMissingField() {
+    return null;
+  }
+
+  /**
+   * Return a non-null {@link MissingMethodInfo} if this type is {@link MissingMethodInfo}.
+   *
+   * @return this with static type of {@link MissingMethodInfo}.
+   */
+  default MissingMethodInfo asMissingMethod() {
+    return null;
+  }
+
   /** The contexts from which this missing definition was referenced. */
   Collection<MissingDefinitionContext> getReferencedFromContexts();
 }

@@ -16,6 +16,8 @@ import com.android.tools.r8.ir.desugar.invokespecial.InvokeSpecialToSelfDesugari
 import com.android.tools.r8.ir.desugar.lambda.LambdaInstructionDesugaring;
 import com.android.tools.r8.ir.desugar.nest.D8NestBasedAccessDesugaring;
 import com.android.tools.r8.ir.desugar.nest.NestBasedAccessDesugaring;
+import com.android.tools.r8.ir.desugar.stringconcat.StringConcatInstructionDesugaring;
+import com.android.tools.r8.ir.desugar.twr.TwrCloseResourceInstructionDesugaring;
 import com.android.tools.r8.utils.IntBox;
 import com.android.tools.r8.utils.IteratorUtils;
 import com.android.tools.r8.utils.ListUtils;
@@ -39,6 +41,16 @@ public class NonEmptyCfInstructionDesugaringCollection extends CfInstructionDesu
     this.nestBasedAccessDesugaring = NestBasedAccessDesugaring.create(appView);
     desugarings.add(new LambdaInstructionDesugaring(appView));
     desugarings.add(new InvokeSpecialToSelfDesugaring(appView));
+    desugarings.add(new StringConcatInstructionDesugaring(appView));
+    if (appView.options().enableBackportedMethodRewriting()) {
+      BackportedMethodRewriter backportedMethodRewriter = new BackportedMethodRewriter(appView);
+      if (backportedMethodRewriter.hasBackports()) {
+        desugarings.add(backportedMethodRewriter);
+      }
+    }
+    if (appView.options().enableTryWithResourcesDesugaring()) {
+      desugarings.add(new TwrCloseResourceInstructionDesugaring(appView));
+    }
     if (nestBasedAccessDesugaring != null) {
       desugarings.add(nestBasedAccessDesugaring);
     }
@@ -86,6 +98,9 @@ public class NonEmptyCfInstructionDesugaringCollection extends CfInstructionDesu
     IntBox maxLocalsForCode = new IntBox(cfCode.getMaxLocals());
     IntBox maxLocalsForInstruction = new IntBox(cfCode.getMaxLocals());
 
+    IntBox maxStackForCode = new IntBox(cfCode.getMaxStack());
+    IntBox maxStackForInstruction = new IntBox(cfCode.getMaxStack());
+
     List<CfInstruction> desugaredInstructions =
         ListUtils.flatMap(
             cfCode.getInstructions(),
@@ -94,6 +109,7 @@ public class NonEmptyCfInstructionDesugaringCollection extends CfInstructionDesu
                   desugarInstruction(
                       instruction,
                       maxLocalsForInstruction::getAndIncrement,
+                      maxStackForInstruction::getAndIncrement,
                       eventConsumer,
                       method,
                       methodProcessingContext);
@@ -110,8 +126,10 @@ public class NonEmptyCfInstructionDesugaringCollection extends CfInstructionDesu
             null);
     if (desugaredInstructions != null) {
       assert maxLocalsForCode.get() >= cfCode.getMaxLocals();
+      assert maxStackForCode.get() >= cfCode.getMaxStack();
       cfCode.setInstructions(desugaredInstructions);
       cfCode.setMaxLocals(maxLocalsForCode.get());
+      cfCode.setMaxStack(maxStackForCode.get());
     } else {
       assert false : "Expected code to be desugared";
     }
@@ -120,6 +138,7 @@ public class NonEmptyCfInstructionDesugaringCollection extends CfInstructionDesu
   private Collection<CfInstruction> desugarInstruction(
       CfInstruction instruction,
       FreshLocalProvider freshLocalProvider,
+      LocalStackAllocator localStackAllocator,
       CfInstructionDesugaringEventConsumer eventConsumer,
       ProgramMethod context,
       MethodProcessingContext methodProcessingContext) {
@@ -129,7 +148,12 @@ public class NonEmptyCfInstructionDesugaringCollection extends CfInstructionDesu
       CfInstructionDesugaring desugaring = iterator.next();
       Collection<CfInstruction> replacement =
           desugaring.desugarInstruction(
-              instruction, freshLocalProvider, eventConsumer, context, methodProcessingContext);
+              instruction,
+              freshLocalProvider,
+              localStackAllocator,
+              eventConsumer,
+              context,
+              methodProcessingContext);
       if (replacement != null) {
         assert verifyNoOtherDesugaringNeeded(
             instruction, context, methodProcessingContext, iterator);
@@ -176,6 +200,9 @@ public class NonEmptyCfInstructionDesugaringCollection extends CfInstructionDesu
                         requiredRegisters -> {
                           assert false;
                           return 0;
+                        },
+                        localStackHeight -> {
+                          assert false;
                         },
                         CfInstructionDesugaringEventConsumer.createForDesugaredCode(),
                         context,

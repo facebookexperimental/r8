@@ -63,7 +63,7 @@ LIBRARY_DESUGAR_CONVERSIONS_ZIP = os.path.join(LIBS, 'library_desugar_conversion
 DESUGAR_CONFIGURATION = os.path.join(
       'src', 'library_desugar', 'desugar_jdk_libs.json')
 DESUGAR_IMPLEMENTATION = os.path.join(
-      'third_party', 'openjdk', 'desugar_jdk_libs', 'libjava.jar')
+      'third_party', 'openjdk', 'desugar_jdk_libs', 'desugar_jdk_libs.jar')
 DESUGAR_CONFIGURATION_MAVEN_ZIP = os.path.join(
   LIBS, 'desugar_jdk_libs_configuration.zip')
 GENERATED_LICENSE = os.path.join(GENERATED_LICENSE_DIR, 'LICENSE')
@@ -82,6 +82,7 @@ OPENSOURCE_DUMPS_DIR = os.path.join(THIRD_PARTY, 'opensource-apps')
 BAZEL_SHA_FILE = os.path.join(THIRD_PARTY, 'bazel.tar.gz.sha1')
 BAZEL_TOOL = os.path.join(THIRD_PARTY, 'bazel')
 JAVA8_SHA_FILE = os.path.join(THIRD_PARTY, 'openjdk', 'jdk8', 'linux-x86.tar.gz.sha1')
+IGNORE_WARNINGS_RULES = os.path.join(REPO_ROOT, 'src', 'test', 'ignorewarnings.rules')
 
 ANDROID_HOME_ENVIROMENT_NAME = "ANDROID_HOME"
 ANDROID_TOOLS_VERSION_ENVIRONMENT_NAME = "ANDROID_TOOLS_VERSION"

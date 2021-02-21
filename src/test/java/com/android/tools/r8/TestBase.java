@@ -4,6 +4,7 @@
 
 package com.android.tools.r8;
 
+import static com.android.tools.r8.TestBuilder.getTestingAnnotations;
 import static com.android.tools.r8.utils.InternalOptions.ASM_VERSION;
 import static com.google.common.collect.Lists.cartesianProduct;
 import static org.junit.Assert.assertEquals;
@@ -39,6 +40,7 @@ import com.android.tools.r8.graph.SmaliWriter;
 import com.android.tools.r8.graph.SubtypingInfo;
 import com.android.tools.r8.jasmin.JasminBuilder;
 import com.android.tools.r8.origin.Origin;
+import com.android.tools.r8.origin.PathOrigin;
 import com.android.tools.r8.references.ClassReference;
 import com.android.tools.r8.references.FieldReference;
 import com.android.tools.r8.references.MethodReference;
@@ -130,6 +132,10 @@ public class TestBase {
   public enum Backend {
     CF,
     DEX;
+
+    public boolean isCf() {
+      return this == CF;
+    }
 
     public boolean isDex() {
       return this == DEX;
@@ -551,12 +557,26 @@ public class TestBase {
   }
 
   protected static AndroidApp.Builder buildClasses(Class<?>... programClasses) throws IOException {
-    return buildClasses(Arrays.asList(programClasses), Collections.emptyList());
+    return buildClasses(Arrays.asList(programClasses));
   }
 
   protected static AndroidApp.Builder buildClasses(Collection<Class<?>> programClasses)
       throws IOException {
     return buildClasses(programClasses, Collections.emptyList());
+  }
+
+  protected static AndroidApp.Builder buildClassesWithTestingAnnotations(Class<?>... programClasses)
+      throws IOException {
+    return buildClassesWithTestingAnnotations(Arrays.asList(programClasses));
+  }
+
+  protected static AndroidApp.Builder buildClassesWithTestingAnnotations(
+      Collection<Class<?>> programClasses) throws IOException {
+    AndroidApp.Builder builder = buildClasses(programClasses, Collections.emptyList());
+    for (Class<?> testingAnnotation : getTestingAnnotations()) {
+      builder.addProgramFile(ToolHelper.getClassFileForTestClass(testingAnnotation));
+    }
+    return builder;
   }
 
   protected static AndroidApp.Builder buildClasses(
@@ -1685,6 +1705,10 @@ public class TestBase {
 
   public static String descriptor(Class<?> clazz) {
     return DescriptorUtils.javaTypeToDescriptor(typeName(clazz));
+  }
+
+  public static PathOrigin getOrigin(Class<?> clazz) {
+    return new PathOrigin(ToolHelper.getClassFileForTestClass(clazz));
   }
 
   public static String typeName(Class<?> clazz) {

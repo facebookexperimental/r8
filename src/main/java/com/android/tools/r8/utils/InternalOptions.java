@@ -1291,7 +1291,7 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     public boolean alwaysUsePessimisticRegisterAllocation = false;
     public boolean enableCheckCastAndInstanceOfRemoval = true;
     public boolean enableDeadSwitchCaseElimination = true;
-    public boolean enableExperimentalMissingClassesReporting = false;
+    public boolean enableExperimentalMissingClassesReporting = true;
     public boolean enableInvokeSuperToInvokeVirtualRewriting = true;
     public boolean enableSwitchToIfRewriting = true;
     public boolean enableEnumUnboxingDebugLogs = false;
@@ -1465,12 +1465,20 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     return !isDesugaring() || hasMinApi(AndroidApiLevel.K);
   }
 
+  public boolean enableBackportedMethodRewriting() {
+    // Disable rewriting if there are no methods to rewrite or if the API level is higher than
+    // the highest known API level when the compiler is built. This ensures that when this is used
+    // by the Android Platform build (which normally use an API level of 10000) there will be
+    // no rewriting of backported methods. See b/147480264.
+    return desugarState.isOn() && minApiLevel <= AndroidApiLevel.LATEST.getLevel();
+  }
+
   public boolean enableTryWithResourcesDesugaring() {
     switch (tryWithResourcesDesugaring) {
       case Off:
         return false;
       case Auto:
-        return !canUseSuppressedExceptions();
+        return desugarState.isOn() && !canUseTwrCloseResourceMethod();
     }
     throw new Unreachable();
   }
@@ -1508,7 +1516,7 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
   }
 
   public boolean canUseJavaUtilObjects() {
-    return (isGeneratingClassFiles() && !cfToCfDesugar) || hasMinApi(AndroidApiLevel.K);
+    return !isDesugaring() || hasMinApi(AndroidApiLevel.K);
   }
 
   public boolean canUseRequireNonNull() {
@@ -1516,11 +1524,11 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
   }
 
   public boolean canUseSuppressedExceptions() {
-    return (isGeneratingClassFiles() && !cfToCfDesugar) || hasMinApi(AndroidApiLevel.K);
+    return !isDesugaring() || hasMinApi(AndroidApiLevel.K);
   }
 
   public boolean canUseAssertionErrorTwoArgumentConstructor() {
-    return (isGeneratingClassFiles() && !cfToCfDesugar) || hasMinApi(AndroidApiLevel.K);
+    return !isDesugaring() || hasMinApi(AndroidApiLevel.K);
   }
 
   public CfVersion classFileVersionAfterDesugaring(CfVersion version) {
@@ -1539,7 +1547,7 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
   //
   // https://android.googlesource.com/platform/libcore/+/refs/heads/ics-mr1/luni/src/main/java/java/lang/AssertionError.java#56
   public boolean canInitCauseAfterAssertionErrorObjectConstructor() {
-    return (isGeneratingClassFiles() && !cfToCfDesugar) || hasMinApi(AndroidApiLevel.J);
+    return !isDesugaring() || hasMinApi(AndroidApiLevel.J);
   }
 
   // Dalvik x86-atom backend had a bug that made it crash on filled-new-array instructions for

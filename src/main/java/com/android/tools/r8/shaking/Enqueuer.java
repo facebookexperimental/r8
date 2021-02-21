@@ -22,6 +22,9 @@ import com.android.tools.r8.errors.Unreachable;
 import com.android.tools.r8.experimental.graphinfo.GraphConsumer;
 import com.android.tools.r8.graph.AppInfoWithClassHierarchy;
 import com.android.tools.r8.graph.AppView;
+import com.android.tools.r8.graph.ClassDefinition;
+import com.android.tools.r8.graph.ClasspathOrLibraryClass;
+import com.android.tools.r8.graph.ClasspathOrLibraryDefinition;
 import com.android.tools.r8.graph.DexAnnotation;
 import com.android.tools.r8.graph.DexAnnotationSet;
 import com.android.tools.r8.graph.DexApplication;
@@ -85,13 +88,12 @@ import com.android.tools.r8.ir.code.InstructionIterator;
 import com.android.tools.r8.ir.code.InvokeMethod;
 import com.android.tools.r8.ir.code.InvokeVirtual;
 import com.android.tools.r8.ir.code.Value;
-import com.android.tools.r8.ir.desugar.BackportedMethodRewriter;
 import com.android.tools.r8.ir.desugar.CfInstructionDesugaringCollection;
 import com.android.tools.r8.ir.desugar.CfInstructionDesugaringEventConsumer;
 import com.android.tools.r8.ir.desugar.CfInstructionDesugaringEventConsumer.R8CfInstructionDesugaringEventConsumer;
 import com.android.tools.r8.ir.desugar.DesugaredLibraryAPIConverter;
+import com.android.tools.r8.ir.desugar.LambdaClass;
 import com.android.tools.r8.ir.desugar.LambdaDescriptor;
-import com.android.tools.r8.ir.desugar.TwrCloseResourceRewriter;
 import com.android.tools.r8.kotlin.KotlinMetadataEnqueuerExtension;
 import com.android.tools.r8.logging.Log;
 import com.android.tools.r8.naming.identifiernamestring.IdentifierNameStringLookupResult;
@@ -108,9 +110,9 @@ import com.android.tools.r8.shaking.RootSetUtils.MutableItemsWithRules;
 import com.android.tools.r8.shaking.RootSetUtils.RootSet;
 import com.android.tools.r8.shaking.RootSetUtils.RootSetBuilder;
 import com.android.tools.r8.shaking.ScopedDexMethodSet.AddMethodIfMoreVisibleResult;
+import com.android.tools.r8.synthesis.SyntheticItems.SynthesizingContextOracle;
 import com.android.tools.r8.utils.Action;
 import com.android.tools.r8.utils.InternalOptions;
-import com.android.tools.r8.utils.InternalOptions.DesugarState;
 import com.android.tools.r8.utils.IteratorUtils;
 import com.android.tools.r8.utils.MethodSignatureEquivalence;
 import com.android.tools.r8.utils.OptionalBool;
@@ -249,6 +251,13 @@ public class Enqueuer {
   private final Map<DexProgramClass, ProgramFieldSet> reachableInstanceFields =
       Maps.newIdentityHashMap();
 
+  // TODO(b/180091213): Remove when supported by synthetic items.
+  /**
+   * The synthesizing contexts for classes synthesized by lambda desugaring and twr close resource
+   * desugaring.
+   */
+  private final Map<DexProgramClass, ProgramMethod> synthesizingContexts = new IdentityHashMap<>();
+
   /**
    * Set of types that are mentioned in the program. We at least need an empty abstract class item
    * for these.
@@ -278,7 +287,7 @@ public class Enqueuer {
    *
    * <p>Used to build a new app of just referenced types and avoid duplicate tracing.
    */
-  private final Set<DexClass> liveNonProgramTypes = Sets.newIdentityHashSet();
+  private final Set<ClasspathOrLibraryClass> liveNonProgramTypes = Sets.newIdentityHashSet();
 
   /** Set of reachable proto types that will be dead code eliminated. */
   private final Set<DexProgramClass> deadProtoTypeCandidates = Sets.newIdentityHashSet();
@@ -382,13 +391,7 @@ public class Enqueuer {
   private final GraphReporter graphReporter;
 
   private final CfInstructionDesugaringCollection desugaring;
-
-  private final BackportedMethodRewriter backportRewriter;
-  private final TwrCloseResourceRewriter twrCloseResourceRewriter;
-
   private final DesugaredLibraryConversionWrapperAnalysis desugaredLibraryWrapperAnalysis;
-  private final Map<DexMethod, ProgramMethod> methodsWithBackports = new IdentityHashMap<>();
-  private final Map<DexMethod, ProgramMethod> methodsWithTwrCloseResource = new IdentityHashMap<>();
   private final ProgramMethodSet pendingDesugaring = ProgramMethodSet.create();
 
   Enqueuer(
@@ -435,12 +438,6 @@ public class Enqueuer {
         mode.isInitialTreeShaking()
             ? CfInstructionDesugaringCollection.create(appView)
             : CfInstructionDesugaringCollection.empty();
-    backportRewriter =
-        options.desugarState == DesugarState.ON ? new BackportedMethodRewriter(appView) : null;
-    twrCloseResourceRewriter =
-        TwrCloseResourceRewriter.enableTwrCloseResourceDesugaring(options)
-            ? new TwrCloseResourceRewriter(appView)
-            : null;
 
     objectAllocationInfoCollection =
         ObjectAllocationInfoCollectionImpl.builder(mode.isInitialTreeShaking(), graphReporter);
@@ -539,7 +536,8 @@ public class Enqueuer {
     if (clazz == null) {
       ignoreMissingClass(type);
     } else if (clazz.isNotProgramClass()) {
-      addLiveNonProgramType(clazz);
+      addLiveNonProgramType(
+          clazz.asClasspathOrLibraryClass(), this::ignoreMissingClasspathOrLibraryClass);
     }
   }
 
@@ -568,13 +566,13 @@ public class Enqueuer {
     definitionFor(type, context, missingClassConsumer);
   }
 
-  private void recordMethodReference(DexMethod method, ProgramDefinition context) {
+  private void recordMethodReference(DexMethod method, ProgramDerivedContext context) {
     recordMethodReference(method, context, this::reportMissingClass);
   }
 
   private void recordMethodReference(
       DexMethod method,
-      ProgramDefinition context,
+      ProgramDerivedContext context,
       BiConsumer<DexType, ProgramDerivedContext> missingClassConsumer) {
     recordTypeReference(method.holder, context, missingClassConsumer);
     recordTypeReference(method.proto.returnType, context, missingClassConsumer);
@@ -617,7 +615,10 @@ public class Enqueuer {
       return null;
     }
     if (clazz.isNotProgramClass()) {
-      addLiveNonProgramType(clazz);
+      addLiveNonProgramType(
+          clazz.asClasspathOrLibraryClass(),
+          (missingType, derivedContext) ->
+              reportMissingClass(missingType, derivedContext.asProgramDerivedContext(context)));
     }
     return clazz;
   }
@@ -626,58 +627,66 @@ public class Enqueuer {
     return keepInfo.isPinned(type, appInfo);
   }
 
-  private void addLiveNonProgramType(DexClass clazz) {
-    assert clazz.isNotProgramClass();
-    // Fast path to avoid the worklist when the class is already seen.
-    if (!liveNonProgramTypes.add(clazz)) {
-      return;
-    }
-    Deque<DexClass> worklist = new ArrayDeque<>();
-    worklist.addLast(clazz);
-    while (!worklist.isEmpty()) {
-      DexClass definition = worklist.removeFirst();
-      processNewLiveNonProgramType(definition, worklist);
+  private void addLiveNonProgramType(
+      ClasspathOrLibraryClass clazz,
+      BiConsumer<DexType, ClasspathOrLibraryDefinition> missingClassConsumer) {
+    WorkList<ClasspathOrLibraryClass> worklist =
+        WorkList.newIdentityWorkList(clazz, liveNonProgramTypes);
+    while (worklist.hasNext()) {
+      ClasspathOrLibraryClass definition = worklist.next();
+      processNewLiveNonProgramType(definition, worklist, missingClassConsumer);
     }
   }
 
-  private void processNewLiveNonProgramType(DexClass clazz, Deque<DexClass> worklist) {
-    assert clazz.isNotProgramClass();
+  private void processNewLiveNonProgramType(
+      ClasspathOrLibraryClass clazz,
+      WorkList<ClasspathOrLibraryClass> worklist,
+      BiConsumer<DexType, ClasspathOrLibraryDefinition> missingClassConsumer) {
     if (clazz.isLibraryClass()) {
       // TODO(b/149201735): This likely needs to apply to classpath too.
       ensureMethodsContinueToWidenAccess(clazz);
       // Only libraries must not derive program. Classpath classes can, assuming correct keep rules.
       warnIfLibraryTypeInheritsFromProgramType(clazz.asLibraryClass());
     }
-    for (DexEncodedField field : clazz.fields()) {
-      addNonProgramClassToWorklist(field.field.type, worklist);
-    }
-    for (DexEncodedMethod method : clazz.methods()) {
-      addNonProgramClassToWorklist(method.method.proto.returnType, worklist);
-      for (DexType param : method.method.proto.parameters.values) {
-        addNonProgramClassToWorklist(param, worklist);
-      }
-    }
+    clazz.forEachClassField(
+        field ->
+            addNonProgramClassToWorklist(
+                field.getType(),
+                field.asClasspathOrLibraryDefinition(),
+                worklist,
+                missingClassConsumer));
+    clazz.forEachClassMethod(
+        method -> {
+          ClasspathOrLibraryDefinition derivedContext = method.asClasspathOrLibraryDefinition();
+          addNonProgramClassToWorklist(
+              method.getReturnType(), derivedContext, worklist, missingClassConsumer);
+          for (DexType parameter : method.getParameters()) {
+            addNonProgramClassToWorklist(parameter, derivedContext, worklist, missingClassConsumer);
+          }
+        });
     for (DexType supertype : clazz.allImmediateSupertypes()) {
-      addNonProgramClassToWorklist(supertype, worklist);
+      addNonProgramClassToWorklist(
+          supertype, clazz.asClasspathOrLibraryDefinition(), worklist, missingClassConsumer);
     }
   }
 
-  private void addNonProgramClassToWorklist(DexType type, Deque<DexClass> worklist) {
+  private void addNonProgramClassToWorklist(
+      DexType type,
+      ClasspathOrLibraryDefinition context,
+      WorkList<ClasspathOrLibraryClass> worklist,
+      BiConsumer<DexType, ClasspathOrLibraryDefinition> missingClassConsumer) {
     if (type.isArrayType()) {
       type = type.toBaseType(appView.dexItemFactory());
     }
     if (!type.isClassType()) {
       return;
     }
-    DexClass definition = appView.definitionFor(type);
-    if (definition == null) {
-      reportMissingClassWithoutContext(type);
-      return;
+    DexClass clazz = appView.definitionFor(type);
+    if (clazz == null) {
+      missingClassConsumer.accept(type, context);
+    } else if (!clazz.isProgramClass()) {
+      worklist.addIfNotSeen(clazz.asClasspathOrLibraryClass());
     }
-    if (definition.isProgramClass() || !liveNonProgramTypes.add(definition)) {
-      return;
-    }
-    worklist.addLast(definition);
   }
 
   private DexProgramClass getProgramClassOrNull(DexType type, ProgramDefinition context) {
@@ -1207,9 +1216,6 @@ public class Enqueuer {
 
   private void traceInvokeDirect(
       DexMethod invokedMethod, ProgramMethod context, KeepReason reason) {
-    if (registerBackportInvoke(invokedMethod, context)) {
-      return;
-    }
     if (!registerMethodWithTargetAndContext(
         methodAccessInfoCollection::registerInvokeDirectInContext, invokedMethod, context)) {
       return;
@@ -1231,10 +1237,6 @@ public class Enqueuer {
 
   private void traceInvokeInterface(
       DexMethod method, ProgramMethod context, KeepReason keepReason) {
-    if (registerBackportInvoke(method, context)) {
-      return;
-    }
-
     if (!registerMethodWithTargetAndContext(
         methodAccessInfoCollection::registerInvokeInterfaceInContext, method, context)) {
       return;
@@ -1254,32 +1256,8 @@ public class Enqueuer {
     traceInvokeStatic(invokedMethod, context, KeepReason.invokedFromLambdaCreatedIn(context));
   }
 
-  private boolean registerBackportInvoke(DexMethod invokedMethod, ProgramMethod context) {
-    if (backportRewriter != null && backportRewriter.needsDesugaring(invokedMethod)) {
-      methodsWithBackports.putIfAbsent(context.getReference(), context);
-      return true;
-    }
-    return false;
-  }
-
-  private boolean registerCloseResource(DexMethod invokedMethod, ProgramMethod context) {
-    if (twrCloseResourceRewriter != null
-        && TwrCloseResourceRewriter.isTwrCloseResourceMethod(
-            invokedMethod, appView.dexItemFactory())) {
-      methodsWithTwrCloseResource.putIfAbsent(context.getReference(), context);
-      return true;
-    }
-    return false;
-  }
-
   private void traceInvokeStatic(
       DexMethod invokedMethod, ProgramMethod context, KeepReason reason) {
-    if (registerBackportInvoke(invokedMethod, context)) {
-      return;
-    }
-    if (registerCloseResource(invokedMethod, context)) {
-      return;
-    }
     DexItemFactory dexItemFactory = appView.dexItemFactory();
     if (dexItemFactory.classMethods.isReflectiveClassLookup(invokedMethod)
         || dexItemFactory.atomicFieldUpdaterMethods.isFieldUpdater(invokedMethod)) {
@@ -1311,9 +1289,6 @@ public class Enqueuer {
   }
 
   void traceInvokeSuper(DexMethod invokedMethod, ProgramMethod context) {
-    if (registerBackportInvoke(invokedMethod, context)) {
-      return;
-    }
     // We have to revisit super invokes based on the context they are found in. The same
     // method descriptor will hit different targets, depending on the context it is used in.
     DexMethod actualTarget = getInvokeSuperTarget(invokedMethod, context);
@@ -1338,10 +1313,6 @@ public class Enqueuer {
 
   private void traceInvokeVirtual(
       DexMethod invokedMethod, ProgramMethod context, KeepReason reason) {
-    if (registerBackportInvoke(invokedMethod, context)) {
-      return;
-    }
-
     if (invokedMethod == appView.dexItemFactory().classMethods.newInstance
         || invokedMethod == appView.dexItemFactory().constructorMethods.newInstance) {
       pendingReflectiveUses.add(context);
@@ -1836,11 +1807,12 @@ public class Enqueuer {
     analyses.forEach(analysis -> analysis.processNewlyLiveClass(clazz, workList));
   }
 
-  private void ensureMethodsContinueToWidenAccess(DexClass clazz) {
+  private void ensureMethodsContinueToWidenAccess(ClassDefinition clazz) {
     assert !clazz.isProgramClass();
     ScopedDexMethodSet seen =
-        scopedMethodsForLiveTypes.computeIfAbsent(clazz.type, ignore -> new ScopedDexMethodSet());
-    clazz.virtualMethods().forEach(seen::addMethodIfMoreVisible);
+        scopedMethodsForLiveTypes.computeIfAbsent(
+            clazz.getType(), ignore -> new ScopedDexMethodSet());
+    clazz.getMethodCollection().forEachVirtualMethod(seen::addMethodIfMoreVisible);
   }
 
   private void ensureMethodsContinueToWidenAccess(
@@ -1983,11 +1955,15 @@ public class Enqueuer {
   private SingleResolutionResult resolveMethod(
       DexMethod method, ProgramDefinition context, KeepReason reason, boolean interfaceInvoke) {
     // Record the references in case they are not program types.
-    recordMethodReference(method, context);
     ResolutionResult resolutionResult = appInfo.resolveMethod(method, interfaceInvoke);
-    if (resolutionResult.isFailedResolution()) {
+    if (resolutionResult.isSingleResolution()) {
+      recordMethodReference(
+          method, resolutionResult.getResolutionPair().asProgramDerivedContext(context));
+    } else {
+      assert resolutionResult.isFailedResolution();
       markFailedMethodResolutionTargets(
           method, resolutionResult.asFailedResolution(), context, reason);
+      recordMethodReference(method, context);
     }
     return resolutionResult.asSingleResolution();
   }
@@ -2230,6 +2206,15 @@ public class Enqueuer {
     ignoreMissingClass(clazz);
   }
 
+  private void ignoreMissingClasspathOrLibraryClass(DexType clazz) {
+    ignoreMissingClass(clazz);
+  }
+
+  private void ignoreMissingClasspathOrLibraryClass(
+      DexType clazz, ClasspathOrLibraryDefinition context) {
+    ignoreMissingClasspathOrLibraryClass(clazz);
+  }
+
   private void reportMissingClass(DexType clazz, ProgramDerivedContext context) {
     assert !mode.isFinalTreeShaking()
             || missingClassesBuilder.wasAlreadyMissing(clazz)
@@ -2238,19 +2223,23 @@ public class Enqueuer {
             // TODO(b/157107464): See if we can clean this up.
             || (initialPrunedTypes != null && initialPrunedTypes.contains(clazz))
         : "Unexpected missing class `" + clazz.toSourceString() + "`";
-    missingClassesBuilder.addNewMissingClass(clazz, context);
-  }
-
-  @Deprecated
-  private void reportMissingClassWithoutContext(DexType clazz) {
-    assert !mode.isFinalTreeShaking()
-            || missingClassesBuilder.wasAlreadyMissing(clazz)
-            || appView.dexItemFactory().isPossiblyCompilerSynthesizedType(clazz)
-            || initialDeadProtoTypes.contains(clazz)
-            // TODO(b/157107464): See if we can clean this up.
-            || (initialPrunedTypes != null && initialPrunedTypes.contains(clazz))
-        : "Unexpected missing class `" + clazz.toSourceString() + "`";
-    missingClassesBuilder.legacyAddNewMissingClass(clazz);
+    // Do not report missing classes from D8/R8 synthesized methods on non-synthetic classes (for
+    // example, lambda accessibility bridges).
+    // TODO(b/180376674): Clean this up. Ideally the D8/R8 synthesized methods would be synthesized
+    //  using synthetic items, such that the synthetic items infrastructure would track the
+    //  synthesizing contexts for these methods as well. That way, this would just work without any
+    //  special handling because the mapping to the synthesizing contexts would also work for these
+    //  synthetic methods.
+    if (context.isProgramContext()
+        && context.getContext().isMethod()
+        && context.getContext().asMethod().getDefinition().isD8R8Synthesized()
+        && !appView
+            .getSyntheticItems()
+            .isSyntheticClass(context.getContext().asProgramDefinition().getContextClass())) {
+      missingClassesBuilder.ignoreNewMissingClass(clazz);
+    } else {
+      missingClassesBuilder.addNewMissingClass(clazz, context);
+    }
   }
 
   /**
@@ -3175,8 +3164,6 @@ public class Enqueuer {
     desugar(additions);
     synthesizeInterfaceMethodBridges(additions);
     synthesizeLibraryConversionWrappers(additions);
-    synthesizeBackports(additions);
-    synthesizeTwrCloseResource(additions);
     if (additions.isEmpty()) {
       return;
     }
@@ -3202,7 +3189,10 @@ public class Enqueuer {
       return;
     }
     R8CfInstructionDesugaringEventConsumer desugaringEventConsumer =
-        CfInstructionDesugaringEventConsumer.createForR8(appView);
+        CfInstructionDesugaringEventConsumer.createForR8(
+            appView,
+            this::recordLambdaSynthesizingContext,
+            this::recordTwrCloseResourceMethodSynthesizingContext);
     ThreadUtils.processItems(
         pendingDesugaring,
         method ->
@@ -3213,6 +3203,19 @@ public class Enqueuer {
     pendingDesugaring.clear();
   }
 
+  private void recordLambdaSynthesizingContext(LambdaClass lambdaClass, ProgramMethod context) {
+    synchronized (synthesizingContexts) {
+      synthesizingContexts.put(lambdaClass.getLambdaProgramClass(), context);
+    }
+  }
+
+  private void recordTwrCloseResourceMethodSynthesizingContext(
+      ProgramMethod closeMethod, ProgramMethod context) {
+    synchronized (synthesizingContexts) {
+      synthesizingContexts.put(closeMethod.getHolder(), context);
+    }
+  }
+
   private void synthesizeInterfaceMethodBridges(SyntheticAdditions additions) {
     for (ProgramMethod bridge : syntheticInterfaceMethodBridges.values()) {
       DexProgramClass holder = bridge.getHolder();
@@ -3221,20 +3224,6 @@ public class Enqueuer {
       additions.addLiveMethodWithKeepAction(bridge, KeepMethodInfo.Joiner::pin);
     }
     syntheticInterfaceMethodBridges.clear();
-  }
-
-  private void synthesizeBackports(SyntheticAdditions additions) {
-    for (ProgramMethod method : methodsWithBackports.values()) {
-      backportRewriter.desugar(
-          method, appInfo, additions.getMethodContext(method), additions::addLiveMethod);
-    }
-  }
-
-  private void synthesizeTwrCloseResource(SyntheticAdditions additions) {
-    for (ProgramMethod method : methodsWithTwrCloseResource.values()) {
-      twrCloseResourceRewriter.rewriteCf(
-          method, additions::addLiveMethod, additions.getMethodContext(method));
-    }
   }
 
   private void finalizeLibraryMethodOverrideInformation() {
@@ -3285,7 +3274,7 @@ public class Enqueuer {
     // Rebuild a new app only containing referenced types.
     Set<DexLibraryClass> libraryClasses = Sets.newIdentityHashSet();
     Set<DexClasspathClass> classpathClasses = Sets.newIdentityHashSet();
-    for (DexClass clazz : liveNonProgramTypes) {
+    for (ClasspathOrLibraryClass clazz : liveNonProgramTypes) {
       if (clazz.isLibraryClass()) {
         libraryClasses.add(clazz.asLibraryClass());
       } else if (clazz.isClasspathClass()) {
@@ -3305,6 +3294,13 @@ public class Enqueuer {
     // Verify the references on the pruned application after type synthesis.
     assert verifyReferences(app);
 
+    SynthesizingContextOracle lambdaSynthesizingContextOracle =
+        syntheticClass -> {
+          ProgramMethod lambdaSynthesisContext = synthesizingContexts.get(syntheticClass);
+          return lambdaSynthesisContext != null
+              ? ImmutableSet.of(lambdaSynthesisContext.getReference())
+              : ImmutableSet.of(syntheticClass.getType());
+        };
     AppInfoWithLiveness appInfoWithLiveness =
         new AppInfoWithLiveness(
             appInfo.getSyntheticItems().commit(app),
@@ -3312,7 +3308,10 @@ public class Enqueuer {
             appInfo.getMainDexInfo(),
             deadProtoTypes,
             appView.testing().enableExperimentalMissingClassesReporting
-                ? missingClassesBuilder.reportMissingClasses(appView)
+                ? (mode.isInitialTreeShaking()
+                    ? missingClassesBuilder.reportMissingClasses(
+                        appView, lambdaSynthesizingContextOracle)
+                    : missingClassesBuilder.assertNoMissingClasses(appView))
                 : missingClassesBuilder.ignoreMissingClasses(),
             SetUtils.mapIdentityHashSet(liveTypes.getItems(), DexProgramClass::getType),
             Enqueuer.toDescriptorSet(targetedMethods.getItems()),
@@ -3818,7 +3817,7 @@ public class Enqueuer {
   }
 
   private void markMethodAsTargeted(ProgramMethod method, KeepReason reason) {
-    if (!targetedMethods.add(method, reason)) {
+    if (!addTargetedMethod(method, reason)) {
       // Already targeted.
       return;
     }
@@ -4218,7 +4217,7 @@ public class Enqueuer {
         continue;
       }
 
-      DexProgramClass clazz = getProgramClassOrNull(type, method);
+      DexProgramClass clazz = getProgramClassOrNullFromReflectiveAccess(type, method);
       if (clazz != null && clazz.isInterface()) {
         // Add this interface to the set of pinned items to ensure that we do not merge the
         // interface into its unique subtype, if any.

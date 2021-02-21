@@ -112,10 +112,6 @@ public abstract class TestShrinkerBuilder<
     return self();
   }
 
-  public T addDontWarn(String className) {
-    return addKeepRules("-dontwarn " + className);
-  }
-
   public T addDontWarn(Collection<String> classes) {
     for (String clazz : classes) {
       addKeepRules("-dontwarn " + clazz);
@@ -137,26 +133,6 @@ public abstract class TestShrinkerBuilder<
 
   public T addDontWarnJavaxNullableAnnotation() {
     return addDontWarn("javax.annotation.Nullable");
-  }
-
-  public T addDontWarnJavaLangInvoke() {
-    return addDontWarn("java.lang.invoke.*");
-  }
-
-  public T addDontWarnJavaNioFile() {
-    return addDontWarn("java.nio.file.**");
-  }
-
-  public T addDontWarnJetBrainsAnnotations() {
-    return addDontWarnJetBrainsNotNullAnnotation().addDontWarnJetBrainsNullableAnnotation();
-  }
-
-  public T addDontWarnJetBrainsNotNullAnnotation() {
-    return addDontWarn("org.jetbrains.annotations.NotNull");
-  }
-
-  public T addDontWarnJetBrainsNullableAnnotation() {
-    return addDontWarn("org.jetbrains.annotations.Nullable");
   }
 
   public T addIgnoreWarnings() {

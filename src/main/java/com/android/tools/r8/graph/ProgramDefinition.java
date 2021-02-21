@@ -4,7 +4,6 @@
 
 package com.android.tools.r8.graph;
 
-import com.android.tools.r8.origin.Origin;
 import java.util.function.Function;
 
 public interface ProgramDefinition extends Definition, ProgramDerivedContext {
@@ -28,14 +27,22 @@ public interface ProgramDefinition extends Definition, ProgramDerivedContext {
 
   DexDefinition getDefinition();
 
-  Origin getOrigin();
-
   default boolean isProgramClass() {
     return false;
   }
 
   default DexProgramClass asProgramClass() {
     return null;
+  }
+
+  @Override
+  default boolean isProgramDefinition() {
+    return true;
+  }
+
+  @Override
+  default ProgramDefinition asProgramDefinition() {
+    return this;
   }
 
   default boolean isProgramField() {

@@ -12,6 +12,8 @@ import com.android.tools.r8.errors.Unreachable;
 import com.android.tools.r8.graph.GenericSignature.ClassSignature;
 import com.android.tools.r8.kotlin.KotlinClassLevelInfo;
 import com.android.tools.r8.origin.Origin;
+import com.android.tools.r8.references.ClassReference;
+import com.android.tools.r8.references.Reference;
 import com.android.tools.r8.utils.InternalOptions;
 import com.android.tools.r8.utils.IterableUtils;
 import com.android.tools.r8.utils.OptionalBool;
@@ -33,7 +35,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
-public abstract class DexClass extends DexDefinition implements Definition {
+public abstract class DexClass extends DexDefinition implements ClassDefinition {
 
   public interface FieldSetter {
     void setField(int index, DexEncodedField field);
@@ -132,6 +134,17 @@ public abstract class DexClass extends DexDefinition implements Definition {
       Consumer<DexClasspathClass> classpathClassConsumer,
       Consumer<DexLibraryClass> libraryClassConsumer);
 
+  @Override
+  public void forEachClassField(Consumer<? super DexClassAndField> consumer) {
+    forEachClassFieldMatching(alwaysTrue(), consumer);
+  }
+
+  public void forEachClassFieldMatching(
+      Predicate<DexEncodedField> predicate, Consumer<? super DexClassAndField> consumer) {
+    forEachFieldMatching(predicate, field -> consumer.accept(DexClassAndField.create(this, field)));
+  }
+
+  @Override
   public void forEachClassMethod(Consumer<? super DexClassAndMethod> consumer) {
     forEachClassMethodMatching(alwaysTrue(), consumer);
   }
@@ -177,6 +190,7 @@ public abstract class DexClass extends DexDefinition implements Definition {
     return Iterables.concat(fields(predicate), methods(predicate));
   }
 
+  @Override
   public MethodCollection getMethodCollection() {
     return methodCollection;
   }
@@ -277,12 +291,12 @@ public abstract class DexClass extends DexDefinition implements Definition {
   }
 
   public void forEachField(Consumer<DexEncodedField> consumer) {
-    for (DexEncodedField field : staticFields()) {
-      consumer.accept(field);
-    }
-    for (DexEncodedField field : instanceFields()) {
-      consumer.accept(field);
-    }
+    forEachFieldMatching(alwaysTrue(), consumer);
+  }
+
+  public void forEachFieldMatching(
+      Predicate<DexEncodedField> predicate, Consumer<DexEncodedField> consumer) {
+    fields(predicate).forEach(consumer);
   }
 
   public TraversalContinuation traverseFields(Function<DexEncodedField, TraversalContinuation> fn) {
@@ -613,20 +627,24 @@ public abstract class DexClass extends DexDefinition implements Definition {
     return this;
   }
 
+  @Override
   public boolean isClasspathClass() {
     return false;
   }
 
+  @Override
   public DexClasspathClass asClasspathClass() {
     return null;
   }
 
   public abstract boolean isNotProgramClass();
 
+  @Override
   public boolean isLibraryClass() {
     return false;
   }
 
+  @Override
   public DexLibraryClass asLibraryClass() {
     return null;
   }
@@ -655,10 +673,17 @@ public abstract class DexClass extends DexDefinition implements Definition {
     return classInitializer;
   }
 
+  @Override
+  public ClassReference getClassReference() {
+    return Reference.classFromDescriptor(getType().toDescriptorString());
+  }
+
+  @Override
   public Origin getOrigin() {
     return this.origin;
   }
 
+  @Override
   public DexType getType() {
     return type;
   }
@@ -761,6 +786,7 @@ public abstract class DexClass extends DexDefinition implements Definition {
     }
   }
 
+  @Override
   public Iterable<DexType> allImmediateSupertypes() {
     Iterator<DexType> iterator =
         superType != null

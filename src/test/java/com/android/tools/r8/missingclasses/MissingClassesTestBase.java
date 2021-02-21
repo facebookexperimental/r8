@@ -4,8 +4,7 @@
 
 package com.android.tools.r8.missingclasses;
 
-import static com.android.tools.r8.DiagnosticsMatcher.diagnosticType;
-import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import com.android.tools.r8.CompilationFailedException;
 import com.android.tools.r8.R8FullTestBuilder;
@@ -14,19 +13,14 @@ import com.android.tools.r8.TestCompilerBuilder.DiagnosticsConsumer;
 import com.android.tools.r8.TestDiagnosticMessages;
 import com.android.tools.r8.TestParameters;
 import com.android.tools.r8.ThrowableConsumer;
-import com.android.tools.r8.diagnostic.internal.MissingDefinitionsDiagnosticImpl;
+import com.android.tools.r8.diagnostic.MissingDefinitionContext;
+import com.android.tools.r8.diagnostic.internal.MissingDefinitionContextUtils;
 import com.android.tools.r8.references.ClassReference;
-import com.android.tools.r8.references.FieldReference;
-import com.android.tools.r8.references.MethodReference;
 import com.android.tools.r8.references.Reference;
-import com.android.tools.r8.utils.FieldReferenceUtils;
 import com.android.tools.r8.utils.InternalOptions.TestingOptions;
-import com.android.tools.r8.utils.MethodReferenceUtils;
-import com.google.common.collect.ImmutableSet;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.List;
-import java.util.function.Function;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
@@ -46,7 +40,7 @@ public abstract class MissingClassesTestBase extends TestBase {
 
   interface MissingInterface {}
 
-  private final TestParameters parameters;
+  protected final TestParameters parameters;
 
   @Parameters(name = "{0}")
   public static List<Object[]> data() {
@@ -57,8 +51,8 @@ public abstract class MissingClassesTestBase extends TestBase {
     this.parameters = parameters;
   }
 
-  public ThrowableConsumer<R8FullTestBuilder> addDontWarn(Class<?> clazz) {
-    return builder -> builder.addDontWarn(clazz);
+  public ThrowableConsumer<R8FullTestBuilder> addDontWarn(Class<?>... classes) {
+    return builder -> builder.addDontWarn(classes);
   }
 
   public ThrowableConsumer<R8FullTestBuilder> addIgnoreWarnings() {
@@ -109,92 +103,79 @@ public abstract class MissingClassesTestBase extends TestBase {
   }
 
   void inspectDiagnosticsWithIgnoreWarnings(
-      TestDiagnosticMessages diagnostics, ClassReference referencedFrom) {
+      TestDiagnosticMessages diagnostics, MissingDefinitionContext... referencedFrom) {
+    assertTrue(referencedFrom.length > 0);
     inspectDiagnosticsWithIgnoreWarnings(
         diagnostics,
-        getExpectedDiagnosticMessageWithIgnoreWarnings(
-            referencedFrom, ClassReference::getTypeName));
+        referencedFrom,
+        getExpectedDiagnosticMessage(
+            MissingDefinitionContextUtils.toSourceString(referencedFrom[0]),
+            referencedFrom.length));
   }
 
   void inspectDiagnosticsWithIgnoreWarnings(
-      TestDiagnosticMessages diagnostics, FieldReference referencedFrom) {
-    inspectDiagnosticsWithIgnoreWarnings(
-        diagnostics,
-        getExpectedDiagnosticMessageWithIgnoreWarnings(
-            referencedFrom, FieldReferenceUtils::toSourceString));
-  }
-
-  void inspectDiagnosticsWithIgnoreWarnings(
-      TestDiagnosticMessages diagnostics, MethodReference referencedFrom) {
-    inspectDiagnosticsWithIgnoreWarnings(
-        diagnostics,
-        getExpectedDiagnosticMessageWithIgnoreWarnings(
-            referencedFrom, MethodReferenceUtils::toSourceString));
-  }
-
-  void inspectDiagnosticsWithIgnoreWarnings(
-      TestDiagnosticMessages diagnostics, String expectedDiagnosticMessage) {
-    MissingDefinitionsDiagnosticImpl diagnostic =
-        diagnostics
-            .assertOnlyWarnings()
-            .assertWarningsCount(1)
-            .assertAllWarningsMatch(diagnosticType(MissingDefinitionsDiagnosticImpl.class))
-            .getWarning(0);
-    assertEquals(ImmutableSet.of(getMissingClassReference()), diagnostic.getMissingClasses());
-    assertEquals(expectedDiagnosticMessage, diagnostic.getDiagnosticMessage());
-  }
-
-  private <T> String getExpectedDiagnosticMessageWithIgnoreWarnings(
-      T referencedFrom, Function<T, String> toSourceStringFunction) {
-    return "Missing class "
-        + getMissingClassReference().getTypeName()
-        + " (referenced from: "
-        + toSourceStringFunction.apply(referencedFrom)
-        + ")";
+      TestDiagnosticMessages diagnostics,
+      MissingDefinitionContext[] referencedFrom,
+      String expectedDiagnosticMessage) {
+    diagnostics
+        .assertOnlyWarnings()
+        .inspectWarnings(
+            diagnostic ->
+                diagnostic
+                    .assertIsMissingDefinitionsDiagnostic()
+                    .applyIf(
+                        referencedFrom != null,
+                        checker ->
+                            checker.assertIsMissingClassWithExactContexts(
+                                getMissingClassReference(), referencedFrom),
+                        checker -> checker.assertIsMissingClass(getMissingClassReference()))
+                    .assertHasMessage(expectedDiagnosticMessage)
+                    .assertNumberOfMissingClasses(1));
   }
 
   void inspectDiagnosticsWithNoRules(
-      TestDiagnosticMessages diagnostics, ClassReference referencedFrom) {
+      TestDiagnosticMessages diagnostics, MissingDefinitionContext... referencedFrom) {
+    assertTrue(referencedFrom.length > 0);
     inspectDiagnosticsWithNoRules(
         diagnostics,
-        getExpectedDiagnosticMessageWithNoRules(referencedFrom, ClassReference::getTypeName));
+        referencedFrom,
+        getExpectedDiagnosticMessage(
+            MissingDefinitionContextUtils.toSourceString(referencedFrom[0]),
+            referencedFrom.length));
   }
 
   void inspectDiagnosticsWithNoRules(
-      TestDiagnosticMessages diagnostics, FieldReference referencedFrom) {
-    inspectDiagnosticsWithNoRules(
-        diagnostics,
-        getExpectedDiagnosticMessageWithNoRules(
-            referencedFrom, FieldReferenceUtils::toSourceString));
+      TestDiagnosticMessages diagnostics,
+      MissingDefinitionContext[] referencedFrom,
+      String expectedDiagnosticMessage) {
+    diagnostics
+        .assertOnlyErrors()
+        .inspectErrors(
+            diagnostic ->
+                diagnostic
+                    .assertIsMissingDefinitionsDiagnostic()
+                    .applyIf(
+                        referencedFrom != null,
+                        checker ->
+                            checker.assertIsMissingClassWithExactContexts(
+                                getMissingClassReference(), referencedFrom),
+                        checker -> checker.assertIsMissingClass(getMissingClassReference()))
+                    .assertHasMessage(expectedDiagnosticMessage)
+                    .assertNumberOfMissingClasses(1));
   }
 
-  void inspectDiagnosticsWithNoRules(
-      TestDiagnosticMessages diagnostics, MethodReference referencedFrom) {
-    inspectDiagnosticsWithNoRules(
-        diagnostics,
-        getExpectedDiagnosticMessageWithNoRules(
-            referencedFrom, MethodReferenceUtils::toSourceString));
-  }
-
-  void inspectDiagnosticsWithNoRules(
-      TestDiagnosticMessages diagnostics, String expectedDiagnosticMessage) {
-    MissingDefinitionsDiagnosticImpl diagnostic =
-        diagnostics
-            .assertOnlyErrors()
-            .assertErrorsCount(1)
-            .assertAllErrorsMatch(diagnosticType(MissingDefinitionsDiagnosticImpl.class))
-            .getError(0);
-    assertEquals(ImmutableSet.of(getMissingClassReference()), diagnostic.getMissingClasses());
-    assertEquals(expectedDiagnosticMessage, diagnostic.getDiagnosticMessage());
-  }
-
-  private <T> String getExpectedDiagnosticMessageWithNoRules(
-      T referencedFrom, Function<T, String> toSourceStringFunction) {
-    return "Compilation can't be completed because the following class is missing: "
-        + getMissingClassReference().getTypeName()
-        + " (referenced from: "
-        + toSourceStringFunction.apply(referencedFrom)
-        + ")"
-        + ".";
+  private String getExpectedDiagnosticMessage(String referencedFrom, int numberOfContexts) {
+    StringBuilder builder =
+        new StringBuilder("Missing class ")
+            .append(getMissingClassReference().getTypeName())
+            .append(" (referenced from: ")
+            .append(referencedFrom);
+    if (numberOfContexts > 1) {
+      builder.append(", and ").append(numberOfContexts - 1).append(" other context");
+      if (numberOfContexts > 2) {
+        builder.append("s");
+      }
+    }
+    return builder.append(")").toString();
   }
 }
