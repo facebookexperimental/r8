@@ -605,8 +605,6 @@ public class DexItemFactory {
   public final DexType annotationThrows = createStaticallyKnownType("Ldalvik/annotation/Throws;");
   public final DexType annotationSynthesizedClass =
       createStaticallyKnownType("Lcom/android/tools/r8/annotations/SynthesizedClass;");
-  public final DexType annotationSynthesizedClassMap =
-      createStaticallyKnownType("Lcom/android/tools/r8/annotations/SynthesizedClassMap;");
   public final DexType annotationCovariantReturnType =
       createStaticallyKnownType("Ldalvik/annotation/codegen/CovariantReturnType;");
   public final DexType annotationCovariantReturnTypes =
@@ -638,6 +636,7 @@ public class DexItemFactory {
   public final DexType comparableType = createStaticallyKnownType("Ljava/lang/Comparable;");
   public final DexType stringConcatFactoryType =
       createStaticallyKnownType("Ljava/lang/invoke/StringConcatFactory;");
+  public final DexType unsafeType = createStaticallyKnownType("Lsun/misc/Unsafe;");
 
   public final ServiceLoaderMethods serviceLoaderMethods = new ServiceLoaderMethods();
   public final StringConcatFactoryMembers stringConcatFactoryMembers =
@@ -2330,8 +2329,17 @@ public class DexItemFactory {
       MethodHandleType type,
       DexMember<? extends DexItem, ? extends DexMember<?, ?>> fieldOrMethod,
       boolean isInterface) {
+    return createMethodHandle(type, fieldOrMethod, isInterface, null);
+  }
+
+  public DexMethodHandle createMethodHandle(
+      MethodHandleType type,
+      DexMember<? extends DexItem, ? extends DexMember<?, ?>> fieldOrMethod,
+      boolean isInterface,
+      DexMethod rewrittenTarget) {
     assert !sorted;
-    DexMethodHandle methodHandle = new DexMethodHandle(type, fieldOrMethod, isInterface);
+    DexMethodHandle methodHandle =
+        new DexMethodHandle(type, fieldOrMethod, isInterface, rewrittenTarget);
     return canonicalize(methodHandles, methodHandle);
   }
 
