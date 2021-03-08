@@ -12,6 +12,7 @@ import com.android.tools.r8.synthesis.CommittedItems;
 import com.android.tools.r8.synthesis.SyntheticItems;
 import com.android.tools.r8.utils.BooleanBox;
 import com.android.tools.r8.utils.InternalOptions;
+import com.android.tools.r8.utils.IterableUtils;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -120,20 +121,22 @@ public class AppInfo implements DexDefinitionSupplier {
     return syntheticItems;
   }
 
-  public void addSynthesizedClass(DexProgramClass clazz, boolean addToMainDex) {
+  public void addSynthesizedClassForLibraryDesugaring(DexProgramClass clazz) {
     assert checkIfObsolete();
-    syntheticItems.addLegacySyntheticClass(clazz);
-    if (addToMainDex) {
-      mainDexInfo.addSyntheticClass(clazz);
-    }
+    assert options().desugaredLibraryConfiguration != null;
+    syntheticItems.addLegacySyntheticClassForLibraryDesugaring(clazz);
   }
 
   public void addSynthesizedClass(DexProgramClass clazz, ProgramDefinition context) {
     assert checkIfObsolete();
-    syntheticItems.addLegacySyntheticClass(clazz);
-    if (context != null) {
-      mainDexInfo.addLegacySyntheticClass(clazz, context);
-    }
+    assert context != null;
+    syntheticItems.addLegacySyntheticClass(clazz, context);
+  }
+
+  public void addSynthesizedClass(DexProgramClass clazz, Iterable<DexProgramClass> contexts) {
+    assert checkIfObsolete();
+    assert !IterableUtils.isEmpty(contexts);
+    contexts.forEach(context -> addSynthesizedClass(clazz, context));
   }
 
   public List<DexProgramClass> classes() {
@@ -168,7 +171,7 @@ public class AppInfo implements DexDefinitionSupplier {
     }
     DexClass definition = definitionFor(type);
     if (definition != null && !definition.isLibraryClass() && !dependent.isLibraryClass()) {
-      InterfaceMethodRewriter.reportDependencyEdge(dependent, definition, options());
+      InterfaceMethodRewriter.reportDependencyEdge(dependent, definition, this);
     }
     return definition;
   }

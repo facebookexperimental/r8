@@ -44,6 +44,10 @@ class SynthesizingContext implements Comparable<SynthesizingContext> {
         context.getContextType(), context.getContextType(), context.getOrigin());
   }
 
+  static SynthesizingContext fromType(DexType type) {
+    return new SynthesizingContext(type, type, Origin.unknown());
+  }
+
   static SynthesizingContext fromNonSyntheticInputContext(ProgramDefinition context) {
     // A context that is itself non-synthetic is the single context, thus both the input context
     // and synthesizing context coincide.
@@ -122,21 +126,13 @@ class SynthesizingContext implements Comparable<SynthesizingContext> {
     appView.rewritePrefix.rewriteType(hygienicType, rewrittenType);
   }
 
-  // TODO(b/180074885): Remove this once main-dex is traced at the end of of compilation.
-  void addIfDerivedFromMainDexClass(
-      DexProgramClass externalSyntheticClass, MainDexInfo mainDexInfo) {
-    if (mainDexInfo.isMainDex(externalSyntheticClass)) {
-      return;
-    }
-    // The input context type (not the annotated context) determines if the derived class is to be
-    // in main dex, as it is the input context type that is traced as part of main-dex tracing.
-    if (mainDexInfo.isMainDexTypeThatShouldIncludeDependencies(inputContextType)) {
-      mainDexInfo.addSyntheticClass(externalSyntheticClass);
-    }
-  }
-
   @Override
   public String toString() {
     return "SynthesizingContext{" + getSynthesizingContextType() + "}";
+  }
+
+  // TODO(b/181858113): Remove once deprecated main-dex-list is removed.
+  boolean isDerivedFromMainDexList(MainDexInfo mainDexInfo) {
+    return mainDexInfo.isSyntheticContextOnMainDexList(inputContextType);
   }
 }

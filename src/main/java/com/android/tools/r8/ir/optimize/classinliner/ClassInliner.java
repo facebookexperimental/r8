@@ -183,14 +183,11 @@ public final class ClassInliner {
           continue;
         }
 
-        assert processor.getReceivers().verifyReceiverSetsAreDisjoint();
-
         // Is inlining allowed.
         InliningIRProvider inliningIRProvider =
             new InliningIRProvider(appView, method, code, methodProcessor);
         ClassInlinerCostAnalysis costAnalysis =
-            new ClassInlinerCostAnalysis(
-                appView, inliningIRProvider, processor.getReceivers().getDefiniteReceiverAliases());
+            new ClassInlinerCostAnalysis(appView, inliningIRProvider, processor.getReceivers());
         if (costAnalysis.willExceedInstructionBudget(
             code,
             processor.getEligibleClass(),
@@ -213,8 +210,7 @@ public final class ClassInliner {
         // Inline the class instance.
         Set<Value> affectedValues = Sets.newIdentityHashSet();
         try {
-          anyInlinedMethods |=
-              processor.processInlining(code, affectedValues, defaultOracle, inliningIRProvider);
+          anyInlinedMethods |= processor.processInlining(code, affectedValues, inliningIRProvider);
         } catch (IllegalClassInlinerStateException e) {
           // We introduced a user that we cannot handle in the class inliner as a result of force
           // inlining. Abort gracefully from class inlining without removing the instance.
@@ -226,8 +222,6 @@ public final class ClassInliner {
           assert false;
           anyInlinedMethods = true;
         }
-
-        assert inliningIRProvider.verifyIRCacheIsEmpty();
 
         // Restore normality.
         code.removeAllDeadAndTrivialPhis(affectedValues);

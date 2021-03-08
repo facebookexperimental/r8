@@ -79,6 +79,7 @@ OPENSOURCE_APPS_SHA_FILE = os.path.join(
 # TODO(b/152155164): Remove this when all apps has been migrated.
 OPENSOURCE_APPS_FOLDER = os.path.join(THIRD_PARTY, 'opensource_apps')
 OPENSOURCE_DUMPS_DIR = os.path.join(THIRD_PARTY, 'opensource-apps')
+INTERNAL_DUMPS_DIR = os.path.join(THIRD_PARTY, 'internal-apps')
 BAZEL_SHA_FILE = os.path.join(THIRD_PARTY, 'bazel.tar.gz.sha1')
 BAZEL_TOOL = os.path.join(THIRD_PARTY, 'bazel')
 JAVA8_SHA_FILE = os.path.join(THIRD_PARTY, 'openjdk', 'jdk8', 'linux-x86.tar.gz.sha1')
@@ -237,15 +238,19 @@ def DownloadFromX20(sha1_file):
   PrintCmd(cmd)
   subprocess.check_call(cmd)
 
-def DownloadFromGoogleCloudStorage(sha1_file, bucket='r8-deps', auth=False):
+def DownloadFromGoogleCloudStorage(sha1_file, bucket='r8-deps', auth=False,
+                                   quiet=False):
   suffix = '.bat' if IsWindows() else ''
   download_script = 'download_from_google_storage%s' % suffix
   cmd = [download_script]
   if not auth:
     cmd.append('-n')
   cmd.extend(['-b', bucket, '-u', '-s',  sha1_file])
-  PrintCmd(cmd)
-  subprocess.check_call(cmd)
+  if not quiet:
+    PrintCmd(cmd)
+    subprocess.check_call(cmd)
+  else:
+    subprocess.check_output(cmd)
 
 def get_sha1(filename):
   sha1 = hashlib.sha1()

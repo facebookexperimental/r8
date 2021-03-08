@@ -4,22 +4,12 @@
 
 package com.android.tools.r8.horizontalclassmerging.policies;
 
-import com.android.tools.r8.graph.AppView;
 import com.android.tools.r8.graph.DexProgramClass;
 import com.android.tools.r8.horizontalclassmerging.SingleClassPolicy;
-import com.android.tools.r8.shaking.AppInfoWithLiveness;
-import com.android.tools.r8.shaking.MainDexInfo;
 
-public class PreventMergeIntoMainDexList extends SingleClassPolicy {
-
-  private final MainDexInfo mainDexInfo;
-
-  public PreventMergeIntoMainDexList(AppView<AppInfoWithLiveness> appView) {
-    this.mainDexInfo = appView.appInfo().getMainDexInfo();
-  }
-
+public class NoAnnotationClasses extends SingleClassPolicy {
   @Override
   public boolean canMerge(DexProgramClass program) {
-    return mainDexInfo.canMerge(program);
+    return !program.isAnnotation();
   }
 }

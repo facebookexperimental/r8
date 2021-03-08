@@ -29,6 +29,7 @@ import com.android.tools.r8.jar.CfApplicationWriter;
 import com.android.tools.r8.kotlin.KotlinMetadataRewriter;
 import com.android.tools.r8.naming.NamingLens;
 import com.android.tools.r8.naming.PrefixRewritingNamingLens;
+import com.android.tools.r8.naming.RecordRewritingNamingLens;
 import com.android.tools.r8.naming.signature.GenericSignatureRewriter;
 import com.android.tools.r8.origin.CommandLineOrigin;
 import com.android.tools.r8.origin.Origin;
@@ -184,14 +185,6 @@ public final class D8 {
       AppView<AppInfo> appView = readApp(inputApp, options, executor, timing);
       SyntheticItems.collectSyntheticInputs(appView);
 
-      if (!options.mainDexKeepRules.isEmpty()) {
-        MainDexInfo mainDexInfo =
-            new GenerateMainDexList(options)
-                .traceMainDex(
-                    executor, appView.appInfo().app(), appView.appInfo().getMainDexInfo());
-        appView.setAppInfo(appView.appInfo().rebuildWithMainDexInfo(mainDexInfo));
-      }
-
       final CfgPrinter printer = options.printCfg ? new CfgPrinter() : null;
 
       if (AssertionsRewriter.isEnabled(options)) {
@@ -267,26 +260,22 @@ public final class D8 {
       Marker.checkCompatibleDesugaredLibrary(markers, options.reporter);
 
       InspectorImpl.runInspections(options.outputInspections, appView.appInfo().classes());
+      NamingLens namingLens = NamingLens.getIdentityLens();
+      if (appView.rewritePrefix.isRewriting()) {
+        namingLens = PrefixRewritingNamingLens.createPrefixRewritingNamingLens(appView, namingLens);
+      }
+      if (appView.options().shouldDesugarRecords()) {
+        namingLens = RecordRewritingNamingLens.createRecordRewritingNamingLens(appView, namingLens);
+      }
       if (options.isGeneratingClassFiles()) {
         // TODO(b/158159959): Move this out so it is shared for both CF and DEX pipelines.
         SyntheticFinalization.finalize(appView);
-        new CfApplicationWriter(
-                appView,
-                marker,
-                GraphLens.getIdentityLens(),
-                appView.rewritePrefix.isRewriting()
-                    ? PrefixRewritingNamingLens.createPrefixRewritingNamingLens(appView)
-                    : NamingLens.getIdentityLens(),
-                null)
+        new CfApplicationWriter(appView, marker, GraphLens.getIdentityLens(), namingLens, null)
             .write(options.getClassFileConsumer());
       } else {
-        NamingLens namingLens;
         if (!hasDexResources || !hasClassResources || !appView.rewritePrefix.isRewriting()) {
           // All inputs are either dex or cf, or there is nothing to rewrite.
-          namingLens =
-              hasDexResources
-                  ? NamingLens.getIdentityLens()
-                  : PrefixRewritingNamingLens.createPrefixRewritingNamingLens(appView);
+          namingLens = hasDexResources ? NamingLens.getIdentityLens() : namingLens;
           new GenericSignatureRewriter(appView, namingLens)
               .run(appView.appInfo().classes(), executor);
           new KotlinMetadataRewriter(appView, namingLens).runForD8(executor);
@@ -298,13 +287,29 @@ public final class D8 {
           timing.begin("Rewrite non-dex inputs");
           DexApplication app =
               rewriteNonDexInputs(
-                  appView, inputApp, options, executor, timing, appView.appInfo().app());
+                  appView,
+                  inputApp,
+                  options,
+                  executor,
+                  timing,
+                  appView.appInfo().app(),
+                  namingLens);
           timing.end();
           appView.setAppInfo(
               new AppInfo(
                   appView.appInfo().getSyntheticItems().commit(app),
                   appView.appInfo().getMainDexInfo()));
           namingLens = NamingLens.getIdentityLens();
+        }
+
+        // Since tracing is not lens aware, this needs to be done prior to synthetic finalization
+        // which will construct a graph lens.
+        if (!options.mainDexKeepRules.isEmpty()) {
+          MainDexInfo mainDexInfo =
+              new GenerateMainDexList(options)
+                  .traceMainDex(
+                      executor, appView.appInfo().app(), appView.appInfo().getMainDexInfo());
+          appView.setAppInfo(appView.appInfo().rebuildWithMainDexInfo(mainDexInfo));
         }
 
         // TODO(b/158159959): Move this out so it is shared for both CF and DEX pipelines.
@@ -337,7 +342,8 @@ public final class D8 {
       InternalOptions options,
       ExecutorService executor,
       Timing timing,
-      DexApplication app)
+      DexApplication app,
+      NamingLens desugaringLens)
       throws IOException, ExecutionException {
     // TODO(b/154575955): Remove the naming lens in D8.
     appView
@@ -363,17 +369,15 @@ public final class D8 {
             appView.appInfo().getSyntheticItems().commit(cfApp),
             appView.appInfo().getMainDexInfo()));
     ConvertedCfFiles convertedCfFiles = new ConvertedCfFiles();
-    NamingLens prefixRewritingNamingLens =
-        PrefixRewritingNamingLens.createPrefixRewritingNamingLens(appView);
-    new GenericSignatureRewriter(appView, prefixRewritingNamingLens)
+    new GenericSignatureRewriter(appView, desugaringLens)
         .run(appView.appInfo().classes(), executor);
-    new KotlinMetadataRewriter(appView, prefixRewritingNamingLens).runForD8(executor);
+    new KotlinMetadataRewriter(appView, desugaringLens).runForD8(executor);
     new ApplicationWriter(
             appView,
             null,
             GraphLens.getIdentityLens(),
             InitClassLens.getDefault(),
-            prefixRewritingNamingLens,
+            desugaringLens,
             null,
             convertedCfFiles)
         .write(executor);

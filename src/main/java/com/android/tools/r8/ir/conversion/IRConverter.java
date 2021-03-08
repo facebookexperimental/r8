@@ -42,6 +42,8 @@ import com.android.tools.r8.ir.code.InstructionListIterator;
 import com.android.tools.r8.ir.code.InvokeStatic;
 import com.android.tools.r8.ir.code.NumericType;
 import com.android.tools.r8.ir.code.Value;
+import com.android.tools.r8.ir.desugar.CfClassDesugaringCollection;
+import com.android.tools.r8.ir.desugar.CfClassDesugaringEventConsumer.D8CfClassDesugaringEventConsumer;
 import com.android.tools.r8.ir.desugar.CfInstructionDesugaringCollection;
 import com.android.tools.r8.ir.desugar.CfInstructionDesugaringEventConsumer;
 import com.android.tools.r8.ir.desugar.CfInstructionDesugaringEventConsumer.D8CfInstructionDesugaringEventConsumer;
@@ -125,7 +127,8 @@ public class IRConverter {
   private final Timing timing;
   private final Outliner outliner;
   private final ClassInitializerDefaultsOptimization classInitializerDefaultsOptimization;
-  private final CfInstructionDesugaringCollection desugaring;
+  private final CfClassDesugaringCollection classDesugaring;
+  private final CfInstructionDesugaringCollection instructionDesugaring;
   private final FieldAccessAnalysis fieldAccessAnalysis;
   private final LibraryMethodOverrideAnalysis libraryMethodOverrideAnalysis;
   private final StringOptimizer stringOptimizer;
@@ -217,7 +220,8 @@ public class IRConverter {
       // - nest based access desugaring,
       // - invoke-special desugaring.
       assert options.desugarState.isOn();
-      this.desugaring = CfInstructionDesugaringCollection.create(appView);
+      this.instructionDesugaring = CfInstructionDesugaringCollection.create(appView);
+      this.classDesugaring = instructionDesugaring.createClassDesugaringCollection();
       this.desugaredLibraryRetargeter =
           options.desugaredLibraryConfiguration.getRetargetCoreLibMember().isEmpty()
               ? null
@@ -249,10 +253,11 @@ public class IRConverter {
       this.assumeInserter = null;
       return;
     }
-    this.desugaring =
+    this.instructionDesugaring =
         appView.enableWholeProgramOptimizations()
             ? CfInstructionDesugaringCollection.empty()
             : CfInstructionDesugaringCollection.create(appView);
+    this.classDesugaring = instructionDesugaring.createClassDesugaringCollection();
     this.interfaceMethodRewriter =
         options.isInterfaceMethodDesugaringEnabled()
             ? new InterfaceMethodRewriter(appView, this)
@@ -349,7 +354,7 @@ public class IRConverter {
   private void synthesizeBridgesForNestBasedAccessesOnClasspath(
       D8MethodProcessor methodProcessor, ExecutorService executorService)
       throws ExecutionException {
-    desugaring.withD8NestBasedAccessDesugaring(
+    instructionDesugaring.withD8NestBasedAccessDesugaring(
         d8NestBasedAccessDesugaring ->
             d8NestBasedAccessDesugaring.synthesizeBridgesForNestBasedAccessesOnClasspath(
                 methodProcessor, executorService));
@@ -357,14 +362,15 @@ public class IRConverter {
   }
 
   private void reportNestDesugarDependencies() {
-    desugaring.withD8NestBasedAccessDesugaring(
+    instructionDesugaring.withD8NestBasedAccessDesugaring(
         D8NestBasedAccessDesugaring::reportDesugarDependencies);
   }
 
-  private void staticizeClasses(OptimizationFeedback feedback, ExecutorService executorService)
+  private void staticizeClasses(
+      OptimizationFeedback feedback, ExecutorService executorService, GraphLens applied)
       throws ExecutionException {
     if (classStaticizer != null) {
-      classStaticizer.staticizeCandidates(feedback, executorService);
+      classStaticizer.staticizeCandidates(feedback, executorService, applied);
     }
   }
 
@@ -459,6 +465,26 @@ public class IRConverter {
         appView, classConverterResult.getForcefullyMovedLambdaMethods());
   }
 
+  public void desugarClassesForD8(
+      List<DexProgramClass> classes,
+      D8CfClassDesugaringEventConsumer desugaringEventConsumer,
+      ExecutorService executorService)
+      throws ExecutionException {
+    if (classDesugaring.isEmpty()) {
+      return;
+    }
+    // Currently the classes can be processed in any order and do not require to be sorted.
+    ThreadUtils.processItems(
+        classes, clazz -> desugarClassForD8(clazz, desugaringEventConsumer), executorService);
+  }
+
+  public void desugarClassForD8(
+      DexProgramClass clazz, D8CfClassDesugaringEventConsumer desugaringEventConsumer) {
+    if (classDesugaring.needsDesugaring(clazz)) {
+      classDesugaring.desugar(clazz, desugaringEventConsumer);
+    }
+  }
+
   void convertMethods(
       DexProgramClass clazz,
       D8CfInstructionDesugaringEventConsumer desugaringEventConsumer,
@@ -544,7 +570,7 @@ public class IRConverter {
     if (!options.cfToCfDesugar) {
       return true;
     }
-    if (desugaring.needsDesugaring(method)) {
+    if (instructionDesugaring.needsDesugaring(method)) {
       return true;
     }
     if (desugaredLibraryAPIConverter != null
@@ -620,7 +646,7 @@ public class IRConverter {
       AppView<AppInfoWithLiveness> appView, ExecutorService executorService)
       throws ExecutionException {
     // Desugaring happens in the enqueuer.
-    assert desugaring.isEmpty();
+    assert instructionDesugaring.isEmpty();
 
     DexApplication application = appView.appInfo().app();
 
@@ -723,7 +749,7 @@ public class IRConverter {
     if (!options.isGeneratingClassFiles()) {
       printPhase("Class staticizer post processing");
       // TODO(b/127694949): Adapt to PostOptimization.
-      staticizeClasses(feedback, executorService);
+      staticizeClasses(feedback, executorService, initialGraphLensForIR);
       feedback.updateVisibleOptimizationInfo();
       // The class staticizer lens shall not be applied through lens code rewriting or it breaks
       // the lambda merger.
@@ -1109,13 +1135,15 @@ public class IRConverter {
       ProgramMethod method,
       CfInstructionDesugaringEventConsumer desugaringEventConsumer,
       MethodProcessingContext methodProcessingContext) {
-    if (options.desugarState.isOff()
-        || !method.getDefinition().getCode().isCfCode()
-        || !desugaring.needsDesugaring(method)) {
+    if (options.desugarState.isOff() || !method.getDefinition().getCode().isCfCode()) {
       return false;
     }
-    desugaring.desugar(method, methodProcessingContext, desugaringEventConsumer);
-    return true;
+    instructionDesugaring.scan(method, desugaringEventConsumer);
+    if (instructionDesugaring.needsDesugaring(method)) {
+      instructionDesugaring.desugar(method, methodProcessingContext, desugaringEventConsumer);
+      return true;
+    }
+    return false;
   }
 
   // TODO(b/140766440): Convert all sub steps an implementer of CodeOptimization

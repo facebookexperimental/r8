@@ -12,10 +12,7 @@ import com.android.tools.r8.ir.analysis.type.TypeElement;
 import com.android.tools.r8.ir.analysis.value.AbstractValue;
 import com.android.tools.r8.ir.analysis.value.UnknownValue;
 import com.android.tools.r8.ir.code.InvokeDirect;
-import com.android.tools.r8.ir.optimize.classinliner.ClassInlinerEligibilityInfo;
-import com.android.tools.r8.ir.optimize.classinliner.constraint.AlwaysFalseClassInlinerMethodConstraint;
 import com.android.tools.r8.ir.optimize.classinliner.constraint.ClassInlinerMethodConstraint;
-import com.android.tools.r8.ir.optimize.info.ParameterUsagesInfo.ParameterUsage;
 import com.android.tools.r8.ir.optimize.info.bridge.BridgeInfo;
 import com.android.tools.r8.ir.optimize.info.initializer.DefaultInstanceInitializerInfo;
 import com.android.tools.r8.ir.optimize.info.initializer.InstanceInitializerInfo;
@@ -36,9 +33,7 @@ public class DefaultMethodOptimizationInfo extends MethodOptimizationInfo {
   static ClassTypeElement UNKNOWN_CLASS_TYPE = null;
   static boolean UNKNOWN_CHECKS_NULL_RECEIVER_BEFORE_ANY_SIDE_EFFECT = false;
   static boolean UNKNOWN_TRIGGERS_CLASS_INIT_BEFORE_ANY_SIDE_EFFECT = false;
-  static ClassInlinerEligibilityInfo UNKNOWN_CLASS_INLINER_ELIGIBILITY = null;
   static boolean UNKNOWN_INITIALIZER_ENABLING_JAVA_ASSERTIONS = false;
-  static ParameterUsagesInfo UNKNOWN_PARAMETER_USAGE_INFO = null;
   static boolean UNKNOWN_MAY_HAVE_SIDE_EFFECTS = true;
   static boolean UNKNOWN_RETURN_VALUE_ONLY_DEPENDS_ON_ARGUMENTS = false;
   static BitSet NO_NULL_PARAMETER_OR_THROW_FACTS = null;
@@ -77,7 +72,7 @@ public class DefaultMethodOptimizationInfo extends MethodOptimizationInfo {
 
   @Override
   public ClassInlinerMethodConstraint getClassInlinerMethodConstraint() {
-    return AlwaysFalseClassInlinerMethodConstraint.getInstance();
+    return ClassInlinerMethodConstraint.alwaysFalse();
   }
 
   @Override
@@ -103,12 +98,6 @@ public class DefaultMethodOptimizationInfo extends MethodOptimizationInfo {
   @Override
   public InstanceInitializerInfo getInstanceInitializerInfo(InvokeDirect invoke) {
     return DefaultInstanceInitializerInfo.getInstance();
-  }
-
-  @Override
-  public ParameterUsage getParameterUsages(int parameter) {
-    assert UNKNOWN_PARAMETER_USAGE_INFO == null;
-    return null;
   }
 
   @Override
@@ -150,11 +139,6 @@ public class DefaultMethodOptimizationInfo extends MethodOptimizationInfo {
   @Override
   public BridgeInfo getBridgeInfo() {
     return null;
-  }
-
-  @Override
-  public ClassInlinerEligibilityInfo getClassInlinerEligibility() {
-    return UNKNOWN_CLASS_INLINER_ELIGIBILITY;
   }
 
   @Override

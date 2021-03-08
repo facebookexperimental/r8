@@ -8,6 +8,7 @@ import apk_masseur
 import as_utils
 import compiledump
 import gradle
+import hashlib
 import optparse
 import os
 import shutil
@@ -50,6 +51,7 @@ class App(object):
       'folder': None,
       'skip_recompilation': False,
       'compiler_properties': [],
+      'internal': False,
     }
     # This below does not work in python3
     defaults.update(fields.items())
@@ -340,8 +342,6 @@ APPS = [
     'url': 'https://github.com/android/compose-samples',
     'revision': '779cf9e187b8ee2c6b620b2abb4524719b3f10f8',
     'folder': 'android/compose-samples/crane',
-    # TODO(b/173176042): Fix recompilation
-    'skip_recompilation': True,
   }),
   # TODO(b/173167253): Check if monkey testing works.
   App({
@@ -353,8 +353,6 @@ APPS = [
     'url': 'https://github.com/android/compose-samples',
     'revision': '779cf9e187b8ee2c6b620b2abb4524719b3f10f8',
     'folder': 'android/compose-samples/jetcaster',
-    # TODO(b/173176042): Fix recompilation
-    'skip_recompilation': True,
   }),
   # TODO(b/173167253): Check if monkey testing works.
   App({
@@ -366,8 +364,6 @@ APPS = [
     'url': 'https://github.com/android/compose-samples',
     'revision': '779cf9e187b8ee2c6b620b2abb4524719b3f10f8',
     'folder': 'android/compose-samples/jetchat',
-    # TODO(b/173176042): Fix recompilation
-    'skip_recompilation': True,
   }),
   # TODO(b/173167253): Check if monkey testing works.
   App({
@@ -379,8 +375,6 @@ APPS = [
     'url': 'https://github.com/android/compose-samples',
     'revision': '779cf9e187b8ee2c6b620b2abb4524719b3f10f8',
     'folder': 'android/compose-samples/jetnews',
-    # TODO(b/173176042): Fix recompilation
-    'skip_recompilation': True,
   }),
   # TODO(b/173167253): Check if monkey testing works.
   App({
@@ -392,8 +386,6 @@ APPS = [
     'url': 'https://github.com/android/compose-samples',
     'revision': '779cf9e187b8ee2c6b620b2abb4524719b3f10f8',
     'folder': 'android/compose-samples/jetsnack',
-    # TODO(b/173176042): Fix recompilation
-    'skip_recompilation': True,
   }),
   # TODO(b/173167253): Check if monkey testing works.
   App({
@@ -405,8 +397,6 @@ APPS = [
     'url': 'https://github.com/android/compose-samples',
     'revision': '779cf9e187b8ee2c6b620b2abb4524719b3f10f8',
     'folder': 'android/compose-samples/jetsurvey',
-    # TODO(b/173176042): Fix recompilation
-    'skip_recompilation': True,
   }),
   # TODO(b/173167253): Check if monkey testing works.
   App({
@@ -418,8 +408,6 @@ APPS = [
     'url': 'https://github.com/android/compose-samples',
     'revision': '779cf9e187b8ee2c6b620b2abb4524719b3f10f8',
     'folder': 'android/compose-samples/owl',
-    # TODO(b/173176042): Fix recompilation
-    'skip_recompilation': True,
   }),
   # TODO(b/173167253): Check if monkey testing works.
   App({
@@ -431,9 +419,17 @@ APPS = [
     'url': 'https://github.com/android/compose-samples',
     'revision': '779cf9e187b8ee2c6b620b2abb4524719b3f10f8',
     'folder': 'android/compose-samples/rally',
-    # TODO(b/173176042): Fix recompilation
-    'skip_recompilation': True,
   }),
+  App({
+    'id': 'youtube_15_33',
+    'name': 'youtube_15_33',
+    'dump_app': 'dump.zip',
+    'apk_app': 'YouTubeRelease_unsigned.apk',
+    'folder': 'youtube_15_33',
+    'internal': True,
+    # TODO(b/181629268): Fix recompilation
+    'skip_recompilation': True,
+  })
 ]
 
 
@@ -453,8 +449,11 @@ def remove_print_lines(file):
         f.write(line)
 
 
-def download_app(app_sha):
-  utils.DownloadFromGoogleCloudStorage(app_sha)
+def download_app(app_sha, internal, quiet=False):
+  if internal:
+    utils.DownloadFromX20(app_sha)
+  else:
+    utils.DownloadFromGoogleCloudStorage(app_sha, quiet=quiet)
 
 
 def is_logging_enabled_for(app, options):
@@ -503,11 +502,12 @@ def get_r8_jar(options, temp_dir, shrinker):
 
 def get_results_for_app(app, options, temp_dir):
   app_folder = app.folder if app.folder else app.name + "_" + app.revision
-  app_dir = os.path.join(utils.OPENSOURCE_DUMPS_DIR, app_folder)
+  app_dir = (os.path.join(utils.INTERNAL_DUMPS_DIR, app_folder) if app.internal
+              else os.path.join(utils.OPENSOURCE_DUMPS_DIR, app_folder))
 
   if not os.path.exists(app_dir) and not options.golem:
     # Download the app from google storage.
-    download_app(app_dir + ".tar.gz.sha1")
+    download_app(app_dir + ".tar.gz.sha1", app.internal)
 
   # Ensure that the dumps are in place
   assert os.path.isfile(dump_for_app(app_dir, app)), "Could not find dump " \
@@ -789,6 +789,11 @@ def log_comparison_results_for_app(app, result_per_shrinker, options):
         warn('  {}-#{}: {}'.format(shrinker, compilation_index, build_status))
         continue
 
+      if options.golem:
+        print('%s(RunTimeRaw): %s ms' % (app.name, result.get('duration')))
+        print('%s(CodeSize): %s' % (app.name, result.get('dex_size')))
+        continue
+
       print('  {}-#{}:'.format(shrinker, compilation_index))
       dex_size = result.get('dex_size')
       msg = '    dex size: {}'.format(dex_size)
@@ -839,8 +844,15 @@ def parse_options(argv):
                     help='What app collection to run',
                     choices=[collection.name for collection in APP_COLLECTIONS],
                     action='append')
+  result.add_option('--app-logging-filter', '--app_logging_filter',
+                    help='The apps for which to turn on logging',
+                    action='append')
   result.add_option('--bot',
                     help='Running on bot, use third_party dependency.',
+                    default=False,
+                    action='store_true')
+  result.add_option('--generate-golem-config', '--generate_golem_config',
+                    help='Generate a new config for golem.',
                     default=False,
                     action='store_true')
   result.add_option('--debug-agent',
@@ -861,15 +873,16 @@ def parse_options(argv):
                     action='store_true')
   result.add_option('--hash',
                     help='The commit of R8 to use')
+  result.add_option('--internal',
+                    help='Run internal apps if set, otherwise run opensource',
+                    default=False,
+                    action='store_true')
   result.add_option('--keystore',
                     help='Path to app.keystore',
                     default=os.path.join(utils.TOOLS_DIR, 'debug.keystore'))
   result.add_option('--keystore-password', '--keystore_password',
                     help='Password for app.keystore',
                     default='android')
-  result.add_option('--app-logging-filter', '--app_logging_filter',
-                    help='The apps for which to turn on logging',
-                    action='append')
   result.add_option('--monkey',
                     help='Whether to install and run app(s) with monkey',
                     default=False,
@@ -934,7 +947,7 @@ def parse_options(argv):
     del options.app
     del options.app_collection
   else:
-    options.apps = APPS
+    options.apps = [app for app in APPS if app.internal == options.internal]
 
   if options.app_logging_filter:
     for app_name in options.app_logging_filter:
@@ -960,6 +973,65 @@ def parse_options(argv):
   return (options, args)
 
 
+def print_indented(s, indent):
+  print(' ' * indent + s)
+
+
+def get_sha256(gz_file):
+  with open(gz_file, 'rb') as f:
+    bytes = f.read() # read entire file as bytes
+    return hashlib.sha256(bytes).hexdigest();
+
+
+def get_sha_from_file(sha_file):
+  with open(sha_file, 'r') as f:
+    return f.readlines()[0]
+
+
+def print_golem_config(options):
+  print('// AUTOGENERATED FILE from tools/run_on_app_dump.py in R8 repo')
+  print('part of r8_config;')
+  print('')
+  print('final Suite dumpsSuite = new Suite("OpenSourceAppDumps");')
+  print('')
+  print('createOpenSourceAppBenchmarks() {')
+  print_indented('final cpus = ["Lenovo M90"];', 2)
+  for app in options.apps:
+    if app.folder and not app.internal:
+      indentation = 2;
+      print_indented('{', indentation)
+      indentation = 4
+      print_indented('final name = "%s";' % app.name, indentation)
+      print_indented('final benchmark =', indentation)
+      print_indented(
+          'new StandardBenchmark(name, [Metric.RunTimeRaw, Metric.CodeSize]);',
+          indentation + 4)
+      print_indented(
+          'final options = benchmark.addTargets(noImplementation, ["R8"]);',
+          indentation)
+      print_indented('options.cpus = cpus;', indentation)
+      print_indented('options.isScript = true;', indentation)
+      print_indented('options.fromRevision = 9700;', indentation);
+      print_indented('options.mainFile = "tools/run_on_app_dump.py "', indentation)
+      print_indented('"--golem --shrinker r8 --app %s";' % app.name, indentation + 4)
+      app_gz = os.path.join(utils.OPENSOURCE_DUMPS_DIR, app.folder + '.tar.gz')
+      app_sha = app_gz + '.sha1'
+      # Golem uses a sha256 of the file in the cache, and you need to specify that.
+      download_app(app_sha, app.internal, quiet=True)
+      sha256 = get_sha256(app_gz)
+      sha = get_sha_from_file(app_sha)
+      print_indented('final resource = BenchmarkResource("",', indentation)
+      print_indented('type: BenchmarkResourceType.Storage,', indentation + 4)
+      print_indented('uri: "gs://r8-deps/%s",' % sha, indentation + 4)
+      print_indented('hash:', indentation + 4)
+      print_indented('"%s",' % sha256, indentation + 8)
+      print_indented('extract: "gz");', indentation + 4);
+      print_indented('options.resources.add(resource);', indentation)
+      print_indented('dumpsSuite.addBenchmark(name);', indentation)
+      indentation = 2
+      print_indented('}', indentation)
+  print('}')
+
 def main(argv):
   (options, args) = parse_options(argv)
 
@@ -969,12 +1041,15 @@ def main(argv):
     print(options.shrinker)
 
   if options.golem:
-    golem.link_third_party()
     options.disable_assertions = True
     options.no_build = True
     options.r8_compilation_steps = 1
     options.quiet = True
     options.no_logging = True
+
+  if options.generate_golem_config:
+    print_golem_config(options)
+    return 0
 
   with utils.TempDir() as temp_dir:
     if options.hash:

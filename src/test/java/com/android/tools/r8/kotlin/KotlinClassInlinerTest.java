@@ -6,6 +6,7 @@ package com.android.tools.r8.kotlin;
 
 import static com.android.tools.r8.KotlinCompilerTool.KotlinCompilerVersion.KOTLINC_1_3_72;
 import static com.android.tools.r8.utils.codeinspector.Matchers.isPresent;
+import static com.android.tools.r8.utils.codeinspector.Matchers.notIf;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -20,12 +21,11 @@ import com.android.tools.r8.graph.DexCode;
 import com.android.tools.r8.graph.DexType;
 import com.android.tools.r8.naming.MemberNaming.MethodSignature;
 import com.android.tools.r8.utils.codeinspector.ClassSubject;
-import com.android.tools.r8.utils.codeinspector.CodeInspector;
 import com.android.tools.r8.utils.codeinspector.InstructionSubject;
 import com.android.tools.r8.utils.codeinspector.MethodSubject;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -61,15 +61,6 @@ public class KotlinClassInlinerTest extends AbstractR8KotlinTestBase {
   private static boolean isJStyleLambda(DexClass clazz) {
     return clazz.getSuperType().getTypeName().equals(Object.class.getTypeName())
         && clazz.getInterfaces().size() == 1;
-  }
-
-  private static Predicate<DexType> createLambdaCheck(CodeInspector inspector) {
-    Set<DexType> lambdaClasses =
-        inspector.allClasses().stream()
-            .filter(clazz -> isLambda(clazz.getDexProgramClass()))
-            .map(clazz -> clazz.getDexProgramClass().type)
-            .collect(Collectors.toSet());
-    return lambdaClasses::contains;
   }
 
   @Test
@@ -116,10 +107,10 @@ public class KotlinClassInlinerTest extends AbstractR8KotlinTestBase {
                     .addKeepRules("-neverinline class * { void test*State*(...); }"))
         .inspect(
             inspector -> {
-              // TODO(b/173337498): MainKt$testStateless$1 should be class inlined.
+              // TODO(b/173337498): MainKt$testStateless$1 should always be class inlined.
               assertThat(
                   inspector.clazz("class_inliner_lambda_j_style.MainKt$testStateless$1"),
-                  isPresent());
+                  notIf(isPresent(), testParameters.isDexRuntime()));
 
               // TODO(b/173337498): MainKt$testStateful$1 should be class inlined.
               assertThat(
@@ -209,10 +200,8 @@ public class KotlinClassInlinerTest extends AbstractR8KotlinTestBase {
         .inspect(
             inspector -> {
               ClassSubject clazz = inspector.clazz(mainClassName);
-
-              // TODO(b/141719453): Data class should maybe be class inlined.
               assertEquals(
-                  Sets.newHashSet("class_inliner_data_class.Alpha"),
+                  Collections.emptySet(),
                   collectAccessedTypes(
                       type -> !type.toSourceString().startsWith("java."),
                       clazz,

@@ -3,6 +3,8 @@
 // BSD-style license that can be found in the LICENSE file.
 package com.android.tools.r8.synthesis;
 
+import static com.google.common.base.Predicates.alwaysTrue;
+
 import com.android.tools.r8.features.ClassToFeatureSplitMap;
 import com.android.tools.r8.graph.AppInfo;
 import com.android.tools.r8.graph.AppInfoWithClassHierarchy;
@@ -29,7 +31,8 @@ import com.android.tools.r8.utils.SetUtils;
 import com.android.tools.r8.utils.collections.BidirectionalManyToManyRepresentativeMap;
 import com.android.tools.r8.utils.collections.BidirectionalManyToOneRepresentativeHashMap;
 import com.android.tools.r8.utils.collections.BidirectionalManyToOneRepresentativeMap;
-import com.android.tools.r8.utils.collections.BidirectionalOneToOneHashMap;
+import com.android.tools.r8.utils.collections.BidirectionalOneToManyRepresentativeHashMap;
+import com.android.tools.r8.utils.collections.MutableBidirectionalOneToManyRepresentativeMap;
 import com.android.tools.r8.utils.structural.RepresentativeMap;
 import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.ImmutableList;
@@ -43,10 +46,8 @@ import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Set;
 import java.util.function.BiConsumer;
-import java.util.function.Function;
 
 public class SyntheticFinalization {
 
@@ -54,128 +55,75 @@ public class SyntheticFinalization {
     public final CommittedItems commit;
     public final NonIdentityGraphLens lens;
     public final PrunedItems prunedItems;
+    public final MainDexInfo mainDexInfo;
 
     public Result(
-        CommittedItems commit, SyntheticFinalizationGraphLens lens, PrunedItems prunedItems) {
+        CommittedItems commit,
+        SyntheticFinalizationGraphLens lens,
+        PrunedItems prunedItems,
+        MainDexInfo mainDexInfo) {
       this.commit = commit;
       this.lens = lens;
       this.prunedItems = prunedItems;
+      this.mainDexInfo = mainDexInfo;
     }
   }
 
   public static class SyntheticFinalizationGraphLens extends NestedGraphLens {
 
-    private final Map<DexType, DexType> syntheticTypeMap;
-    private final Map<DexMethod, DexMethod> syntheticMethodsMap;
-
     private SyntheticFinalizationGraphLens(
         GraphLens previous,
-        Map<DexType, DexType> syntheticClassesMap,
-        Map<DexMethod, DexMethod> syntheticMethodsMap,
         Map<DexType, DexType> typeMap,
         BidirectionalManyToOneRepresentativeMap<DexField, DexField> fieldMap,
         Map<DexMethod, DexMethod> methodMap,
         BidirectionalManyToManyRepresentativeMap<DexMethod, DexMethod> originalMethodSignatures,
         DexItemFactory factory) {
       super(typeMap, methodMap, fieldMap, originalMethodSignatures, previous, factory);
-      this.syntheticTypeMap = syntheticClassesMap;
-      this.syntheticMethodsMap = syntheticMethodsMap;
     }
 
     @Override
     public boolean isSyntheticFinalizationGraphLens() {
       return true;
     }
-
-    // The mapping is many to one, so the inverse is only defined up to equivalence groups.
-    // Override the access to renamed signatures to first check for synthetic mappings before
-    // using the original item mappings of the
-
-    @Override
-    public DexField getRenamedFieldSignature(DexField originalField) {
-      if (syntheticTypeMap.containsKey(originalField.holder)) {
-        DexField renamed = fieldMap.get(originalField);
-        if (renamed != null) {
-          return renamed;
-        }
-      }
-      return super.getRenamedFieldSignature(originalField);
-    }
-
-    @Override
-    public DexMethod getRenamedMethodSignature(DexMethod originalMethod, GraphLens applied) {
-      if (syntheticTypeMap.containsKey(originalMethod.holder)) {
-        DexMethod renamed = methodMap.get(originalMethod);
-        if (renamed != null) {
-          return renamed;
-        }
-      }
-      DexMethod renamed = syntheticMethodsMap.get(originalMethod);
-      return renamed != null ? renamed : super.getRenamedMethodSignature(originalMethod, applied);
-    }
   }
 
   private static class Builder {
-
-    // Forward mapping of internal to external synthetics.
-    Map<DexType, DexType> syntheticClassesMap = new IdentityHashMap<>();
-    Map<DexMethod, DexMethod> syntheticMethodsMap = new IdentityHashMap<>();
 
     Map<DexType, DexType> typeMap = new IdentityHashMap<>();
     BidirectionalManyToOneRepresentativeHashMap<DexField, DexField> fieldMap =
         new BidirectionalManyToOneRepresentativeHashMap<>();
     Map<DexMethod, DexMethod> methodMap = new IdentityHashMap<>();
 
-    protected final BidirectionalOneToOneHashMap<DexMethod, DexMethod> originalMethodSignatures =
-        new BidirectionalOneToOneHashMap<>();
-
-    void moveSyntheticClass(DexType from, DexType to) {
-      assert !syntheticClassesMap.containsKey(from);
-      syntheticClassesMap.put(from, to);
-      typeMap.put(from, to);
-    }
-
-    void moveSyntheticMethod(DexMethod from, DexMethod to) {
-      assert !syntheticMethodsMap.containsKey(from);
-      syntheticMethodsMap.put(from, to);
-      methodMap.put(from, to);
-      typeMap.put(from.getHolderType(), to.getHolderType());
-    }
+    protected final MutableBidirectionalOneToManyRepresentativeMap<DexMethod, DexMethod>
+        originalMethodSignatures = new BidirectionalOneToManyRepresentativeHashMap<>();
 
     void move(DexType from, DexType to) {
-      typeMap.put(from, to);
+      DexType old = typeMap.put(from, to);
+      assert old == null || old == to;
     }
 
     void move(DexField from, DexField to) {
-      fieldMap.put(from, to);
+      DexField old = fieldMap.put(from, to);
+      assert old == null || old == to;
     }
 
     void move(DexMethod from, DexMethod to) {
-      methodMap.put(from, to);
+      DexMethod old = methodMap.put(from, to);
+      assert old == null || old == to;
       originalMethodSignatures.put(to, from);
     }
 
     SyntheticFinalizationGraphLens build(GraphLens previous, DexItemFactory factory) {
-      assert verifySubMap(syntheticClassesMap, typeMap);
       if (typeMap.isEmpty() && fieldMap.isEmpty() && methodMap.isEmpty()) {
         return null;
       }
       return new SyntheticFinalizationGraphLens(
           previous,
-          syntheticClassesMap,
-          syntheticMethodsMap,
           typeMap,
           fieldMap,
           methodMap,
           originalMethodSignatures,
           factory);
-    }
-
-    private static <K, V> boolean verifySubMap(Map<K, V> sub, Map<K, V> sup) {
-      for (Entry<K, V> entry : sub.entrySet()) {
-        assert sup.get(entry.getKey()) == entry.getValue();
-      }
-      return true;
     }
   }
 
@@ -231,26 +179,38 @@ public class SyntheticFinalization {
     assert !appView.appInfo().hasClassHierarchy();
     assert !appView.appInfo().hasLiveness();
     Result result = appView.getSyntheticItems().computeFinalSynthetics(appView);
-    appView.setAppInfo(new AppInfo(result.commit, appView.appInfo().getMainDexInfo()));
-    appView.pruneItems(result.prunedItems);
+    appView.setAppInfo(new AppInfo(result.commit, result.mainDexInfo));
     if (result.lens != null) {
+      appView.setAppInfo(
+          appView
+              .appInfo()
+              .rebuildWithMainDexInfo(
+                  appView.appInfo().getMainDexInfo().rewrittenWithLens(result.lens)));
       appView.setGraphLens(result.lens);
     }
+    appView.pruneItems(result.prunedItems);
   }
 
   public static void finalizeWithClassHierarchy(AppView<AppInfoWithClassHierarchy> appView) {
     assert !appView.appInfo().hasLiveness();
     Result result = appView.getSyntheticItems().computeFinalSynthetics(appView);
     appView.setAppInfo(appView.appInfo().rebuildWithClassHierarchy(result.commit));
-    appView.pruneItems(result.prunedItems);
+    appView.setAppInfo(appView.appInfo().rebuildWithMainDexInfo(result.mainDexInfo));
     if (result.lens != null) {
       appView.setGraphLens(result.lens);
+      appView.setAppInfo(
+          appView
+              .appInfo()
+              .rebuildWithMainDexInfo(
+                  appView.appInfo().getMainDexInfo().rewrittenWithLens(result.lens)));
     }
+    appView.pruneItems(result.prunedItems);
   }
 
   public static void finalizeWithLiveness(AppView<AppInfoWithLiveness> appView) {
     Result result = appView.getSyntheticItems().computeFinalSynthetics(appView);
     appView.setAppInfo(appView.appInfo().rebuildWithLiveness(result.commit));
+    appView.setAppInfo(appView.appInfo().rebuildWithMainDexInfo(result.mainDexInfo));
     appView.rewriteWithLens(result.lens);
     appView.pruneItems(result.prunedItems);
   }
@@ -263,23 +223,20 @@ public class SyntheticFinalization {
         ImmutableMap.builder();
     ImmutableMap.Builder<DexType, SyntheticProgramClassReference> finalClassesBuilder =
         ImmutableMap.builder();
-    List<DexProgramClass> finalSyntheticProgramDefinitions = new ArrayList<>();
+    Set<DexType> derivedMainDexTypes = Sets.newIdentityHashSet();
     {
       Map<String, NumberGenerator> generators = new HashMap<>();
       application =
           buildLensAndProgram(
               appView,
-              computeEquivalences(appView, committed.getNonLegacyMethods().values(), generators),
-              computeEquivalences(appView, committed.getNonLegacyClasses().values(), generators),
+              computeEquivalences(
+                  appView, committed.getNonLegacyMethods().values(), generators, lensBuilder),
+              computeEquivalences(
+                  appView, committed.getNonLegacyClasses().values(), generators, lensBuilder),
               lensBuilder,
-              (clazz, reference) -> {
-                finalSyntheticProgramDefinitions.add(clazz);
-                finalClassesBuilder.put(clazz.getType(), reference);
-              },
-              (clazz, reference) -> {
-                finalSyntheticProgramDefinitions.add(clazz);
-                finalMethodsBuilder.put(clazz.getType(), reference);
-              });
+              (clazz, reference) -> finalClassesBuilder.put(clazz.getType(), reference),
+              (clazz, reference) -> finalMethodsBuilder.put(clazz.getType(), reference),
+              derivedMainDexTypes);
     }
     ImmutableMap<DexType, SyntheticMethodReference> finalMethods = finalMethodsBuilder.build();
     ImmutableMap<DexType, SyntheticProgramClassReference> finalClasses =
@@ -294,6 +251,10 @@ public class SyntheticFinalization {
           }
         });
 
+    // TODO(b/181858113): Remove once deprecated main-dex-list is removed.
+    MainDexInfo.Builder mainDexInfoBuilder = appView.appInfo().getMainDexInfo().builderFromCopy();
+    derivedMainDexTypes.forEach(mainDexInfoBuilder::addList);
+
     return new Result(
         new CommittedItems(
             SyntheticItems.INVALID_ID_AFTER_SYNTHETIC_FINALIZATION,
@@ -302,17 +263,16 @@ public class SyntheticFinalization {
                 committed.getLegacyTypes(), finalMethods, finalClasses),
             ImmutableList.of()),
         lensBuilder.build(appView.graphLens(), appView.dexItemFactory()),
-        PrunedItems.builder()
-            .setPrunedApp(application)
-            .addRemovedClasses(prunedSynthetics)
-            .build());
+        PrunedItems.builder().setPrunedApp(application).addRemovedClasses(prunedSynthetics).build(),
+        mainDexInfoBuilder.build());
   }
 
   private <R extends SyntheticReference<R, D, ?>, D extends SyntheticDefinition<R, D, ?>>
       Map<DexType, EquivalenceGroup<D>> computeEquivalences(
           AppView<?> appView,
           ImmutableCollection<R> references,
-          Map<String, NumberGenerator> generators) {
+          Map<String, NumberGenerator> generators,
+          Builder lensBuilder) {
     boolean intermediate = appView.options().intermediate;
     Map<DexType, D> definitions = lookupDefinitions(appView, references);
     ClassToFeatureSplitMap classToFeatureSplitMap =
@@ -328,7 +288,12 @@ public class SyntheticFinalization {
             classToFeatureSplitMap,
             synthetics);
     return computeActualEquivalences(
-        potentialEquivalences, generators, appView, intermediate, classToFeatureSplitMap);
+        potentialEquivalences,
+        generators,
+        appView,
+        intermediate,
+        classToFeatureSplitMap,
+        lensBuilder);
   }
 
   private boolean isNotSyntheticType(DexType type) {
@@ -339,7 +304,8 @@ public class SyntheticFinalization {
     // Check that a context is never itself synthetic class.
     committed.forEachNonLegacyItem(
         item -> {
-          assert isNotSyntheticType(item.getContext().getSynthesizingContextType());
+          assert isNotSyntheticType(item.getContext().getSynthesizingContextType())
+              || item.getKind().allowSyntheticContext();
         });
     return true;
   }
@@ -350,75 +316,18 @@ public class SyntheticFinalization {
       Map<DexType, EquivalenceGroup<SyntheticProgramClassDefinition>> syntheticClassGroups,
       Builder lensBuilder,
       BiConsumer<DexProgramClass, SyntheticProgramClassReference> addFinalSyntheticClass,
-      BiConsumer<DexProgramClass, SyntheticMethodReference> addFinalSyntheticMethod) {
+      BiConsumer<DexProgramClass, SyntheticMethodReference> addFinalSyntheticMethod,
+      Set<DexType> derivedMainDexSynthetics) {
     DexApplication application = appView.appInfo().app();
-    DexItemFactory factory = appView.dexItemFactory();
+    MainDexInfo mainDexInfo = appView.appInfo().getMainDexInfo();
     List<DexProgramClass> newProgramClasses = new ArrayList<>();
     Set<DexType> pruned = Sets.newIdentityHashSet();
 
-    syntheticMethodGroups.forEach(
-        (syntheticType, syntheticGroup) -> {
-          SyntheticMethodDefinition representative = syntheticGroup.getRepresentative();
-          SynthesizingContext context = representative.getContext();
-          context.registerPrefixRewriting(syntheticType, appView);
-          DexProgramClass externalSyntheticClass =
-              createExternalMethodClass(syntheticType, representative, factory);
-          newProgramClasses.add(externalSyntheticClass);
-          addSyntheticMarker(representative.getKind(), externalSyntheticClass, context, appView);
-          assert externalSyntheticClass.getMethodCollection().size() == 1;
-          DexEncodedMethod externalSyntheticMethod =
-              externalSyntheticClass.methods().iterator().next();
-          for (SyntheticMethodDefinition member : syntheticGroup.getMembers()) {
-            DexMethod memberReference = member.getMethod().getReference();
-            pruned.add(member.getHolder().getType());
-            if (memberReference != externalSyntheticMethod.method) {
-              lensBuilder.moveSyntheticMethod(memberReference, externalSyntheticMethod.method);
-            }
-          }
-        });
-
-    List<DexProgramClass> deduplicatedClasses = new ArrayList<>();
-    syntheticClassGroups.forEach(
-        (syntheticType, syntheticGroup) -> {
-          SyntheticProgramClassDefinition representative = syntheticGroup.getRepresentative();
-          SynthesizingContext context = representative.getContext();
-          context.registerPrefixRewriting(syntheticType, appView);
-          DexProgramClass externalSyntheticClass = representative.getHolder();
-          newProgramClasses.add(externalSyntheticClass);
-          addSyntheticMarker(representative.getKind(), externalSyntheticClass, context, appView);
-          for (SyntheticProgramClassDefinition member : syntheticGroup.getMembers()) {
-            DexProgramClass memberClass = member.getHolder();
-            DexType memberType = memberClass.getType();
-            pruned.add(memberType);
-            if (memberType != syntheticType) {
-              lensBuilder.moveSyntheticClass(memberType, syntheticType);
-            }
-            // The aliasing of the non-representative members needs to be recorded manually.
-            if (member != representative) {
-              deduplicatedClasses.add(memberClass);
-            }
-          }
-        });
-
-    for (DexProgramClass clazz : application.classes()) {
-      if (!pruned.contains(clazz.type)) {
-        newProgramClasses.add(clazz);
-      }
-    }
-    application = application.builder().replaceProgramClasses(newProgramClasses).build();
-
-    // We can only assert that the method container classes are in here as the classes need
-    // to be rewritten by the tree-fixer.
-    for (DexType key : syntheticMethodGroups.keySet()) {
-      assert application.definitionFor(key) != null;
-    }
-
-    DexApplication.Builder<?> builder = application.builder();
     TreeFixerBase treeFixer =
         new TreeFixerBase(appView) {
           @Override
           public DexType mapClassType(DexType type) {
-            return lensBuilder.syntheticClassesMap.getOrDefault(type, type);
+            return lensBuilder.typeMap.getOrDefault(type, type);
           }
 
           @Override
@@ -436,6 +345,59 @@ public class SyntheticFinalization {
             lensBuilder.move(from, to);
           }
         };
+
+    List<DexProgramClass> deduplicatedClasses = new ArrayList<>();
+    syntheticMethodGroups.forEach(
+        (syntheticType, syntheticGroup) -> {
+          SyntheticMethodDefinition representative = syntheticGroup.getRepresentative();
+          SynthesizingContext context = representative.getContext();
+          context.registerPrefixRewriting(syntheticType, appView);
+          DexProgramClass representativeClass = representative.getHolder();
+          addSyntheticMarker(representative.getKind(), representativeClass, context, appView);
+          assert representativeClass.getMethodCollection().size() == 1;
+          for (SyntheticMethodDefinition member : syntheticGroup.getMembers()) {
+            if (member != representative) {
+              pruned.add(member.getHolder().getType());
+              deduplicatedClasses.add(member.getHolder());
+            }
+            if (member.getContext().isDerivedFromMainDexList(mainDexInfo)) {
+              derivedMainDexSynthetics.add(syntheticType);
+            }
+          }
+        });
+
+    syntheticClassGroups.forEach(
+        (syntheticType, syntheticGroup) -> {
+          SyntheticProgramClassDefinition representative = syntheticGroup.getRepresentative();
+          SynthesizingContext context = representative.getContext();
+          context.registerPrefixRewriting(syntheticType, appView);
+          addSyntheticMarker(
+              representative.getKind(), representative.getHolder(), context, appView);
+          for (SyntheticProgramClassDefinition member : syntheticGroup.getMembers()) {
+            DexProgramClass memberClass = member.getHolder();
+            DexType memberType = memberClass.getType();
+            if (member != representative) {
+              pruned.add(memberType);
+              deduplicatedClasses.add(memberClass);
+            }
+            if (member.getContext().isDerivedFromMainDexList(mainDexInfo)) {
+              derivedMainDexSynthetics.add(syntheticType);
+            }
+          }
+        });
+
+    for (DexProgramClass clazz : application.classes()) {
+      if (!pruned.contains(clazz.type)) {
+        newProgramClasses.add(clazz);
+      }
+    }
+    application = application.builder().replaceProgramClasses(newProgramClasses).build();
+
+    // Assert that the non-representatives have been removed from the app.
+    assert verifyNonRepresentativesRemovedFromApplication(application, syntheticClassGroups);
+    assert verifyNonRepresentativesRemovedFromApplication(application, syntheticMethodGroups);
+
+    DexApplication.Builder<?> builder = application.builder();
     treeFixer.fixupClasses(deduplicatedClasses);
     builder.replaceProgramClasses(treeFixer.fixupClasses(application.classes()));
     application = builder.build();
@@ -452,34 +414,21 @@ public class SyntheticFinalization {
                   representative.getKind(),
                   representative.getContext(),
                   externalSyntheticClass.type));
-          for (SyntheticProgramClassDefinition member : syntheticGroup.getMembers()) {
-            addMainDexAndSynthesizedFromForMember(
-                member,
-                externalSyntheticClass,
-                appView.appInfo().getMainDexInfo(),
-                appForLookup::programDefinitionFor);
-          }
         });
     syntheticMethodGroups.forEach(
         (syntheticType, syntheticGroup) -> {
           DexProgramClass externalSyntheticClass = appForLookup.programDefinitionFor(syntheticType);
           SyntheticMethodDefinition representative = syntheticGroup.getRepresentative();
+          assert externalSyntheticClass.getMethodCollection().size() == 1;
+          assert externalSyntheticClass.getMethodCollection().hasDirectMethods();
+          DexEncodedMethod syntheticMethodDefinition =
+              externalSyntheticClass.getMethodCollection().getDirectMethod(alwaysTrue());
           addFinalSyntheticMethod.accept(
               externalSyntheticClass,
               new SyntheticMethodReference(
                   representative.getKind(),
                   representative.getContext(),
-                  representative
-                      .getMethod()
-                      .getReference()
-                      .withHolder(externalSyntheticClass.type, factory)));
-          for (SyntheticMethodDefinition member : syntheticGroup.getMembers()) {
-            addMainDexAndSynthesizedFromForMember(
-                member,
-                externalSyntheticClass,
-                appView.appInfo().getMainDexInfo(),
-                appForLookup::programDefinitionFor);
-          }
+                  syntheticMethodDefinition.getReference()));
         });
 
     for (DexType key : syntheticMethodGroups.keySet()) {
@@ -493,6 +442,18 @@ public class SyntheticFinalization {
     return application;
   }
 
+  private static <T extends SyntheticDefinition<?, T, ?>>
+      boolean verifyNonRepresentativesRemovedFromApplication(
+          DexApplication application, Map<DexType, EquivalenceGroup<T>> syntheticGroups) {
+    for (EquivalenceGroup<?> syntheticGroup : syntheticGroups.values()) {
+      for (SyntheticDefinition<?, ?, ?> member : syntheticGroup.getMembers()) {
+        assert member == syntheticGroup.getRepresentative()
+            || application.definitionFor(member.getHolder().getType()) == null;
+      }
+    }
+    return true;
+  }
+
   private static void addSyntheticMarker(
       SyntheticKind kind,
       DexProgramClass externalSyntheticClass,
@@ -501,38 +462,6 @@ public class SyntheticFinalization {
     if (shouldAnnotateSynthetics(appView.options())) {
       SyntheticMarker.addMarkerToClass(
           externalSyntheticClass, kind, context, appView.dexItemFactory());
-    }
-  }
-
-  private static DexProgramClass createExternalMethodClass(
-      DexType syntheticType, SyntheticMethodDefinition representative, DexItemFactory factory) {
-    SyntheticProgramClassBuilder builder =
-        new SyntheticProgramClassBuilder(syntheticType, representative.getContext(), factory);
-    // TODO(b/158159959): Support grouping multiple methods per synthetic class.
-    builder.addMethod(
-        methodBuilder -> {
-          DexEncodedMethod definition = representative.getMethod().getDefinition();
-          methodBuilder
-              .setName(SyntheticNaming.INTERNAL_SYNTHETIC_METHOD_PREFIX)
-              .setAccessFlags(definition.accessFlags)
-              .setProto(definition.getProto())
-              .setClassFileVersion(
-                  definition.hasClassFileVersion() ? definition.getClassFileVersion() : null)
-              .setCode(m -> definition.getCode());
-        });
-    return builder.build();
-  }
-
-  private static void addMainDexAndSynthesizedFromForMember(
-      SyntheticDefinition<?, ?, ?> member,
-      DexProgramClass externalSyntheticClass,
-      MainDexInfo mainDexInfo,
-      Function<DexType, DexProgramClass> definitions) {
-    member.getContext().addIfDerivedFromMainDexClass(externalSyntheticClass, mainDexInfo);
-    // TODO(b/168584485): Remove this once class-mapping support is removed.
-    DexProgramClass from = definitions.apply(member.getContext().getSynthesizingContextType());
-    if (from != null) {
-      externalSyntheticClass.addSynthesizedFrom(from);
     }
   }
 
@@ -550,7 +479,8 @@ public class SyntheticFinalization {
           Map<String, NumberGenerator> generators,
           AppView<?> appView,
           boolean intermediate,
-          ClassToFeatureSplitMap classToFeatureSplitMap) {
+          ClassToFeatureSplitMap classToFeatureSplitMap,
+          Builder lensBuilder) {
     Map<String, List<EquivalenceGroup<T>>> groupsPerPrefix = new HashMap<>();
     potentialEquivalences.forEach(
         members -> {
@@ -599,6 +529,9 @@ public class SyntheticFinalization {
             DexType representativeType =
                 createExternalType(kind, externalSyntheticTypePrefix, generators, appView);
             equivalences.put(representativeType, group);
+            for (T member : group.getMembers()) {
+              lensBuilder.move(member.getHolder().getType(), representativeType);
+            }
           }
         });
     return equivalences;

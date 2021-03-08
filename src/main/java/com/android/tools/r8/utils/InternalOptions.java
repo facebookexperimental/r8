@@ -490,9 +490,16 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     return !canUseNestBasedAccess();
   }
 
-  public boolean canUseRecords() {
-    // TODO(b/169645628): Replace by true when records are supported.
-    return testing.canUseRecords;
+  public boolean enableExperimentalRecordDesugaring() {
+    // TODO(b/169645628): Remove when records are supported.
+    return testing.enableExperimentalRecordDesugaring;
+  }
+
+  public boolean shouldDesugarRecords() {
+    if (!enableExperimentalRecordDesugaring()) {
+      return false;
+    }
+    return desugarState.isOn() && !canUseRecords();
   }
 
   public Set<String> extensiveLoggingFilter = getExtensiveLoggingFilter();
@@ -1032,7 +1039,7 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     }
     // Currently the filter is simple string equality on the qualified name.
     String qualifiedName = method.qualifiedName();
-    return methodsFilter.indexOf(qualifiedName) >= 0;
+    return methodsFilter.contains(qualifiedName);
   }
 
   public boolean methodMatchesLogArgumentsFilter(DexEncodedMethod method) {
@@ -1042,7 +1049,7 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     }
     // Currently the filter is simple string equality on the qualified name.
     String qualifiedName = method.qualifiedName();
-    return logArgumentsFilter.indexOf(qualifiedName) >= 0;
+    return logArgumentsFilter.contains(qualifiedName);
   }
 
   public enum PackageObfuscationMode {
@@ -1151,14 +1158,9 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
 
     public boolean enable = true;
     public boolean enableConstructorMerging = true;
-    // TODO(b/174809311): Update or remove the option and its tests after new lambdas synthetics.
-    public boolean enableJavaLambdaMerging = false;
+    public boolean enableJavaLambdaMerging = true;
 
-    public int syntheticArgumentCount = 3;
     public int maxGroupSize = 30;
-
-    // TODO(b/179019716): Add support for merging in presence of annotations.
-    public boolean skipNoClassesOrMembersWithAnnotationsPolicyForTesting = false;
 
     public void disable() {
       enable = false;
@@ -1178,10 +1180,6 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
 
     public int getMaxGroupSize() {
       return maxGroupSize;
-    }
-
-    public int getSyntheticArgumentCount() {
-      return syntheticArgumentCount;
     }
 
     public boolean isConstructorMergingEnabled() {
@@ -1295,7 +1293,7 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     public boolean enableSwitchToIfRewriting = true;
     public boolean enableEnumUnboxingDebugLogs = false;
     public boolean forceRedundantConstNumberRemoval = false;
-    public boolean canUseRecords = false;
+    public boolean enableExperimentalRecordDesugaring = false;
     public boolean invertConditionals = false;
     public boolean placeExceptionalBlocksLast = false;
     public boolean dontCreateMarkerInD8 = false;
@@ -1453,6 +1451,10 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
   }
 
   public boolean canUseNestBasedAccess() {
+    return !isDesugaring();
+  }
+
+  public boolean canUseRecords() {
     return !isDesugaring();
   }
 

@@ -10,13 +10,13 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assume.assumeFalse;
 
 import com.android.tools.r8.ToolHelper.DexVm;
 import com.android.tools.r8.ToolHelper.DexVm.Version;
 import com.android.tools.r8.origin.Origin;
 import com.android.tools.r8.utils.AndroidApiLevel;
 import com.android.tools.r8.utils.AndroidApp;
-import com.android.tools.r8.utils.DescriptorUtils;
 import com.android.tools.r8.utils.InternalOptions;
 import com.android.tools.r8.utils.ListUtils;
 import com.android.tools.r8.utils.OffOrAuto;
@@ -115,21 +115,19 @@ public abstract class RunExamplesAndroidOTest<
       return self();
     }
 
-    C withMainDexClass(String... classes) {
-      return withBuilderTransformation(builder -> builder.addMainDexClasses(classes));
-    }
-
     C withMainDexKeepClassRules(List<String> classes) {
       return withBuilderTransformation(
           builder -> {
             if (builder instanceof D8Command.Builder) {
               ((D8Command.Builder) builder)
                   .addMainDexRules(
-                      ListUtils.map(classes, c -> "-keep class " + c), Origin.unknown());
+                      ListUtils.map(classes, c -> "-keep class " + c + " { *; }"),
+                      Origin.unknown());
             } else if (builder instanceof R8Command.Builder) {
               ((R8Command.Builder) builder)
                   .addMainDexRules(
-                      ListUtils.map(classes, c -> "-keep class " + c), Origin.unknown());
+                      ListUtils.map(classes, c -> "-keep class " + c + " { *; }"),
+                      Origin.unknown());
             } else {
               fail("Unexpected builder type: " + builder.getClass());
             }
@@ -486,22 +484,14 @@ public abstract class RunExamplesAndroidOTest<
   public void testLambdaDesugaringWithMainDexList1() throws Throwable {
     // Minimal case: there are synthesized classes but not form the main dex class.
     testIntermediateWithMainDexList(
-        "lambdadesugaring",
-        1,
-        ImmutableList.of("lambdadesugaring.LambdaDesugaring$I"),
-        ImmutableList.of());
+        "lambdadesugaring", 1, ImmutableList.of("lambdadesugaring.LambdaDesugaring$I"));
   }
 
   @Test
   public void testLambdaDesugaringWithMainDexList2() throws Throwable {
     // Main dex class has many lambdas.
     testIntermediateWithMainDexList(
-        "lambdadesugaring",
-        // TODO(b/180074885): Over approximation not present in R8.
-        this instanceof R8RunExamplesAndroidOTest ? 51 : 52,
-        ImmutableList.of("lambdadesugaring.LambdaDesugaring$Refs$B"),
-        // TODO(b/180074885): Over approximation due to invoke-dynamic reference adds as dependency.
-        ImmutableList.of("lambdadesugaring.LambdaDesugaring$Refs$D"));
+        "lambdadesugaring", 98, ImmutableList.of("lambdadesugaring.LambdaDesugaring$Refs$B"));
   }
 
   @Test
@@ -511,11 +501,7 @@ public abstract class RunExamplesAndroidOTest<
         "interfacemethods",
         Paths.get(ToolHelper.EXAMPLES_ANDROID_N_BUILD_DIR, "interfacemethods" + JAR_EXTENSION),
         2,
-        ImmutableList.of("interfacemethods.I1"),
-        // TODO(b/180074885): Over approximation due to including I1-CC by being derived from I1,
-        //  but after desugaring I1 does not reference I1$-CC (the static method is moved), so it
-        //  is incorrect to include I1-CC in the main dex.
-        ImmutableList.of("interfacemethods.I1$-CC"));
+        ImmutableList.of("interfacemethods.I2", "interfacemethods.I2$-CC"));
   }
 
 
@@ -526,11 +512,7 @@ public abstract class RunExamplesAndroidOTest<
         "interfacemethods",
         Paths.get(ToolHelper.EXAMPLES_ANDROID_N_BUILD_DIR, "interfacemethods" + JAR_EXTENSION),
         2,
-        ImmutableList.of("interfacemethods.I2"),
-        // TODO(b/180074885): Over approximation due to including I2$-CC by being derived from I2,
-        //  but after desugaring I2 does not reference I2$-CC (the default method is moved), so it
-        //  is incorrect to include I2$-CC in the main dex.
-        ImmutableList.of("interfacemethods.I2$-CC"));
+        ImmutableList.of("interfacemethods.I2", "interfacemethods.I2$-CC"));
   }
 
   @Test
@@ -544,26 +526,21 @@ public abstract class RunExamplesAndroidOTest<
   }
 
   private void testIntermediateWithMainDexList(
-      String packageName,
-      int expectedMainDexListSize,
-      List<String> mainDexClasses,
-      List<String> mainDexOverApproximation)
+      String packageName, int expectedMainDexListSize, List<String> mainDexClasses)
       throws Throwable {
     testIntermediateWithMainDexList(
         packageName,
         Paths.get(EXAMPLE_DIR, packageName + JAR_EXTENSION),
         expectedMainDexListSize,
-        mainDexClasses,
-        mainDexOverApproximation);
+        mainDexClasses);
   }
 
   protected void testIntermediateWithMainDexList(
-      String packageName,
-      Path input,
-      int expectedMainDexListSize,
-      List<String> mainDexClasses,
-      List<String> mainDexOverApproximation)
+      String packageName, Path input, int expectedMainDexListSize, List<String> mainDexClasses)
       throws Throwable {
+    // R8 does not support merging intermediate builds via DEX.
+    assumeFalse(this instanceof R8RunExamplesAndroidOTest);
+
     AndroidApiLevel minApi = AndroidApiLevel.K;
 
     // Full build, will be used as reference.
@@ -604,13 +581,8 @@ public abstract class RunExamplesAndroidOTest<
 
     // Check.
     Assert.assertEquals(expectedMainDexListSize, fullMainClasses.size());
-    SetView<String> adjustedFull =
-        Sets.difference(
-            fullMainClasses,
-            new HashSet<>(
-                ListUtils.map(mainDexOverApproximation, DescriptorUtils::javaTypeToDescriptor)));
-    assertEqualSets(adjustedFull, indexedIntermediateMainClasses);
-    assertEqualSets(adjustedFull, filePerInputClassIntermediateMainClasses);
+    assertEqualSets(fullMainClasses, indexedIntermediateMainClasses);
+    assertEqualSets(fullMainClasses, filePerInputClassIntermediateMainClasses);
   }
 
   <T> void assertEqualSets(Set<T> expected, Set<T> actual) {

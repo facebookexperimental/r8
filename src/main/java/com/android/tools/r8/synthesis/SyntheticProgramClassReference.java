@@ -19,7 +19,7 @@ import java.util.function.Function;
 class SyntheticProgramClassReference
     extends SyntheticClassReference<
         SyntheticProgramClassReference, SyntheticProgramClassDefinition, DexProgramClass>
-    implements SyntheticProgramReference {
+    implements SyntheticProgramReference, Rewritable<SyntheticProgramClassReference> {
 
   SyntheticProgramClassReference(SyntheticKind kind, SynthesizingContext context, DexType type) {
     super(kind, context, type);
@@ -42,9 +42,6 @@ class SyntheticProgramClassReference
     // If the reference has been non-trivially rewritten the compiler has changed it and it can no
     // longer be considered a synthetic. The context may or may not have changed.
     if (type != rewritten && !lens.isSimpleRenaming(type, rewritten)) {
-      // If the referenced item is rewritten, it should be moved to another holder as the
-      // synthetic holder is no longer part of the synthetic collection.
-      assert SyntheticNaming.verifyNotInternalSynthetic(rewritten);
       return null;
     }
     if (rewrittenContext == getContext() && rewritten == type) {

@@ -4,12 +4,19 @@
 
 package com.android.tools.r8.horizontalclassmerging.policies;
 
+import com.android.tools.r8.graph.DexEncodedField;
 import com.android.tools.r8.graph.DexProgramClass;
 import com.android.tools.r8.horizontalclassmerging.SingleClassPolicy;
 
-public class NoAnnotations extends SingleClassPolicy {
+public class NoInstanceFieldAnnotations extends SingleClassPolicy {
+
   @Override
   public boolean canMerge(DexProgramClass program) {
-    return !program.isAnnotation();
+    for (DexEncodedField instanceField : program.instanceFields()) {
+      if (instanceField.hasAnnotations()) {
+        return false;
+      }
+    }
+    return true;
   }
 }

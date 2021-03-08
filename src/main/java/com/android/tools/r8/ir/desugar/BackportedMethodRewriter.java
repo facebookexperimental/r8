@@ -78,7 +78,8 @@ public final class BackportedMethodRewriter implements CfInstructionDesugaring {
     CfInvoke invoke = instruction.asInvoke();
     MethodProvider methodProvider = getMethodProviderOrNull(invoke.getMethod());
     return methodProvider != null
-        ? methodProvider.rewriteInvoke(invoke, appView, eventConsumer, methodProcessingContext)
+        ? methodProvider.rewriteInvoke(
+            invoke, appView, eventConsumer, methodProcessingContext, localStackAllocator)
         : null;
   }
 
@@ -194,6 +195,7 @@ public final class BackportedMethodRewriter implements CfInstructionDesugaring {
       }
 
       // These are currently not implemented at any API level in Android.
+      initializeJava9MethodProviders(factory);
       initializeJava10MethodProviders(factory);
       initializeJava11MethodProviders(factory);
     }
@@ -1043,6 +1045,60 @@ public final class BackportedMethodRewriter implements CfInstructionDesugaring {
       }
     }
 
+    private void initializeJava9MethodProviders(DexItemFactory factory) {
+      // Integer
+      DexType type = factory.boxedIntType;
+      // long Long.parseLong(CharSequence s, int beginIndex, int endIndex, int radix)
+      DexString name = factory.createString("parseInt");
+      DexProto proto =
+          factory.createProto(
+              factory.intType,
+              factory.charSequenceType,
+              factory.intType,
+              factory.intType,
+              factory.intType);
+      DexMethod method = factory.createMethod(type, proto, name);
+      addProvider(
+          new MethodGenerator(
+              method,
+              BackportedMethods::IntegerMethods_parseIntSubsequenceWithRadix,
+              "parseIntSubsequenceWithRadix"));
+
+      // Long
+      type = factory.boxedLongType;
+      // long Long.parseLong(CharSequence s, int beginIndex, int endIndex, int radix)
+      name = factory.createString("parseLong");
+      proto =
+          factory.createProto(
+              factory.longType,
+              factory.charSequenceType,
+              factory.intType,
+              factory.intType,
+              factory.intType);
+      method = factory.createMethod(type, proto, name);
+      addProvider(
+          new MethodGenerator(
+              method,
+              BackportedMethods::LongMethods_parseLongSubsequenceWithRadix,
+              "parseLongSubsequenceWithRadix"));
+
+      // long Long.parseUnsignedLong(CharSequence s, int beginIndex, int endIndex, int radix)
+      name = factory.createString("parseUnsignedLong");
+      proto =
+          factory.createProto(
+              factory.longType,
+              factory.charSequenceType,
+              factory.intType,
+              factory.intType,
+              factory.intType);
+      method = factory.createMethod(type, proto, name);
+      addProvider(
+          new MethodGenerator(
+              method,
+              BackportedMethods::LongMethods_parseUnsignedLongSubsequenceWithRadix,
+              "parseUnsignedLongSubsequenceWithRadix"));
+    }
+
     private void initializeJava10MethodProviders(DexItemFactory factory) {
       // List
       DexType type = factory.listType;
@@ -1309,7 +1365,8 @@ public final class BackportedMethodRewriter implements CfInstructionDesugaring {
         CfInvoke invoke,
         AppView<?> appView,
         BackportedMethodDesugaringEventConsumer eventConsumer,
-        MethodProcessingContext methodProcessingContext);
+        MethodProcessingContext methodProcessingContext,
+        LocalStackAllocator localStackAllocator);
   }
 
   private static final class InvokeRewriter extends MethodProvider {
@@ -1326,8 +1383,9 @@ public final class BackportedMethodRewriter implements CfInstructionDesugaring {
         CfInvoke invoke,
         AppView<?> appView,
         BackportedMethodDesugaringEventConsumer eventConsumer,
-        MethodProcessingContext methodProcessingContext) {
-      return rewriter.rewrite(invoke, appView.dexItemFactory());
+        MethodProcessingContext methodProcessingContext,
+        LocalStackAllocator localStackAllocator) {
+      return rewriter.rewrite(invoke, appView.dexItemFactory(), localStackAllocator);
     }
   }
 
@@ -1351,7 +1409,8 @@ public final class BackportedMethodRewriter implements CfInstructionDesugaring {
         CfInvoke invoke,
         AppView<?> appView,
         BackportedMethodDesugaringEventConsumer eventConsumer,
-        MethodProcessingContext methodProcessingContext) {
+        MethodProcessingContext methodProcessingContext,
+        LocalStackAllocator localStackAllocator) {
       ProgramMethod method = getSyntheticMethod(appView, methodProcessingContext);
       eventConsumer.acceptBackportedMethod(method, methodProcessingContext.getMethodContext());
       return ImmutableList.of(new CfInvoke(Opcodes.INVOKESTATIC, method.getReference(), false));
@@ -1410,7 +1469,8 @@ public final class BackportedMethodRewriter implements CfInstructionDesugaring {
     CfInstruction rewriteSingle(CfInvoke invoke, DexItemFactory factory);
 
     // Convenience wrapper since most rewrites are to a single instruction.
-    default Collection<CfInstruction> rewrite(CfInvoke invoke, DexItemFactory factory) {
+    default Collection<CfInstruction> rewrite(
+        CfInvoke invoke, DexItemFactory factory, LocalStackAllocator localStackAllocator) {
       return ImmutableList.of(rewriteSingle(invoke, factory));
     }
   }
@@ -1423,6 +1483,7 @@ public final class BackportedMethodRewriter implements CfInstructionDesugaring {
     }
 
     @Override
-    public abstract Collection<CfInstruction> rewrite(CfInvoke invoke, DexItemFactory factory);
+    public abstract Collection<CfInstruction> rewrite(
+        CfInvoke invoke, DexItemFactory factory, LocalStackAllocator localStackAllocator);
   }
 }

@@ -147,9 +147,12 @@ class Dump(object):
     if self.if_exists('proguard_input.config'):
       print("Unimplemented: proguard_input configuration.")
 
-  def main_dex_resource(self):
+  def main_dex_list_resource(self):
     if self.if_exists('main-dex-list.txt'):
       print("Unimplemented: main-dex-list.")
+
+  def main_dex_rules_resource(self):
+    return self.if_exists('main-dex-rules.txt')
 
   def build_properties_file(self):
     return self.if_exists('build.properties')
@@ -318,6 +321,8 @@ def run1(out, args, otherargs):
       if hasattr(args, 'config_file_consumer') and args.config_file_consumer:
         args.config_file_consumer(dump.config_file())
       cmd.extend(['--pg-conf', dump.config_file()])
+    if dump.main_dex_rules_resource():
+      cmd.extend(['--main-dex-rules', dump.main_dex_rules_resource()])
     if compiler != 'd8':
       cmd.extend(['--pg-map-output', '%s.map' % out])
     if min_api:
@@ -332,10 +337,9 @@ def run1(out, args, otherargs):
       print(subprocess.check_output(cmd, stderr=subprocess.STDOUT))
       return 0
     except subprocess.CalledProcessError as e:
-      print(e.output)
       if not args.nolib and version != 'source':
         stacktrace = os.path.join(temp, 'stacktrace')
-        open(stacktrace, 'w+').write(e.output)
+        open(stacktrace, 'w+').write(e.output.decode('UTF-8'))
         local_map = utils.R8LIB_MAP if version == 'master' else None
         hash_or_version = None if version == 'master' else version
         print("=" * 80)
@@ -343,6 +347,8 @@ def run1(out, args, otherargs):
         print("=" * 80)
         retrace.run(
           local_map, hash_or_version, stacktrace, is_hash(version), no_r8lib=False)
+      else:
+        print(e.output.decode('UTF-8'))
       return 1
 
 def run(args, otherargs):
