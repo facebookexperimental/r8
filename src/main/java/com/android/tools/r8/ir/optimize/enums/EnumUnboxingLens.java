@@ -4,11 +4,11 @@
 
 package com.android.tools.r8.ir.optimize.enums;
 
+import com.android.tools.r8.graph.AppView;
 import com.android.tools.r8.graph.DexField;
-import com.android.tools.r8.graph.DexItemFactory;
 import com.android.tools.r8.graph.DexMethod;
 import com.android.tools.r8.graph.DexType;
-import com.android.tools.r8.graph.GraphLens;
+import com.android.tools.r8.graph.NestedGraphLens;
 import com.android.tools.r8.graph.RewrittenPrototypeDescription;
 import com.android.tools.r8.ir.code.Invoke;
 import com.android.tools.r8.utils.BooleanUtils;
@@ -16,34 +16,21 @@ import com.android.tools.r8.utils.collections.BidirectionalOneToOneHashMap;
 import com.android.tools.r8.utils.collections.BidirectionalOneToOneMap;
 import com.android.tools.r8.utils.collections.MutableBidirectionalOneToOneMap;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
 import java.util.IdentityHashMap;
 import java.util.Map;
-import java.util.Set;
 
-class EnumUnboxingLens extends GraphLens.NestedGraphLens {
+class EnumUnboxingLens extends NestedGraphLens {
 
   private final Map<DexMethod, RewrittenPrototypeDescription> prototypeChangesPerMethod;
-  private final Set<DexType> unboxedEnums;
 
   EnumUnboxingLens(
-      Map<DexType, DexType> typeMap,
-      Map<DexMethod, DexMethod> methodMap,
+      AppView<?> appView,
       BidirectionalOneToOneMap<DexField, DexField> fieldMap,
-      BidirectionalOneToOneMap<DexMethod, DexMethod> originalMethodSignatures,
-      GraphLens previousLens,
-      DexItemFactory dexItemFactory,
-      Map<DexMethod, RewrittenPrototypeDescription> prototypeChangesPerMethod,
-      Set<DexType> unboxedEnums) {
-    super(
-        typeMap,
-        methodMap,
-        fieldMap,
-        originalMethodSignatures,
-        previousLens,
-        dexItemFactory);
+      BidirectionalOneToOneMap<DexMethod, DexMethod> methodMap,
+      Map<DexType, DexType> typeMap,
+      Map<DexMethod, RewrittenPrototypeDescription> prototypeChangesPerMethod) {
+    super(appView, fieldMap, methodMap, typeMap);
     this.prototypeChangesPerMethod = prototypeChangesPerMethod;
-    this.unboxedEnums = unboxedEnums;
   }
 
   @Override
@@ -59,7 +46,7 @@ class EnumUnboxingLens extends GraphLens.NestedGraphLens {
   @Override
   protected Invoke.Type mapInvocationType(
       DexMethod newMethod, DexMethod originalMethod, Invoke.Type type) {
-    if (unboxedEnums.contains(originalMethod.holder)) {
+    if (typeMap.containsKey(originalMethod.getHolderType())) {
       // Methods moved from unboxed enums to the utility class are either static or statified.
       assert newMethod != originalMethod;
       return Invoke.Type.STATIC;
@@ -76,7 +63,7 @@ class EnumUnboxingLens extends GraphLens.NestedGraphLens {
     protected final Map<DexType, DexType> typeMap = new IdentityHashMap<>();
     protected final MutableBidirectionalOneToOneMap<DexField, DexField> newFieldSignatures =
         new BidirectionalOneToOneHashMap<>();
-    protected final MutableBidirectionalOneToOneMap<DexMethod, DexMethod> originalMethodSignatures =
+    protected final MutableBidirectionalOneToOneMap<DexMethod, DexMethod> newMethodSignatures =
         new BidirectionalOneToOneHashMap<>();
 
     private Map<DexMethod, RewrittenPrototypeDescription> prototypeChangesPerMethod =
@@ -107,7 +94,7 @@ class EnumUnboxingLens extends GraphLens.NestedGraphLens {
         boolean toStatic,
         int numberOfExtraNullParameters) {
       assert from != to;
-      originalMethodSignatures.put(to, from);
+      newMethodSignatures.put(from, to);
       int offsetDiff = 0;
       int toOffset = BooleanUtils.intValue(!toStatic);
       RewrittenPrototypeDescription.ArgumentInfoCollection.Builder builder =
@@ -140,18 +127,14 @@ class EnumUnboxingLens extends GraphLens.NestedGraphLens {
               .withExtraUnusedNullParameters(numberOfExtraNullParameters));
     }
 
-    public EnumUnboxingLens build(
-        DexItemFactory dexItemFactory, GraphLens previousLens, Set<DexType> unboxedEnums) {
+    public EnumUnboxingLens build(AppView<?> appView) {
       assert !typeMap.isEmpty();
       return new EnumUnboxingLens(
-          typeMap,
-          originalMethodSignatures.getInverseOneToOneMap().getForwardMap(),
+          appView,
           newFieldSignatures,
-          originalMethodSignatures,
-          previousLens,
-          dexItemFactory,
-          ImmutableMap.copyOf(prototypeChangesPerMethod),
-          ImmutableSet.copyOf(unboxedEnums));
+          newMethodSignatures,
+          typeMap,
+          ImmutableMap.copyOf(prototypeChangesPerMethod));
     }
   }
 }

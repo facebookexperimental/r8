@@ -57,7 +57,8 @@ public class NonTrivialInstanceFieldInitializationInfoCollection
 
   @Override
   public InstanceFieldInitializationInfo get(DexEncodedField field) {
-    return infos.getOrDefault(field.field, UnknownInstanceFieldInitializationInfo.getInstance());
+    return infos.getOrDefault(
+        field.getReference(), UnknownInstanceFieldInitializationInfo.getInstance());
   }
 
   @Override
@@ -85,7 +86,7 @@ public class NonTrivialInstanceFieldInitializationInfoCollection
     List<String> strings = new ArrayList<>();
     infos.forEach((field, info) -> strings.add(field.toSourceString() + " -> " + info));
     return "NonTrivialInstanceFieldInitializationInfoCollection("
-        + StringUtils.join(strings, "; ")
+        + StringUtils.join("; ", strings)
         + ")";
   }
 }

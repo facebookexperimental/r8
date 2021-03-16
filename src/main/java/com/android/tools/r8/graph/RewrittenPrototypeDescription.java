@@ -133,8 +133,8 @@ public class RewrittenPrototypeDescription {
     private final DexType oldType;
     private final DexType newType;
 
-    static RewrittenTypeInfo toVoid(DexType oldReturnType, AppView<?> appView) {
-      return new RewrittenTypeInfo(oldReturnType, appView.dexItemFactory().voidType);
+    static RewrittenTypeInfo toVoid(DexType oldReturnType, DexItemFactory dexItemFactory) {
+      return new RewrittenTypeInfo(oldReturnType, dexItemFactory.voidType);
     }
 
     public RewrittenTypeInfo(DexType oldType, DexType newType) {
@@ -150,8 +150,8 @@ public class RewrittenPrototypeDescription {
       return oldType;
     }
 
-    boolean hasBeenChangedToReturnVoid(AppView<?> appView) {
-      return newType == appView.dexItemFactory().voidType;
+    boolean hasBeenChangedToReturnVoid(DexItemFactory dexItemFactory) {
+      return newType == dexItemFactory.voidType;
     }
 
     @Override
@@ -252,7 +252,7 @@ public class RewrittenPrototypeDescription {
       // Currently not allowed to remove the receiver of an instance method. This would involve
       // changing invoke-direct/invoke-virtual into invoke-static.
       assert encodedMethod.isStatic() || !getArgumentInfo(0).isRemovedArgumentInfo();
-      DexType[] params = encodedMethod.method.proto.parameters.values;
+      DexType[] params = encodedMethod.getReference().proto.parameters.values;
       if (isEmpty()) {
         return params;
       }
@@ -367,7 +367,9 @@ public class RewrittenPrototypeDescription {
       ArgumentInfoCollection removedArgumentsInfo) {
     DexType returnType = method.proto.returnType;
     RewrittenTypeInfo returnInfo =
-        returnType.isAlwaysNull(appView) ? RewrittenTypeInfo.toVoid(returnType, appView) : null;
+        returnType.isAlwaysNull(appView)
+            ? RewrittenTypeInfo.toVoid(returnType, appView.dexItemFactory())
+            : null;
     return create(Collections.emptyList(), returnInfo, removedArgumentsInfo);
   }
 
@@ -394,8 +396,9 @@ public class RewrittenPrototypeDescription {
     return extraParameters.size();
   }
 
-  public boolean hasBeenChangedToReturnVoid(AppView<?> appView) {
-    return rewrittenReturnInfo != null && rewrittenReturnInfo.hasBeenChangedToReturnVoid(appView);
+  public boolean hasBeenChangedToReturnVoid(DexItemFactory dexItemFactory) {
+    return rewrittenReturnInfo != null
+        && rewrittenReturnInfo.hasBeenChangedToReturnVoid(dexItemFactory);
   }
 
   public ArgumentInfoCollection getArgumentInfoCollection() {
@@ -433,23 +436,23 @@ public class RewrittenPrototypeDescription {
 
   public DexProto rewriteProto(DexEncodedMethod encodedMethod, DexItemFactory dexItemFactory) {
     if (isEmpty()) {
-      return encodedMethod.method.proto;
+      return encodedMethod.getReference().proto;
     }
     DexType newReturnType =
         rewrittenReturnInfo != null
             ? rewrittenReturnInfo.newType
-            : encodedMethod.method.proto.returnType;
+            : encodedMethod.getReference().proto.returnType;
     DexType[] newParameters = argumentInfoCollection.rewriteParameters(encodedMethod);
     return dexItemFactory.createProto(newReturnType, newParameters);
   }
 
   public RewrittenPrototypeDescription withConstantReturn(
-      DexType oldReturnType, AppView<?> appView) {
+      DexType oldReturnType, DexItemFactory dexItemFactory) {
     assert rewrittenReturnInfo == null;
-    return !hasBeenChangedToReturnVoid(appView)
+    return !hasBeenChangedToReturnVoid(dexItemFactory)
         ? new RewrittenPrototypeDescription(
             extraParameters,
-            RewrittenTypeInfo.toVoid(oldReturnType, appView),
+            RewrittenTypeInfo.toVoid(oldReturnType, dexItemFactory),
             argumentInfoCollection)
         : this;
   }

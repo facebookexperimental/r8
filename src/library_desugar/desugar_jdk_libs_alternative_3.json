@@ -77,12 +77,6 @@
         "java.time.": "j$.time.",
         "java.util.Desugar": "j$.util.Desugar"
       },
-      "backport": {
-        "java.lang.Double8": "java.lang.Double",
-        "java.lang.Integer8": "java.lang.Integer",
-        "java.lang.Long8": "java.lang.Long",
-        "java.lang.Math8": "java.lang.Math"
-      },
       "retarget_lib_member": {
         "java.util.Date#toInstant": "java.util.DesugarDate",
         "java.util.GregorianCalendar#toZonedDateTime": "java.util.DesugarGregorianCalendar",

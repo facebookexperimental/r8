@@ -8,7 +8,6 @@ import static org.junit.Assert.assertEquals;
 import com.android.tools.r8.TestBase;
 import com.android.tools.r8.TestParameters;
 import com.android.tools.r8.TestRunResult;
-import com.android.tools.r8.ToolHelper.DexVm;
 import com.android.tools.r8.ToolHelper.DexVm.Version;
 import com.android.tools.r8.utils.BooleanUtils;
 import com.android.tools.r8.utils.DescriptorUtils;
@@ -22,10 +21,11 @@ import org.junit.runners.Parameterized;
 import org.objectweb.asm.Opcodes;
 
 @RunWith(Parameterized.class)
-public class DefaultInterfaceMethodDesugaringWithStaticResolutionInvokeVirtualTest
+public class DefaultInterfaceMethodDesugaringWithPublicStaticResolutionInvokeVirtualTest
     extends TestBase {
 
   private static final String EXPECTED = StringUtils.lines("I.m()");
+  private static final String EXPECTED_R8 = StringUtils.lines("B.m()");
 
   private final TestParameters parameters;
   private final boolean invalidInvoke;
@@ -33,10 +33,11 @@ public class DefaultInterfaceMethodDesugaringWithStaticResolutionInvokeVirtualTe
   @Parameterized.Parameters(name = "{0}, invalid:{1}")
   public static List<Object[]> data() {
     return buildParameters(
-        getTestParameters().withAllRuntimesAndApiLevels().build(), BooleanUtils.values());
+        getTestParameters().withAllRuntimes().withAllApiLevelsAlsoForCf().build(),
+        BooleanUtils.values());
   }
 
-  public DefaultInterfaceMethodDesugaringWithStaticResolutionInvokeVirtualTest(
+  public DefaultInterfaceMethodDesugaringWithPublicStaticResolutionInvokeVirtualTest(
       TestParameters parameters, boolean invalidInvoke) {
     this.parameters = parameters;
     this.invalidInvoke = invalidInvoke;
@@ -53,8 +54,6 @@ public class DefaultInterfaceMethodDesugaringWithStaticResolutionInvokeVirtualTe
                 B.class.getDeclaredMethod("m"),
                 flags -> {
                   assert flags.isPublic();
-                  flags.unsetPublic();
-                  flags.setPrivate();
                   flags.setStatic();
                 })
             .transform(),
@@ -83,7 +82,8 @@ public class DefaultInterfaceMethodDesugaringWithStaticResolutionInvokeVirtualTe
         testForRuntime(parameters)
             .addProgramClasses(getProgramClasses())
             .addProgramClassFileData(getProgramClassData())
-            .run(parameters.getRuntime(), TestClass.class));
+            .run(parameters.getRuntime(), TestClass.class),
+        false);
   }
 
   @Test
@@ -95,54 +95,34 @@ public class DefaultInterfaceMethodDesugaringWithStaticResolutionInvokeVirtualTe
             .addKeepAllClassesRule()
             .setMinApi(parameters.getApiLevel())
             .compile()
-            .run(parameters.getRuntime(), TestClass.class));
+            .run(parameters.getRuntime(), TestClass.class),
+        true);
   }
 
-  private void checkResult(TestRunResult<?> result) {
+  private void checkResult(TestRunResult<?> result, boolean isR8) {
     // Invalid invoke case is where the invoke-virtual targets C.m.
     if (invalidInvoke) {
-      // Up to 4.4 the exception for targeting a private static was ICCE.
-      if (isDexOlderThanOrEqual(Version.V4_4_4)) {
+      if (parameters.isCfRuntime()) {
         result.assertFailureWithErrorThatThrows(IncompatibleClassChangeError.class);
         return;
       }
-      // Then up to 6.0 the runtime just ignores privates leading to incorrectly hitting I.m
-      if (isDexOlderThanOrEqual(Version.V6_0_1)) {
+      if (parameters.getDexRuntimeVersion().isInRangeInclusive(Version.V5_1_1, Version.V7_0_0)) {
         result.assertSuccessWithOutput(EXPECTED);
         return;
       }
-      if (!unexpectedArtFailure() && !parameters.canUseDefaultAndStaticInterfaceMethods()) {
-        assert false : "Dead code until future ART behavior change. See b/152199517";
-        // Desugaring will insert a forwarding bridge which will hide the "invalid invoke" case.
-        // Thus, a future ART runtime that does not have the invalid IAE for the private override
-        // will end up calling the forward method to I.m.
-        result.assertSuccessWithOutput(EXPECTED);
-      }
-      // The expected behavior is IAE since the resolved method is private.
-      result.assertFailureWithErrorThatThrows(IllegalAccessError.class);
+      result.assertFailureWithErrorThatThrows(IncompatibleClassChangeError.class);
       return;
     }
 
-    // The non-invalid case is where the invoke-virtual targets A.m.
-
-    // In the successful case ART since 6.0 incorrectly throws IAE due to the private override.
-    if (unexpectedArtFailure()) {
-      result.assertFailureWithErrorThatThrows(IllegalAccessError.class);
+    if (isR8
+        && parameters.isDexRuntime()
+        && parameters.getDexRuntimeVersion().isNewerThan(Version.V6_0_1)) {
+      // TODO(b/1822553980: This should be EXPECTED.
+      result.assertSuccessWithOutput(EXPECTED_R8);
       return;
     }
 
-    // The expected behavior is that the resolution of A.m will resolve and hit I.m.
     result.assertSuccessWithOutput(EXPECTED);
-  }
-
-  private boolean isDexOlderThanOrEqual(Version version) {
-    return parameters.isDexRuntime()
-        && parameters.getRuntime().asDex().getVm().getVersion().isOlderThanOrEqual(version);
-  }
-
-  private boolean unexpectedArtFailure() {
-    return parameters.isDexRuntime()
-        && parameters.getRuntime().asDex().getVm().isNewerThan(DexVm.ART_6_0_1_HOST);
   }
 
   static class TestClass {
@@ -165,7 +145,7 @@ public class DefaultInterfaceMethodDesugaringWithStaticResolutionInvokeVirtualTe
 
   static class B extends A {
 
-    public /* will be: private static */ void m() {
+    public /* will be: public static */ void m() {
       System.out.println("B.m()");
     }
   }

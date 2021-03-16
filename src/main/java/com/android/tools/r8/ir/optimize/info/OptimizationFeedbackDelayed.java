@@ -108,11 +108,10 @@ public class OptimizationFeedbackDelayed extends OptimizationFeedback {
   public boolean noUpdatesLeft() {
     assert appInfoWithLivenessModifier.isEmpty();
     assert fieldOptimizationInfos.isEmpty()
-        : StringUtils.join(fieldOptimizationInfos.keySet(), ", ");
+        : StringUtils.join(", ", fieldOptimizationInfos.keySet());
     assert methodOptimizationInfos.isEmpty()
-        : StringUtils.join(methodOptimizationInfos.keySet(), ", ");
-    assert processed.isEmpty()
-        : StringUtils.join(processed.keySet(), ", ");
+        : StringUtils.join(", ", methodOptimizationInfos.keySet());
+    assert processed.isEmpty() : StringUtils.join(", ", processed.keySet());
     return true;
   }
 
@@ -151,9 +150,13 @@ public class OptimizationFeedbackDelayed extends OptimizationFeedback {
   @Override
   public void recordFieldHasAbstractValue(
       DexEncodedField field, AppView<AppInfoWithLiveness> appView, AbstractValue abstractValue) {
-    assert appView.appInfo().getFieldAccessInfoCollection().contains(field.field);
-    assert !appView.appInfo().getFieldAccessInfoCollection().get(field.field).hasReflectiveAccess();
-    if (appView.appInfo().mayPropagateValueFor(field.field)) {
+    assert appView.appInfo().getFieldAccessInfoCollection().contains(field.getReference());
+    assert !appView
+        .appInfo()
+        .getFieldAccessInfoCollection()
+        .get(field.getReference())
+        .hasReflectiveAccess();
+    if (appView.appInfo().mayPropagateValueFor(field.getReference())) {
       getFieldOptimizationInfoForUpdating(field).setAbstractValue(abstractValue);
     }
   }
@@ -190,7 +193,7 @@ public class OptimizationFeedbackDelayed extends OptimizationFeedback {
   @Override
   public synchronized void methodReturnsAbstractValue(
       DexEncodedMethod method, AppView<AppInfoWithLiveness> appView, AbstractValue value) {
-    if (appView.appInfo().mayPropagateValueFor(method.method)) {
+    if (appView.appInfo().mayPropagateValueFor(method.getReference())) {
       getMethodOptimizationInfoForUpdating(method).markReturnsAbstractValue(value);
     }
   }

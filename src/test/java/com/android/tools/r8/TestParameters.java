@@ -36,6 +36,13 @@ public class TestParameters {
             .isGreaterThanOrEqualTo(TestBase.apiLevelWithDefaultInterfaceMethodsSupport());
   }
 
+  public boolean canUseDefaultAndStaticInterfaceMethodsWhenDesugaring() {
+    assert isCfRuntime() || isDexRuntime();
+    assert apiLevel != null;
+    return getApiLevel()
+        .isGreaterThanOrEqualTo(TestBase.apiLevelWithDefaultInterfaceMethodsSupport());
+  }
+
   // Convenience predicates.
   public boolean isDexRuntime() {
     return runtime.isDex();
@@ -47,6 +54,10 @@ public class TestParameters {
 
   public boolean isCfRuntime(CfVm vm) {
     return runtime.isCf() && runtime.asCf().getVm() == vm;
+  }
+
+  public boolean isDexRuntimeVersion(DexVm.Version vm) {
+    return isDexRuntime() && vm == getDexRuntimeVersion();
   }
 
   public boolean isNoneRuntime() {

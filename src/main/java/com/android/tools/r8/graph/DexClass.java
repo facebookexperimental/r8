@@ -10,6 +10,9 @@ import com.android.tools.r8.dex.MixedSectionCollection;
 import com.android.tools.r8.errors.CompilationError;
 import com.android.tools.r8.errors.Unreachable;
 import com.android.tools.r8.graph.GenericSignature.ClassSignature;
+import com.android.tools.r8.graph.GenericSignature.ClassTypeSignature;
+import com.android.tools.r8.graph.GenericSignature.FieldTypeSignature;
+import com.android.tools.r8.graph.GenericSignature.FormalTypeParameter;
 import com.android.tools.r8.kotlin.KotlinClassLevelInfo;
 import com.android.tools.r8.origin.Origin;
 import com.android.tools.r8.references.ClassReference;
@@ -20,6 +23,7 @@ import com.android.tools.r8.utils.OptionalBool;
 import com.android.tools.r8.utils.TraversalContinuation;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Predicates;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Sets;
@@ -31,6 +35,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Set;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -257,7 +262,9 @@ public abstract class DexClass extends DexDefinition implements ClassDefinition 
     if (options.canHaveDalvikAbstractMethodOnNonAbstractClassVerificationBug() && !isAbstract()) {
       for (DexEncodedMethod method : methods) {
         assert !method.isAbstract()
-            : "Non-abstract method on abstract class: `" + method.method.toSourceString() + "`";
+            : "Non-abstract method on abstract class: `"
+                + method.getReference().toSourceString()
+                + "`";
       }
     }
     return true;
@@ -363,7 +370,7 @@ public abstract class DexClass extends DexDefinition implements ClassDefinition 
 
   public boolean definesStaticField(DexField field) {
     for (DexEncodedField encodedField : staticFields()) {
-      if (encodedField.field == field) {
+      if (encodedField.getReference() == field) {
         return true;
       }
     }
@@ -427,7 +434,7 @@ public abstract class DexClass extends DexDefinition implements ClassDefinition 
   private boolean verifyCorrectnessOfFieldHolder(DexEncodedField field) {
     assert field.getHolderType() == type
         : "Expected field `"
-            + field.field.toSourceString()
+            + field.getReference().toSourceString()
             + "` to have holder `"
             + type.toSourceString()
             + "`";
@@ -444,8 +451,8 @@ public abstract class DexClass extends DexDefinition implements ClassDefinition 
   private boolean verifyNoDuplicateFields() {
     Set<DexField> unique = Sets.newIdentityHashSet();
     for (DexEncodedField field : fields()) {
-      boolean changed = unique.add(field.field);
-      assert changed : "Duplicate field `" + field.field.toSourceString() + "`";
+      boolean changed = unique.add(field.getReference());
+      assert changed : "Duplicate field `" + field.getReference().toSourceString() + "`";
     }
     return true;
   }
@@ -463,11 +470,11 @@ public abstract class DexClass extends DexDefinition implements ClassDefinition 
   public DexField lookupUniqueInstanceFieldWithName(DexString name) {
     DexField field = null;
     for (DexEncodedField encodedField : instanceFields()) {
-      if (encodedField.field.name == name) {
+      if (encodedField.getReference().name == name) {
         if (field != null) {
           return null;
         }
-        field = encodedField.field;
+        field = encodedField.getReference();
       }
     }
     return field;
@@ -544,7 +551,7 @@ public abstract class DexClass extends DexDefinition implements ClassDefinition 
     DexEncodedMethod matchingName = null;
     DexEncodedMethod signaturePolymorphicMethod = null;
     for (DexEncodedMethod method : virtualMethods()) {
-      if (method.method.name == methodName) {
+      if (method.getReference().name == methodName) {
         if (matchingName != null) {
           // The jvm spec, section 5.4.3.3 details that there must be exactly one method with the
           // given name only.
@@ -564,8 +571,8 @@ public abstract class DexClass extends DexDefinition implements ClassDefinition 
         || method.getHolderType() == factory.varHandleType;
     return method.accessFlags.isVarargs()
         && method.accessFlags.isNative()
-        && method.method.proto.parameters.size() == 1
-        && method.method.proto.parameters.values[0] != factory.objectArrayType;
+        && method.getReference().proto.parameters.size() == 1
+        && method.getReference().proto.parameters.values[0] != factory.objectArrayType;
   }
 
   private <D extends DexEncodedMember<D, R>, R extends DexMember<D, R>> D lookupTarget(
@@ -704,7 +711,7 @@ public abstract class DexClass extends DexDefinition implements ClassDefinition 
   public DexEncodedMethod getInitializer(DexType[] parameters) {
     for (DexEncodedMethod method : directMethods()) {
       if (method.isInstanceInitializer()
-          && Arrays.equals(method.method.proto.parameters.values, parameters)) {
+          && Arrays.equals(method.getReference().proto.parameters.values, parameters)) {
         return method;
       }
     }
@@ -778,13 +785,125 @@ public abstract class DexClass extends DexDefinition implements ClassDefinition 
       Predicate<DexType> ignore,
       Set<DexType> seen);
 
+  public void forEachImmediateInterface(Consumer<DexType> fn) {
+    for (DexType iface : interfaces.values) {
+      fn.accept(iface);
+    }
+  }
+
   public void forEachImmediateSupertype(Consumer<DexType> fn) {
     if (superType != null) {
       fn.accept(superType);
     }
-    for (DexType iface : interfaces.values) {
-      fn.accept(iface);
+    forEachImmediateInterface(fn);
+  }
+
+  public boolean validInterfaceSignatures() {
+    return getClassSignature().superInterfaceSignatures().isEmpty()
+        || interfaces.values.length == getClassSignature().superInterfaceSignatures.size();
+  }
+
+  public void forEachImmediateInterface(BiConsumer<DexType, ClassTypeSignature> consumer) {
+    assert validInterfaceSignatures();
+
+    // If there is no generic signature information don't pass any type arguments.
+    if (getClassSignature().superInterfaceSignatures().isEmpty()) {
+      forEachImmediateInterface(
+          superInterface ->
+              consumer.accept(superInterface, new ClassTypeSignature(superInterface)));
+      return;
     }
+
+    Iterator<DexType> interfaceIterator = Arrays.asList(interfaces.values).iterator();
+    Iterator<ClassTypeSignature> interfaceSignatureIterator =
+        getClassSignature().superInterfaceSignatures().iterator();
+
+    while (interfaceIterator.hasNext()) {
+      assert interfaceSignatureIterator.hasNext();
+      DexType superInterface = interfaceIterator.next();
+      ClassTypeSignature superInterfaceSignatures = interfaceSignatureIterator.next();
+      consumer.accept(superInterface, superInterfaceSignatures);
+    }
+  }
+
+  public void forEachImmediateSupertype(BiConsumer<DexType, ClassTypeSignature> consumer) {
+    if (superType != null) {
+      consumer.accept(superType, classSignature.superClassSignature);
+    }
+    forEachImmediateInterface(consumer);
+  }
+
+  public void forEachImmediateInterfaceWithAppliedTypeArguments(
+      List<FieldTypeSignature> typeArguments,
+      BiConsumer<DexType, List<FieldTypeSignature>> consumer) {
+    assert validInterfaceSignatures();
+
+    // If there is no generic signature information don't pass any type arguments.
+    if (getClassSignature().superInterfaceSignatures().size() == 0) {
+      forEachImmediateInterface(
+          superInterface -> consumer.accept(superInterface, ImmutableList.of()));
+      return;
+    }
+
+    Iterator<DexType> interfaceIterator = Arrays.asList(interfaces.values).iterator();
+    Iterator<ClassTypeSignature> interfaceSignatureIterator =
+        getClassSignature().superInterfaceSignatures().iterator();
+
+    while (interfaceIterator.hasNext()) {
+      assert interfaceSignatureIterator.hasNext();
+      DexType superInterface = interfaceIterator.next();
+      ClassTypeSignature superInterfaceSignatures = interfaceSignatureIterator.next();
+
+      // With no type arguments erase the signatures.
+      if (typeArguments.isEmpty() && superInterfaceSignatures.hasTypeVariableArguments()) {
+        consumer.accept(superInterface, ImmutableList.of());
+        continue;
+      }
+
+      consumer.accept(superInterface, applyTypeArguments(superInterfaceSignatures, typeArguments));
+    }
+    assert !interfaceSignatureIterator.hasNext();
+  }
+
+  public void forEachImmediateSupertypeWithAppliedTypeArguments(
+      List<FieldTypeSignature> typeArguments,
+      BiConsumer<DexType, List<FieldTypeSignature>> consumer) {
+    if (superType != null) {
+      consumer.accept(
+          superType, applyTypeArguments(getClassSignature().superClassSignature, typeArguments));
+    }
+    forEachImmediateInterfaceWithAppliedTypeArguments(typeArguments, consumer);
+  }
+
+  private List<FieldTypeSignature> applyTypeArguments(
+      ClassTypeSignature superInterfaceSignatures, List<FieldTypeSignature> appliedTypeArguments) {
+    ImmutableList.Builder<FieldTypeSignature> superTypeArgumentsBuilder = ImmutableList.builder();
+    if (superInterfaceSignatures.type.toSourceString().equals("java.util.Map")) {
+      System.currentTimeMillis();
+    }
+    superInterfaceSignatures
+        .typeArguments()
+        .forEach(
+            typeArgument -> {
+              if (typeArgument.isTypeVariableSignature()) {
+                for (int i = 0; i < getClassSignature().getFormalTypeParameters().size(); i++) {
+                  FormalTypeParameter formalTypeParameter =
+                      getClassSignature().getFormalTypeParameters().get(i);
+                  if (formalTypeParameter
+                      .getName()
+                      .equals(typeArgument.asTypeVariableSignature().typeVariable())) {
+                    if (i >= appliedTypeArguments.size()) {
+                      assert false;
+                    } else {
+                      superTypeArgumentsBuilder.add(appliedTypeArguments.get(i));
+                    }
+                  }
+                }
+              } else {
+                superTypeArgumentsBuilder.add(typeArgument);
+              }
+            });
+    return superTypeArgumentsBuilder.build();
   }
 
   @Override

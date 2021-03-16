@@ -4,6 +4,7 @@
 
 package com.android.tools.r8.classmerging.horizontal;
 
+import static com.android.tools.r8.DiagnosticsMatcher.diagnosticType;
 import static com.android.tools.r8.utils.codeinspector.Matchers.isPresent;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.IsNot.not;
@@ -12,48 +13,46 @@ import com.android.tools.r8.NeverClassInline;
 import com.android.tools.r8.OutputMode;
 import com.android.tools.r8.R8TestCompileResult;
 import com.android.tools.r8.TestParameters;
-import com.android.tools.r8.classmerging.horizontal.EmptyClassTest.A;
-import com.android.tools.r8.classmerging.horizontal.EmptyClassTest.B;
-import com.android.tools.r8.classmerging.horizontal.EmptyClassTest.Main;
-import com.android.tools.r8.utils.BooleanUtils;
+import com.android.tools.r8.TestParametersCollection;
+import com.android.tools.r8.errors.UnsupportedMainDexListUsageDiagnostic;
 import com.android.tools.r8.utils.codeinspector.CodeInspector;
 import java.nio.file.Path;
-import java.util.List;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 @RunWith(Parameterized.class)
 public class PreventMergeMainDexListTest extends HorizontalClassMergingTestBase {
-  public PreventMergeMainDexListTest(
-      TestParameters parameters, boolean enableHorizontalClassMerging) {
-    super(parameters, enableHorizontalClassMerging);
+  public PreventMergeMainDexListTest(TestParameters parameters) {
+    super(parameters);
   }
 
-  @Parameterized.Parameters(name = "{0}, horizontalClassMerging:{1}")
-  public static List<Object[]> data() {
-    return buildParameters(
-        getTestParameters()
-            .withDexRuntimes()
-            .withApiLevelsEndingAtExcluding(apiLevelWithNativeMultiDexSupport())
-            .build(),
-        BooleanUtils.values());
+  @Parameterized.Parameters(name = "{0}")
+  public static TestParametersCollection data() {
+    return getTestParameters()
+        .withDexRuntimes()
+        .withApiLevelsEndingAtExcluding(apiLevelWithNativeMultiDexSupport())
+        .build();
   }
 
+  // TODO(b/181858113): This test is likely obsolete once main-dex-list support is removed.
+  //  Ensure the main-dex-rules variant of this test (PreventMergeMainDexTracingTest) is sufficient.
   @Test
   public void testR8() throws Exception {
     testForR8(parameters.getBackend())
         .addInnerClasses(getClass())
         .addKeepClassAndMembersRules(Main.class)
         .addMainDexListClasses(A.class, Main.class)
-        .addOptionsModification(
-            options -> {
-              options.horizontalClassMergerOptions().enableIf(enableHorizontalClassMerging);
-              options.minimalMainDex = true;
-            })
+        .addOptionsModification(options -> options.minimalMainDex = true)
         .enableNeverClassInliningAnnotations()
         .setMinApi(parameters.getApiLevel())
-        .compile()
+        .allowDiagnosticMessages()
+        .compileWithExpectedDiagnostics(
+            diagnostics ->
+                diagnostics
+                    .assertOnlyWarnings()
+                    .assertWarningsMatch(
+                        diagnosticType(UnsupportedMainDexListUsageDiagnostic.class)))
         .apply(this::checkCompileResult)
         .run(parameters.getRuntime(), Main.class)
         .assertSuccessWithOutputLines("main dex");

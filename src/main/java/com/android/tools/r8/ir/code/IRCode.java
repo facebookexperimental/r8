@@ -973,7 +973,7 @@ public class IRCode implements ValueFactory {
                   || !v.hasDebugUsers()
                   || v.debugUsers().stream().anyMatch(i -> !i.isAssume())
                   || v.numberOfPhiUsers() > 0
-              : StringUtils.join(v.uniqueUsers(), System.lineSeparator());
+              : StringUtils.join(System.lineSeparator(), v.uniqueUsers());
           return true;
         };
     return verifySSATypeLattice(wrapSSAVerifierWithStackValueHandling(verifyValue));
@@ -1091,7 +1091,7 @@ public class IRCode implements ValueFactory {
       }
     }
     assert arguments.size()
-        == method().method.getArity()
+        == method().getReference().getArity()
             + ((method().accessFlags.isStatic() || ignoreReceiver) ? 0 : 1);
     return arguments;
   }

@@ -46,6 +46,7 @@ import com.android.tools.r8.ir.conversion.IRConverter;
 import com.android.tools.r8.ir.desugar.BackportedMethodRewriter;
 import com.android.tools.r8.ir.desugar.DesugaredLibraryRetargeter;
 import com.android.tools.r8.ir.desugar.InterfaceMethodRewriter;
+import com.android.tools.r8.ir.desugar.RecordRewriter;
 import com.android.tools.r8.ir.optimize.AssertionsRewriter;
 import com.android.tools.r8.ir.optimize.MethodPoolCollection;
 import com.android.tools.r8.ir.optimize.NestReducer;
@@ -283,7 +284,7 @@ public class R8 {
       {
         ApplicationReader applicationReader = new ApplicationReader(inputApp, options, timing);
         DirectMappedDexApplication application = applicationReader.read(executorService).toDirect();
-        MainDexInfo mainDexInfo = applicationReader.readMainDexClasses(application);
+        MainDexInfo mainDexInfo = applicationReader.readMainDexClassesForR8(application);
 
         // Now that the dex-application is fully loaded, close any internal archive providers.
         inputApp.closeInternalArchiveProviders();
@@ -308,6 +309,9 @@ public class R8 {
       BackportedMethodRewriter.registerAssumedLibraryTypes(options);
       if (options.enableEnumUnboxing) {
         EnumUnboxingCfMethods.registerSynthesizedCodeReferences(appView.dexItemFactory());
+      }
+      if (options.shouldDesugarRecords()) {
+        RecordRewriter.registerSynthesizedCodeReferences(appView.dexItemFactory());
       }
       CfUtilityMethodsForCodeOptimizations.registerSynthesizedCodeReferences(
           appView.dexItemFactory());
@@ -496,7 +500,7 @@ public class R8 {
           timing.begin("HorizontalClassMerger");
           HorizontalClassMerger merger = new HorizontalClassMerger(appViewWithLiveness);
           HorizontalClassMergerResult horizontalClassMergerResult =
-              merger.run(runtimeTypeCheckInfo);
+              merger.run(runtimeTypeCheckInfo, timing);
           if (horizontalClassMergerResult != null) {
             // Must rewrite AppInfoWithLiveness before pruning the merged classes, to ensure that
             // allocations sites, fields accesses, etc. are correctly transferred to the target

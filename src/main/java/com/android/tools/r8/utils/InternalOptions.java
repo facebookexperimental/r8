@@ -270,8 +270,6 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
   public boolean encodeChecksums = false;
   public BiPredicate<String, Long> dexClassChecksumFilter = (name, checksum) -> true;
   public boolean cfToCfDesugar = false;
-  // TODO(b/172496438): Temporarily enable publicizing package-private overrides.
-  public boolean enablePackagePrivateAwarePublicization = false;
 
   public int callGraphLikelySpuriousCallEdgeThreshold = 50;
 
@@ -1908,5 +1906,13 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
   // See b/177790310.
   public boolean canHaveSwitchMaxIntBug() {
     return isGeneratingDex() && minApiLevel < AndroidApiLevel.K.getLevel();
+  }
+
+  // On Dalvik the methods Integer.parseInt and Long.parseLong does not support strings with a '+'
+  // prefix
+  //
+  // See b/182137865.
+  public boolean canParseNumbersWithPlusPrefix() {
+    return minApiLevel > AndroidApiLevel.K.getLevel();
   }
 }

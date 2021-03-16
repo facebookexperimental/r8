@@ -64,6 +64,8 @@ public class DexItemFactory {
 
   public static final String throwableDescriptorString = "Ljava/lang/Throwable;";
   public static final String dalvikAnnotationSignatureString = "Ldalvik/annotation/Signature;";
+  public static final String recordTagDescriptorString = "Lcom/android/tools/r8/RecordTag;";
+  public static final String recordDescriptorString = "Ljava/lang/Record;";
 
   /** Set of types that may be synthesized during compilation. */
   private final Set<DexType> possibleCompilerSynthesizedTypes = Sets.newIdentityHashSet();
@@ -215,8 +217,8 @@ public class DexItemFactory {
   public final DexString stringDescriptor = createString("Ljava/lang/String;");
   public final DexString stringArrayDescriptor = createString("[Ljava/lang/String;");
   public final DexString objectDescriptor = createString("Ljava/lang/Object;");
-  public final DexString recordDescriptor = createString("Ljava/lang/Record;");
-  public final DexString r8RecordDescriptor = createString("Lcom/android/tools/r8/RecordTag;");
+  public final DexString recordDescriptor = createString(recordDescriptorString);
+  public final DexString recordTagDescriptor = createString(recordTagDescriptorString);
   public final DexString objectArrayDescriptor = createString("[Ljava/lang/Object;");
   public final DexString classDescriptor = createString("Ljava/lang/Class;");
   public final DexString classLoaderDescriptor = createString("Ljava/lang/ClassLoader;");
@@ -348,7 +350,7 @@ public class DexItemFactory {
   public final DexType stringArrayType = createStaticallyKnownType(stringArrayDescriptor);
   public final DexType objectType = createStaticallyKnownType(objectDescriptor);
   public final DexType recordType = createStaticallyKnownType(recordDescriptor);
-  public final DexType r8RecordType = createStaticallyKnownType(r8RecordDescriptor);
+  public final DexType recordTagType = createStaticallyKnownType(recordTagDescriptor);
   public final DexType objectArrayType = createStaticallyKnownType(objectArrayDescriptor);
   public final DexType classArrayType = createStaticallyKnownType(classArrayDescriptor);
   public final DexType enumType = createStaticallyKnownType(enumDescriptor);
@@ -631,6 +633,10 @@ public class DexItemFactory {
   public final DexType callSiteType = createStaticallyKnownType("Ljava/lang/invoke/CallSite;");
   public final DexType lookupType =
       createStaticallyKnownType("Ljava/lang/invoke/MethodHandles$Lookup;");
+  public final DexType objectMethodsType =
+      createStaticallyKnownType("Ljava/lang/runtime/ObjectMethods;");
+  public final DexType typeDescriptorType =
+      createStaticallyKnownType("Ljava/lang/invoke/TypeDescriptor;");
   public final DexType iteratorType = createStaticallyKnownType("Ljava/util/Iterator;");
   public final DexType listIteratorType = createStaticallyKnownType("Ljava/util/ListIterator;");
   public final DexType enumerationType = createStaticallyKnownType("Ljava/util/Enumeration;");
@@ -642,6 +648,7 @@ public class DexItemFactory {
       createStaticallyKnownType("Ljava/lang/invoke/StringConcatFactory;");
   public final DexType unsafeType = createStaticallyKnownType("Lsun/misc/Unsafe;");
 
+  public final ObjectMethodsMembers objectMethodsMembers = new ObjectMethodsMembers();
   public final ServiceLoaderMethods serviceLoaderMethods = new ServiceLoaderMethods();
   public final StringConcatFactoryMembers stringConcatFactoryMembers =
       new StringConcatFactoryMembers();
@@ -1213,6 +1220,21 @@ public class DexItemFactory {
         createMethod(recordType, createProto(booleanType, objectType), "equals");
     public final DexMethod hashCode = createMethod(recordType, createProto(intType), "hashCode");
     public final DexMethod toString = createMethod(recordType, createProto(stringType), "toString");
+  }
+
+  public class ObjectMethodsMembers {
+    public final DexMethod bootstrap =
+        createMethod(
+            objectMethodsType,
+            createProto(
+                objectType,
+                lookupType,
+                stringType,
+                typeDescriptorType,
+                classType,
+                stringType,
+                createArrayType(1, methodHandleType)),
+            "bootstrap");
   }
 
   public class ObjectMembers {

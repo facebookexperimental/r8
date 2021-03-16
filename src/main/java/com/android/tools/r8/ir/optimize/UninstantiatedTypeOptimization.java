@@ -14,7 +14,7 @@ import com.android.tools.r8.graph.DexMethod;
 import com.android.tools.r8.graph.DexProgramClass;
 import com.android.tools.r8.graph.DexProto;
 import com.android.tools.r8.graph.DexType;
-import com.android.tools.r8.graph.GraphLens.NestedGraphLens;
+import com.android.tools.r8.graph.NestedGraphLens;
 import com.android.tools.r8.graph.RewrittenPrototypeDescription;
 import com.android.tools.r8.graph.RewrittenPrototypeDescription.ArgumentInfoCollection;
 import com.android.tools.r8.graph.RewrittenPrototypeDescription.RemovedArgumentInfo;
@@ -28,11 +28,9 @@ import com.android.tools.r8.utils.MethodSignatureEquivalence;
 import com.android.tools.r8.utils.Timing;
 import com.android.tools.r8.utils.collections.BidirectionalOneToOneHashMap;
 import com.android.tools.r8.utils.collections.BidirectionalOneToOneMap;
-import com.android.tools.r8.utils.collections.EmptyBidirectionalOneToOneMap;
 import com.android.tools.r8.utils.collections.MutableBidirectionalOneToOneMap;
 import com.google.common.base.Equivalence.Wrapper;
 import com.google.common.collect.BiMap;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import java.util.HashMap;
@@ -51,21 +49,13 @@ public class UninstantiatedTypeOptimization {
 
   public static class UninstantiatedTypeOptimizationGraphLens extends NestedGraphLens {
 
-    private final AppView<?> appView;
     private final Map<DexMethod, ArgumentInfoCollection> removedArgumentsInfoPerMethod;
 
     UninstantiatedTypeOptimizationGraphLens(
         BidirectionalOneToOneMap<DexMethod, DexMethod> methodMap,
         Map<DexMethod, ArgumentInfoCollection> removedArgumentsInfoPerMethod,
         AppView<?> appView) {
-      super(
-          ImmutableMap.of(),
-          methodMap.getForwardMap(),
-          new EmptyBidirectionalOneToOneMap<>(),
-          methodMap.getInverseOneToOneMap(),
-          appView.graphLens(),
-          appView.dexItemFactory());
-      this.appView = appView;
+      super(appView, EMPTY_FIELD_MAP, methodMap, EMPTY_TYPE_MAP);
       this.removedArgumentsInfoPerMethod = removedArgumentsInfoPerMethod;
     }
 
@@ -78,7 +68,8 @@ public class UninstantiatedTypeOptimization {
         return prototypeChanges;
       }
       if (method.getReturnType().isVoidType() && !previous.getReturnType().isVoidType()) {
-        prototypeChanges = prototypeChanges.withConstantReturn(previous.getReturnType(), appView);
+        prototypeChanges =
+            prototypeChanges.withConstantReturn(previous.getReturnType(), dexItemFactory());
       }
       return prototypeChanges.withRemovedArguments(
           removedArgumentsInfoPerMethod.getOrDefault(method, ArgumentInfoCollection.empty()));
@@ -158,7 +149,7 @@ public class UninstantiatedTypeOptimization {
       for (DexEncodedMethod virtualMethod : clazz.virtualMethods()) {
         RewrittenPrototypeDescription prototypeChanges =
             RewrittenPrototypeDescription.createForUninstantiatedTypes(
-                virtualMethod.method,
+                virtualMethod.getReference(),
                 appView,
                 getRemovedArgumentsInfo(virtualMethod, ALLOW_ARGUMENT_REMOVAL));
         if (!prototypeChanges.isEmpty()) {
@@ -186,7 +177,7 @@ public class UninstantiatedTypeOptimization {
     Set<Wrapper<DexMethod>> usedSignatures = new HashSet<>();
     for (DexEncodedMethod method : clazz.methods()) {
       if (!prototypeChangesPerMethod.containsKey(method)) {
-        usedSignatures.add(equivalence.wrap(method.method));
+        usedSignatures.add(equivalence.wrap(method.getReference()));
       }
     }
 
@@ -195,7 +186,7 @@ public class UninstantiatedTypeOptimization {
         .getMethodCollection()
         .replaceDirectMethods(
             encodedMethod -> {
-              DexMethod method = encodedMethod.method;
+              DexMethod method = encodedMethod.getReference();
               RewrittenPrototypeDescription prototypeChanges =
                   prototypeChangesPerMethod.getOrDefault(
                       encodedMethod, RewrittenPrototypeDescription.none());
@@ -230,7 +221,7 @@ public class UninstantiatedTypeOptimization {
         .getMethodCollection()
         .replaceVirtualMethods(
             encodedMethod -> {
-              DexMethod method = encodedMethod.method;
+              DexMethod method = encodedMethod.getReference();
               RewrittenPrototypeDescription prototypeChanges =
                   getPrototypeChanges(encodedMethod, DISALLOW_ARGUMENT_REMOVAL);
               ArgumentInfoCollection removedArgumentsInfo =
@@ -262,7 +253,7 @@ public class UninstantiatedTypeOptimization {
         .getMethodCollection()
         .replaceVirtualMethods(
             encodedMethod -> {
-              DexMethod method = encodedMethod.method;
+              DexMethod method = encodedMethod.getReference();
               RewrittenPrototypeDescription prototypeChanges =
                   getPrototypeChanges(encodedMethod, DISALLOW_ARGUMENT_REMOVAL);
               ArgumentInfoCollection removedArgumentsInfo =
@@ -299,11 +290,11 @@ public class UninstantiatedTypeOptimization {
   private RewrittenPrototypeDescription getPrototypeChanges(
       DexEncodedMethod encodedMethod, Strategy strategy) {
     if (ArgumentRemovalUtils.isPinned(encodedMethod, appView)
-        || appView.appInfo().isKeepConstantArgumentsMethod(encodedMethod.method)) {
+        || appView.appInfo().isKeepConstantArgumentsMethod(encodedMethod.getReference())) {
       return RewrittenPrototypeDescription.none();
     }
     return RewrittenPrototypeDescription.createForUninstantiatedTypes(
-        encodedMethod.method, appView, getRemovedArgumentsInfo(encodedMethod, strategy));
+        encodedMethod.getReference(), appView, getRemovedArgumentsInfo(encodedMethod, strategy));
   }
 
   private ArgumentInfoCollection getRemovedArgumentsInfo(
@@ -313,7 +304,7 @@ public class UninstantiatedTypeOptimization {
     }
 
     ArgumentInfoCollection.Builder argInfosBuilder = ArgumentInfoCollection.builder();
-    DexProto proto = encodedMethod.method.proto;
+    DexProto proto = encodedMethod.getReference().proto;
     int offset = encodedMethod.isStatic() ? 0 : 1;
     for (int i = 0; i < proto.parameters.size(); ++i) {
       DexType type = proto.parameters.values[i];
@@ -329,7 +320,7 @@ public class UninstantiatedTypeOptimization {
   private DexMethod getNewMethodSignature(
       DexEncodedMethod encodedMethod, RewrittenPrototypeDescription prototypeChanges) {
     DexItemFactory dexItemFactory = appView.dexItemFactory();
-    DexMethod method = encodedMethod.method;
+    DexMethod method = encodedMethod.getReference();
     DexProto newProto = prototypeChanges.rewriteProto(encodedMethod, dexItemFactory);
 
     return dexItemFactory.createMethod(method.holder, newProto, method.name);

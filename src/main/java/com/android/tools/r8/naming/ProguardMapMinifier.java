@@ -5,6 +5,7 @@
 package com.android.tools.r8.naming;
 
 import static com.android.tools.r8.graph.DexApplication.classesWithDeterministicOrder;
+import static com.android.tools.r8.utils.IterableUtils.fromMethod;
 
 import com.android.tools.r8.graph.AppInfoWithClassHierarchy;
 import com.android.tools.r8.graph.AppView;
@@ -51,7 +52,6 @@ import java.util.TreeSet;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.function.BiPredicate;
-import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 /**
@@ -99,19 +99,17 @@ public class ProguardMapMinifier {
 
     timing.begin("MappingInterfaces");
     Set<DexClass> interfaces = new TreeSet<>(Comparator.comparing(DexClass::getType));
-    Consumer<DexClass> consumer =
-        clazz -> {
-          if (clazz.isInterface()) {
-            // Only visit top level interfaces because computeMapping will visit the hierarchy.
-            if (clazz.interfaces.isEmpty()) {
-              computeMapping(clazz.type, nonPrivateMembers, notMappedReferences, subtypingInfo);
-            }
-            interfaces.add(clazz);
-          }
-        };
     // For union-find of interface methods we also need to add the library types above live types.
-    appInfo.forEachTypeInHierarchyOfLiveProgramClasses(consumer);
-    appInfo.forEachReferencedClasspathClass(consumer::accept);
+    appInfo.forEachReachableInterface(
+        iFace -> {
+          assert iFace.isInterface();
+          interfaces.add(iFace);
+          if (iFace.interfaces.isEmpty()) {
+            computeMapping(iFace.type, nonPrivateMembers, notMappedReferences, subtypingInfo);
+          }
+        },
+        fromMethod(appInfo::forEachReferencedClasspathClass, DexClass::getType));
+
     assert nonPrivateMembers.isEmpty();
     timing.end();
 
@@ -504,12 +502,12 @@ public class ProguardMapMinifier {
 
     @Override
     public DexString getReservedName(DexEncodedMethod method, DexClass holder) {
-      return getReservedName(method, method.method.name, holder);
+      return getReservedName(method, method.getReference().name, holder);
     }
 
     @Override
     public DexString getReservedName(DexEncodedField field, DexClass holder) {
-      return getReservedName(field, field.field.name, holder);
+      return getReservedName(field, field.getReference().name, holder);
     }
 
     private DexString getReservedName(DexDefinition definition, DexString name, DexClass holder) {
