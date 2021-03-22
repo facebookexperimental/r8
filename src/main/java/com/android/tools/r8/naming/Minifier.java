@@ -20,7 +20,6 @@ import com.android.tools.r8.graph.ProgramField;
 import com.android.tools.r8.graph.SubtypingInfo;
 import com.android.tools.r8.naming.ClassNameMinifier.ClassNamingStrategy;
 import com.android.tools.r8.naming.ClassNameMinifier.ClassRenaming;
-import com.android.tools.r8.naming.ClassNameMinifier.PackageNamingStrategy;
 import com.android.tools.r8.naming.FieldNameMinifier.FieldRenaming;
 import com.android.tools.r8.naming.MethodNameMinifier.MethodRenaming;
 import com.android.tools.r8.shaking.AppInfoWithLiveness;
@@ -55,7 +54,6 @@ public class Minifier {
         new ClassNameMinifier(
             appView,
             new MinificationClassNamingStrategy(appView),
-            new MinificationPackageNamingStrategy(appView),
             // Use deterministic class order to make sure renaming is deterministic.
             appView.appInfo().classesWithDeterministicOrder());
     ClassRenaming classRenaming = classNameMinifier.computeRenaming(timing);
@@ -106,14 +104,15 @@ public class Minifier {
     private final MixedCasing mixedCasing;
 
     BaseMinificationNamingStrategy(List<String> obfuscationDictionary, boolean dontUseMixedCasing) {
+      assert obfuscationDictionary != null;
       this.obfuscationDictionary = obfuscationDictionary;
-      this.obfuscationDictionaryForLookup = new HashSet<>(this.obfuscationDictionary);
+      this.obfuscationDictionaryForLookup = new HashSet<>(obfuscationDictionary);
       this.mixedCasing =
           dontUseMixedCasing ? MixedCasing.DONT_USE_MIXED_CASE : MixedCasing.USE_MIXED_CASE;
-      assert obfuscationDictionary != null;
     }
 
-    String nextName(char[] packagePrefix, InternalNamingState state, boolean isDirectMethodCall) {
+    /** TODO(b/182992598): using char[] could give problems with unicode */
+    String nextName(char[] packagePrefix, InternalNamingState state) {
       StringBuilder nextName = new StringBuilder();
       nextName.append(packagePrefix);
       String nextString;
@@ -123,8 +122,7 @@ public class Minifier {
         } else {
           do {
             nextString =
-                SymbolGenerationUtils.numberToIdentifier(
-                    state.incrementNameIndex(isDirectMethodCall), mixedCasing);
+                SymbolGenerationUtils.numberToIdentifier(state.incrementNameIndex(), mixedCasing);
           } while (obfuscationDictionaryForLookup.contains(nextString));
         }
       } while (PRIMITIVE_TYPE_NAMES.contains(nextString));
@@ -153,7 +151,7 @@ public class Minifier {
       String candidate = null;
       String lastName = null;
       do {
-        String newName = nextName(packagePrefix, state, false) + ";";
+        String newName = nextName(packagePrefix, state) + ";";
         if (newName.equals(lastName)) {
           throw new CompilationError(
               "Generating same name '"
@@ -187,24 +185,44 @@ public class Minifier {
     }
   }
 
-  static class MinificationPackageNamingStrategy extends BaseMinificationNamingStrategy
-      implements PackageNamingStrategy {
+  public static class MinificationPackageNamingStrategy extends BaseMinificationNamingStrategy {
 
-    MinificationPackageNamingStrategy(AppView<?> appView) {
+    private final InternalNamingState namingState =
+        new InternalNamingState() {
+
+          private int dictionaryIndex = 0;
+          private int nameIndex = 1;
+
+          @Override
+          public int getDictionaryIndex() {
+            return dictionaryIndex;
+          }
+
+          @Override
+          public int incrementDictionaryIndex() {
+            return dictionaryIndex++;
+          }
+
+          @Override
+          public int incrementNameIndex() {
+            return nameIndex++;
+          }
+        };
+
+    public MinificationPackageNamingStrategy(AppView<?> appView) {
       super(
           appView.options().getProguardConfiguration().getPackageObfuscationDictionary(),
           appView.options().getProguardConfiguration().hasDontUseMixedCaseClassnames());
     }
 
-    @Override
-    public String next(char[] packagePrefix, InternalNamingState state, Predicate<String> isUsed) {
+    public String next(String packagePrefix, Predicate<String> isUsed) {
       // Note that the differences between this method and the other variant for class renaming are
       // 1) this one uses the different dictionary and counter,
       // 2) this one does not append ';' at the end, and
-      // 3) this one removes 'L' at the beginning to make the return value a binary form.
+      // 3) this one assumes no 'L' at the beginning to make the return value a binary form.
       String nextPackageName;
       do {
-        nextPackageName = nextName(packagePrefix, state, false).substring(1);
+        nextPackageName = nextName(packagePrefix.toCharArray(), namingState);
       } while (isUsed.test(nextPackageName));
       return nextPackageName;
     }
@@ -230,10 +248,9 @@ public class Minifier {
         InternalNamingState internalState,
         BiPredicate<DexString, DexMethod> isAvailable) {
       assert checkAllowMemberRenaming(method.getHolderType());
-      boolean isDirectOrStatic = method.isDirectMethod() || method.isStatic();
       DexString candidate;
       do {
-        candidate = getNextName(internalState, isDirectOrStatic);
+        candidate = getNextName(internalState);
       } while (!isAvailable.test(candidate, method.getReference()));
       return candidate;
     }
@@ -246,13 +263,13 @@ public class Minifier {
       assert checkAllowMemberRenaming(field.getHolderType());
       DexString candidate;
       do {
-        candidate = getNextName(internalState, false);
+        candidate = getNextName(internalState);
       } while (!isAvailable.test(candidate, field));
       return candidate;
     }
 
-    private DexString getNextName(InternalNamingState internalState, boolean isDirectOrStatic) {
-      return factory.createString(nextName(EMPTY_CHAR_ARRAY, internalState, isDirectOrStatic));
+    private DexString getNextName(InternalNamingState internalState) {
+      return factory.createString(nextName(EMPTY_CHAR_ARRAY, internalState));
     }
 
     @Override

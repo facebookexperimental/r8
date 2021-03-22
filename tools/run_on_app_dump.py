@@ -9,6 +9,7 @@ import as_utils
 import compiledump
 import gradle
 import hashlib
+import jdk
 import optparse
 import os
 import shutil
@@ -449,7 +450,7 @@ def remove_print_lines(file):
         f.write(line)
 
 
-def download_app(app_sha, internal, quiet=False):
+def download_sha(app_sha, internal, quiet=False):
   if internal:
     utils.DownloadFromX20(app_sha)
   else:
@@ -473,7 +474,7 @@ def is_full_r8(shrinker):
 
 
 def version_is_built_jar(version):
-  return version != 'master' and version != 'source'
+  return version != 'main' and version != 'source'
 
 
 def compute_size_of_dex_files_in_package(path):
@@ -502,12 +503,13 @@ def get_r8_jar(options, temp_dir, shrinker):
 
 def get_results_for_app(app, options, temp_dir):
   app_folder = app.folder if app.folder else app.name + "_" + app.revision
+  opensource_basedir = (os.path.join('benchmarks', app.name) if options.golem
+                        else utils.OPENSOURCE_DUMPS_DIR)
   app_dir = (os.path.join(utils.INTERNAL_DUMPS_DIR, app_folder) if app.internal
-              else os.path.join(utils.OPENSOURCE_DUMPS_DIR, app_folder))
-
+              else os.path.join(opensource_basedir, app_folder))
   if not os.path.exists(app_dir) and not options.golem:
     # Download the app from google storage.
-    download_app(app_dir + ".tar.gz.sha1", app.internal)
+    download_sha(app_dir + ".tar.gz.sha1", app.internal)
 
   # Ensure that the dumps are in place
   assert os.path.isfile(dump_for_app(app_dir, app)), "Could not find dump " \
@@ -929,7 +931,7 @@ def parse_options(argv):
                     help='The shrinkers to use (by default, all are run)',
                     action='append')
   result.add_option('--version',
-                    default='master',
+                    default='main',
                     help='The version of R8 to use (e.g., 1.4.51)')
   (options, args) = result.parse_args(argv)
 
@@ -996,6 +998,10 @@ def print_golem_config(options):
   print('')
   print('createOpenSourceAppBenchmarks() {')
   print_indented('final cpus = ["Lenovo M90"];', 2)
+  # Avoid calculating this for every app
+  jdk_gz = jdk.GetJdkHome() + '.tar.gz'
+  download_sha(jdk_gz + '.sha1', False, quiet=True)
+  jdk_sha256 = get_sha256(jdk_gz)
   for app in options.apps:
     if app.folder and not app.internal:
       indentation = 2;
@@ -1014,23 +1020,30 @@ def print_golem_config(options):
       print_indented('options.fromRevision = 9700;', indentation);
       print_indented('options.mainFile = "tools/run_on_app_dump.py "', indentation)
       print_indented('"--golem --shrinker r8 --app %s";' % app.name, indentation + 4)
+
       app_gz = os.path.join(utils.OPENSOURCE_DUMPS_DIR, app.folder + '.tar.gz')
-      app_sha = app_gz + '.sha1'
-      # Golem uses a sha256 of the file in the cache, and you need to specify that.
-      download_app(app_sha, app.internal, quiet=True)
-      sha256 = get_sha256(app_gz)
-      sha = get_sha_from_file(app_sha)
-      print_indented('final resource = BenchmarkResource("",', indentation)
-      print_indented('type: BenchmarkResourceType.Storage,', indentation + 4)
-      print_indented('uri: "gs://r8-deps/%s",' % sha, indentation + 4)
-      print_indented('hash:', indentation + 4)
-      print_indented('"%s",' % sha256, indentation + 8)
-      print_indented('extract: "gz");', indentation + 4);
-      print_indented('options.resources.add(resource);', indentation)
+      add_golem_resource(indentation, app_gz, 'app_resource')
+      add_golem_resource(indentation, jdk_gz, 'openjdk', sha256=jdk_sha256)
+
       print_indented('dumpsSuite.addBenchmark(name);', indentation)
       indentation = 2
       print_indented('}', indentation)
   print('}')
+
+def add_golem_resource(indentation, gz, name, sha256=None):
+  sha = gz + '.sha1'
+  if not sha256:
+    # Golem uses a sha256 of the file in the cache, and you need to specify that.
+    download_sha(sha, False, quiet=True)
+    sha256 = get_sha256(gz)
+  sha = get_sha_from_file(sha)
+  print_indented('final %s = BenchmarkResource("",' % name, indentation)
+  print_indented('type: BenchmarkResourceType.Storage,', indentation + 4)
+  print_indented('uri: "gs://r8-deps/%s",' % sha, indentation + 4)
+  print_indented('hash:', indentation + 4)
+  print_indented('"%s",' % sha256, indentation + 8)
+  print_indented('extract: "gz");', indentation + 4);
+  print_indented('options.resources.add(%s);' % name, indentation)
 
 def main(argv):
   (options, args) = parse_options(argv)
@@ -1070,7 +1083,7 @@ def main(argv):
         as_utils.MoveFile(
           os.path.join(temp_dir, target), os.path.join(temp_dir, 'r8lib.jar'),
           quiet=options.quiet)
-    elif options.version == 'master':
+    elif options.version == 'main':
       if not (options.no_build or options.golem):
         gradle.RunGradle(['r8', '-Pno_internal'])
         build_r8lib = False

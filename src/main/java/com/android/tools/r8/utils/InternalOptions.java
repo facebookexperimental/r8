@@ -571,7 +571,7 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
   @Override
   public boolean isRepackagingEnabled() {
     return proguardConfiguration.getPackageObfuscationMode().isSome()
-        && (isShrinking() || isMinifying());
+        && (isMinifying() || testing.repackageWithNoMinification);
   }
 
   @Override
@@ -1154,7 +1154,10 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
 
   public static class HorizontalClassMergerOptions {
 
-    public boolean enable = true;
+    // TODO(b/138781768): Set enable to true when this bug is resolved.
+    public boolean enable =
+        !Version.isDevelopmentVersion()
+            || System.getProperty("com.android.tools.r8.disableHorizontalClassMerging") == null;
     public boolean enableConstructorMerging = true;
     public boolean enableJavaLambdaMerging = true;
 
@@ -1320,6 +1323,7 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     // TODO(b/177333791): Set to true
     public boolean checkForNotExpandingMainDexTracingResult = false;
     public Set<String> allowedUnusedDontWarnPatterns = new HashSet<>();
+    public boolean repackageWithNoMinification = false;
 
     public boolean allowConflictingSyntheticTypes = false;
 
