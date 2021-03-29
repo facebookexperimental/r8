@@ -7,12 +7,15 @@ import com.android.tools.r8.DiagnosticsHandler;
 import com.android.tools.r8.naming.MemberNaming.FieldSignature;
 import com.android.tools.r8.naming.MemberNaming.MethodSignature;
 import com.android.tools.r8.naming.MemberNaming.Signature;
+import com.android.tools.r8.naming.ProguardMap.Builder;
 import com.android.tools.r8.naming.mappinginformation.MappingInformation;
-import com.android.tools.r8.naming.mappinginformation.SignatureMappingInformation;
+import com.android.tools.r8.naming.mappinginformation.MetaInfMappingInformation;
+import com.android.tools.r8.naming.mappinginformation.ScopedMappingInformation.ClassScopeReference;
+import com.android.tools.r8.naming.mappinginformation.ScopedMappingInformation.ScopeReference;
 import com.android.tools.r8.position.TextPosition;
+import com.android.tools.r8.references.Reference;
 import com.android.tools.r8.utils.IdentifierUtils;
 import com.android.tools.r8.utils.StringUtils;
-import com.google.common.collect.Maps;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import java.io.BufferedReader;
@@ -20,7 +23,6 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -85,6 +87,8 @@ public class ProguardMapReader implements AutoCloseable {
   private int lineNo = 0;
   private int lineOffset = 0;
   private String line;
+  private MapVersion version = MapVersion.MapVersionNone;
+  private ScopeReference implicitSingletonScope = null;
 
   private int peekCodePoint() {
     return lineOffset < line.length() ? line.codePointAt(lineOffset) : '\n';
@@ -225,7 +229,7 @@ public class ProguardMapReader implements AutoCloseable {
       if (isCommentLineWithJsonBrace()) {
         // TODO(b/179665169): Parse the mapping information without doing anything with it, since we
         //  at this point do not have a global context.
-        MappingInformation.fromJsonObject(parseJsonInComment(), diagnosticsHandler, lineNo);
+        parseMappingInformation();
         // Skip reading the rest of the line.
         lineOffset = line.length();
         nextLine();
@@ -248,29 +252,42 @@ public class ProguardMapReader implements AutoCloseable {
       expect(':');
       ClassNaming.Builder currentClassBuilder =
           mapBuilder.classNamingBuilder(after, before, getPosition());
+      implicitSingletonScope = new ClassScopeReference(Reference.classFromTypeName(after));
       skipWhitespace();
       if (nextLine()) {
-        parseMemberMappings(currentClassBuilder);
+        parseMemberMappings(mapBuilder, currentClassBuilder);
       }
     }
   }
 
-  private void parseMemberMappings(ClassNaming.Builder classNamingBuilder) throws IOException {
+  private MappingInformation parseMappingInformation() {
+    MappingInformation info =
+        MappingInformation.fromJsonObject(
+            version, parseJsonInComment(), diagnosticsHandler, lineNo, implicitSingletonScope);
+    if (info == null) {
+      return null;
+    }
+    MetaInfMappingInformation generatorInfo = info.asMetaInfMappingInformation();
+    if (generatorInfo != null) {
+      version = generatorInfo.getMapVersion();
+    }
+    return info;
+  }
+
+  private void parseMemberMappings(Builder mapBuilder, ClassNaming.Builder classNamingBuilder)
+      throws IOException {
     MemberNaming lastAddedNaming = null;
     MemberNaming activeMemberNaming = null;
     Range previousMappedRange = null;
-    Map<Signature, SignatureMappingInformation> mappingInformation = Maps.newHashMap();
     do {
       Object originalRange = null;
       Range mappedRange = null;
       // Try to parse any information added in comments above member namings
       if (isCommentLineWithJsonBrace()) {
-        MappingInformation mappingInfo =
-            MappingInformation.fromJsonObject(parseJsonInComment(), diagnosticsHandler, lineNo);
+        MappingInformation mappingInfo = parseMappingInformation();
         if (mappingInfo != null) {
-          if (mappingInfo.isSignatureMappingInformation()) {
-            SignatureMappingInformation sigMapInfo = mappingInfo.asSignatureMappingInformation();
-            mappingInformation.put(sigMapInfo.getSignature(), sigMapInfo);
+          if (mappingInfo.isScopedMappingInformation()) {
+            mapBuilder.addScopedMappingInformation(mappingInfo.asScopedMappingInformation());
           } else {
             classNamingBuilder.addMappingInformation(mappingInfo, diagnosticsHandler, lineNo);
           }
@@ -336,16 +353,8 @@ public class ProguardMapReader implements AutoCloseable {
           }
         }
       }
-      if (mappingInformation.containsKey(signature)) {
-        activeMemberNaming =
-            new MemberNaming(
-                signature,
-                mappingInformation.get(signature).apply(signature, renamedName, diagnosticsHandler),
-                getPosition());
-      } else {
-        activeMemberNaming =
-            new MemberNaming(signature, signature.asRenamed(renamedName), getPosition());
-      }
+      activeMemberNaming =
+          new MemberNaming(signature, signature.asRenamed(renamedName), getPosition());
       previousMappedRange = mappedRange;
     } while (nextLine());
 

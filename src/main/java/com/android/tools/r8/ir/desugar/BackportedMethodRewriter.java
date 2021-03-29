@@ -983,6 +983,17 @@ public final class BackportedMethodRewriter implements CfInstructionDesugaring {
           new MethodGenerator(
               method, BackportedMethods::CollectionsMethods_copyOfSet, "copyOfSet"));
 
+      // Map
+      type = factory.mapType;
+
+      // Map Map.copyOf(Map)
+      name = factory.createString("copyOf");
+      proto = factory.createProto(factory.mapType, factory.mapType);
+      method = factory.createMethod(type, proto, name);
+      addProvider(
+          new MethodGenerator(
+              method, BackportedMethods::CollectionsMethods_copyOfMap, "copyOfMap"));
+
       // Byte
       type = factory.boxedByteType;
 
@@ -1048,7 +1059,7 @@ public final class BackportedMethodRewriter implements CfInstructionDesugaring {
     private void initializeJava9MethodProviders(DexItemFactory factory) {
       // Integer
       DexType type = factory.boxedIntType;
-      // long Long.parseLong(CharSequence s, int beginIndex, int endIndex, int radix)
+      // int Integer.parseInt(CharSequence s, int beginIndex, int endIndex, int radix)
       DexString name = factory.createString("parseInt");
       DexProto proto =
           factory.createProto(
@@ -1120,17 +1131,6 @@ public final class BackportedMethodRewriter implements CfInstructionDesugaring {
       addProvider(
           new MethodGenerator(
               method, BackportedMethods::CollectionsMethods_copyOfList, "copyOfList"));
-
-      // Map
-      type = factory.mapType;
-
-      // Map Map.copyOf(Map)
-      name = factory.createString("copyOf");
-      proto = factory.createProto(factory.mapType, factory.mapType);
-      method = factory.createMethod(type, proto, name);
-      addProvider(
-          new MethodGenerator(
-              method, BackportedMethods::CollectionsMethods_copyOfMap, "copyOfMap"));
     }
 
     private void initializeJava11MethodProviders(DexItemFactory factory) {
