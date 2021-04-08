@@ -5,26 +5,24 @@
 package com.android.tools.r8.retrace;
 
 import com.android.tools.r8.Keep;
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.Reader;
+import java.io.StringReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 /** Interface for producing a string format of a mapping file. */
 @Keep
 public interface ProguardMapProducer {
 
-  String get() throws IOException;
+  Reader get() throws IOException;
 
-  static ProguardMapProducer fromReader(Reader reader) {
-    return () -> {
-      try (BufferedReader br = new BufferedReader(reader)) {
-        StringBuilder sb = new StringBuilder();
-        String line;
-        while ((line = br.readLine()) != null) {
-          sb.append(line).append('\n');
-        }
-        return sb.toString();
-      }
-    };
+  static ProguardMapProducer fromString(String proguardMapString) {
+    return () -> new StringReader(proguardMapString);
+  }
+
+  static ProguardMapProducer fromPath(Path path) {
+    return () -> Files.newBufferedReader(path, StandardCharsets.UTF_8);
   }
 }
