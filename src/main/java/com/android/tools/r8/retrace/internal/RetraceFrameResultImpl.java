@@ -9,11 +9,13 @@ import static com.android.tools.r8.retrace.internal.RetraceUtils.methodReference
 import com.android.tools.r8.naming.ClassNamingForNameMapper.MappedRange;
 import com.android.tools.r8.naming.Range;
 import com.android.tools.r8.references.MethodReference;
+import com.android.tools.r8.retrace.RetraceFrameElement;
 import com.android.tools.r8.retrace.RetraceFrameResult;
 import com.android.tools.r8.retrace.RetraceSourceFileResult;
-import com.android.tools.r8.retrace.RetracedClassMember;
-import com.android.tools.r8.retrace.RetracedMethod;
+import com.android.tools.r8.retrace.RetracedClassMemberReference;
+import com.android.tools.r8.retrace.RetracedMethodReference;
 import com.android.tools.r8.retrace.Retracer;
+import com.android.tools.r8.retrace.internal.RetraceClassResultImpl.RetraceClassElementImpl;
 import com.android.tools.r8.utils.Pair;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
@@ -21,7 +23,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 public class RetraceFrameResultImpl implements RetraceFrameResult {
@@ -29,12 +30,12 @@ public class RetraceFrameResultImpl implements RetraceFrameResult {
   private final RetraceClassResultImpl classResult;
   private final MethodDefinition methodDefinition;
   private final int obfuscatedPosition;
-  private final List<Pair<RetraceClassResultImpl.ElementImpl, List<MappedRange>>> mappedRanges;
+  private final List<Pair<RetraceClassElementImpl, List<MappedRange>>> mappedRanges;
   private final Retracer retracer;
 
   public RetraceFrameResultImpl(
       RetraceClassResultImpl classResult,
-      List<Pair<RetraceClassResultImpl.ElementImpl, List<MappedRange>>> mappedRanges,
+      List<Pair<RetraceClassElementImpl, List<MappedRange>>> mappedRanges,
       MethodDefinition methodDefinition,
       int obfuscatedPosition,
       Retracer retracer) {
@@ -66,18 +67,18 @@ public class RetraceFrameResultImpl implements RetraceFrameResult {
   }
 
   @Override
-  public Stream<Element> stream() {
+  public Stream<RetraceFrameElement> stream() {
     return mappedRanges.stream()
         .flatMap(
             mappedRangePair -> {
-              RetraceClassResultImpl.ElementImpl classElement = mappedRangePair.getFirst();
+              RetraceClassElementImpl classElement = mappedRangePair.getFirst();
               List<MappedRange> mappedRanges = mappedRangePair.getSecond();
               if (mappedRanges == null || mappedRanges.isEmpty()) {
                 return Stream.of(
                     new ElementImpl(
                         this,
                         classElement,
-                        RetracedMethodImpl.create(
+                        RetracedMethodReferenceImpl.create(
                             methodDefinition.substituteHolder(
                                 classElement.getRetracedClass().getClassReference())),
                         ImmutableList.of(),
@@ -103,7 +104,7 @@ public class RetraceFrameResultImpl implements RetraceFrameResult {
   }
 
   private ElementImpl elementFromMappedRanges(
-      List<MappedRange> mappedRangesForElement, RetraceClassResultImpl.ElementImpl classElement) {
+      List<MappedRange> mappedRangesForElement, RetraceClassElementImpl classElement) {
     MappedRange topFrame = mappedRangesForElement.get(0);
     MethodReference methodReference =
         methodReferenceFromMappedRange(
@@ -116,38 +117,32 @@ public class RetraceFrameResultImpl implements RetraceFrameResult {
         obfuscatedPosition);
   }
 
-  @Override
-  public RetraceFrameResultImpl forEach(Consumer<Element> resultConsumer) {
-    stream().forEach(resultConsumer);
-    return this;
-  }
-
-  private RetracedMethodImpl getRetracedMethod(
+  private RetracedMethodReferenceImpl getRetracedMethod(
       MethodReference methodReference, MappedRange mappedRange, int obfuscatedPosition) {
     if (mappedRange.minifiedRange == null) {
       int originalLineNumber = mappedRange.getFirstLineNumberOfOriginalRange();
-      return RetracedMethodImpl.create(
+      return RetracedMethodReferenceImpl.create(
           methodReference, originalLineNumber > 0 ? originalLineNumber : obfuscatedPosition);
     }
     if (obfuscatedPosition == -1 || !mappedRange.minifiedRange.contains(obfuscatedPosition)) {
-      return RetracedMethodImpl.create(methodReference);
+      return RetracedMethodReferenceImpl.create(methodReference);
     }
-    return RetracedMethodImpl.create(
+    return RetracedMethodReferenceImpl.create(
         methodReference, mappedRange.getOriginalLineNumber(obfuscatedPosition));
   }
 
-  public static class ElementImpl implements RetraceFrameResult.Element {
+  public static class ElementImpl implements RetraceFrameElement {
 
-    private final RetracedMethodImpl methodReference;
+    private final RetracedMethodReferenceImpl methodReference;
     private final RetraceFrameResultImpl retraceFrameResult;
-    private final RetraceClassResultImpl.ElementImpl classElement;
+    private final RetraceClassElementImpl classElement;
     private final List<MappedRange> mappedRanges;
     private final int obfuscatedPosition;
 
     public ElementImpl(
         RetraceFrameResultImpl retraceFrameResult,
-        RetraceClassResultImpl.ElementImpl classElement,
-        RetracedMethodImpl methodReference,
+        RetraceClassElementImpl classElement,
+        RetracedMethodReferenceImpl methodReference,
         List<MappedRange> mappedRanges,
         int obfuscatedPosition) {
       this.methodReference = methodReference;
@@ -158,41 +153,47 @@ public class RetraceFrameResultImpl implements RetraceFrameResult {
     }
 
     @Override
+    public RetraceFrameResult getRetraceResultContext() {
+      return retraceFrameResult;
+    }
+
+    @Override
     public boolean isUnknown() {
       return methodReference.isUnknown();
     }
 
     @Override
-    public RetracedMethodImpl getTopFrame() {
+    public RetracedMethodReferenceImpl getTopFrame() {
       return methodReference;
     }
 
     @Override
-    public RetraceClassResultImpl.ElementImpl getClassElement() {
+    public RetraceClassElementImpl getClassElement() {
       return classElement;
     }
 
     @Override
-    public void visitFrames(BiConsumer<RetracedMethod, Integer> consumer) {
+    public void visitFrames(BiConsumer<RetracedMethodReference, Integer> consumer) {
       int counter = 0;
       consumer.accept(getTopFrame(), counter++);
-      for (RetracedMethodImpl outerFrame : getOuterFrames()) {
+      for (RetracedMethodReferenceImpl outerFrame : getOuterFrames()) {
         consumer.accept(outerFrame, counter++);
       }
     }
 
     @Override
-    public RetraceSourceFileResult retraceSourceFile(RetracedClassMember frame, String sourceFile) {
+    public RetraceSourceFileResult retraceSourceFile(
+        RetracedClassMemberReference frame, String sourceFile) {
       return RetraceUtils.getSourceFile(
           classElement, frame.getHolderClass(), sourceFile, retraceFrameResult.retracer);
     }
 
     @Override
-    public List<RetracedMethodImpl> getOuterFrames() {
+    public List<RetracedMethodReferenceImpl> getOuterFrames() {
       if (mappedRanges == null) {
         return Collections.emptyList();
       }
-      List<RetracedMethodImpl> outerFrames = new ArrayList<>();
+      List<RetracedMethodReferenceImpl> outerFrames = new ArrayList<>();
       for (int i = 1; i < mappedRanges.size(); i++) {
         MappedRange mappedRange = mappedRanges.get(i);
         MethodReference methodReference =

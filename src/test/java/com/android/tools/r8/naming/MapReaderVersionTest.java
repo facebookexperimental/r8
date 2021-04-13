@@ -6,9 +6,12 @@ package com.android.tools.r8.naming;
 import static junit.framework.TestCase.assertEquals;
 
 import com.android.tools.r8.TestBase;
+import com.android.tools.r8.TestDiagnosticMessagesImpl;
 import com.android.tools.r8.TestParameters;
 import com.android.tools.r8.TestParametersCollection;
 import com.android.tools.r8.naming.mappinginformation.MappingInformation;
+import com.android.tools.r8.naming.mappinginformation.ScopeReference;
+import com.android.tools.r8.references.Reference;
 import com.android.tools.r8.utils.StringUtils;
 import java.io.IOException;
 import org.junit.Assert;
@@ -51,6 +54,7 @@ public class MapReaderVersionTest extends TestBase {
 
   @Test
   public void testConcatMapFiles() throws IOException {
+    TestDiagnosticMessagesImpl diagnostics = new TestDiagnosticMessagesImpl();
     ClassNameMapper mapper =
         ClassNameMapper.mapperFromString(
             StringUtils.joinLines(
@@ -65,7 +69,9 @@ public class MapReaderVersionTest extends TestBase {
                 // concatenates).
                 "# { id: 'com.android.tools.r8.metainf', map-version: 'none' }",
                 "pkg.Baz -> a.c:",
-                "# { id: 'com.android.tools.r8.synthesized' }"));
+                "# { id: 'com.android.tools.r8.synthesized' }"),
+            diagnostics);
+    diagnostics.assertNoMessages();
     assertMapping("a.a", "pkg.Foo", false, mapper);
     assertMapping("a.b", "pkg.Bar", true, mapper);
     assertMapping("a.c", "pkg.Baz", false, mapper);
@@ -75,11 +81,13 @@ public class MapReaderVersionTest extends TestBase {
       String finalName, String originalName, boolean isSynthesized, ClassNameMapper mapper) {
     ClassNamingForNameMapper naming = mapper.getClassNaming(finalName);
     assertEquals(originalName, naming.originalName);
-    Assert.assertEquals(isSynthesized, isCompilerSynthesized(naming));
+    Assert.assertEquals(isSynthesized, isCompilerSynthesized(mapper, finalName));
   }
 
-  private boolean isCompilerSynthesized(ClassNamingForNameMapper naming) {
-    return naming.getAdditionalMappings().stream()
+  private boolean isCompilerSynthesized(ClassNameMapper mapper, String finalName) {
+    ScopeReference reference =
+        ScopeReference.fromClassReference(Reference.classFromTypeName(finalName));
+    return mapper.getAdditionalMappingInfo(reference).stream()
         .anyMatch(MappingInformation::isCompilerSynthesizedMappingInformation);
   }
 }

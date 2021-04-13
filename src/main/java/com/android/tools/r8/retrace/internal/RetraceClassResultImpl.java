@@ -11,9 +11,11 @@ import com.android.tools.r8.naming.ClassNamingForNameMapper.MappedRange;
 import com.android.tools.r8.naming.ClassNamingForNameMapper.MappedRangesOfName;
 import com.android.tools.r8.naming.MemberNaming;
 import com.android.tools.r8.naming.mappinginformation.MappingInformation;
+import com.android.tools.r8.naming.mappinginformation.ScopeReference;
 import com.android.tools.r8.references.ClassReference;
 import com.android.tools.r8.references.Reference;
 import com.android.tools.r8.references.TypeReference;
+import com.android.tools.r8.retrace.RetraceClassElement;
 import com.android.tools.r8.retrace.RetraceClassResult;
 import com.android.tools.r8.retrace.RetraceFrameResult;
 import com.android.tools.r8.retrace.Retracer;
@@ -22,25 +24,28 @@ import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BiFunction;
-import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 public class RetraceClassResultImpl implements RetraceClassResult {
 
   private final ClassReference obfuscatedReference;
   private final ClassNamingForNameMapper mapper;
-  private final Retracer retracer;
+  private final RetracerImpl retracer;
 
   private RetraceClassResultImpl(
-      ClassReference obfuscatedReference, ClassNamingForNameMapper mapper, Retracer retracer) {
+      ClassReference obfuscatedReference, ClassNamingForNameMapper mapper, RetracerImpl retracer) {
     this.obfuscatedReference = obfuscatedReference;
     this.mapper = mapper;
     this.retracer = retracer;
   }
 
   static RetraceClassResultImpl create(
-      ClassReference obfuscatedReference, ClassNamingForNameMapper mapper, Retracer retracer) {
+      ClassReference obfuscatedReference, ClassNamingForNameMapper mapper, RetracerImpl retracer) {
     return new RetraceClassResultImpl(obfuscatedReference, mapper, retracer);
+  }
+
+  RetracerImpl getRetracerImpl() {
+    return retracer;
   }
 
   @Override
@@ -97,7 +102,7 @@ public class RetraceClassResultImpl implements RetraceClassResult {
       D definition,
       BiFunction<ClassNamingForNameMapper, String, T> lookupFunction,
       ResultConstructor<T, R, D> constructor) {
-    List<Pair<ElementImpl, T>> mappings = new ArrayList<>();
+    List<Pair<RetraceClassElementImpl, T>> mappings = new ArrayList<>();
     internalStream()
         .forEach(
             element -> {
@@ -134,7 +139,7 @@ public class RetraceClassResultImpl implements RetraceClassResult {
   }
 
   private RetraceFrameResultImpl lookupFrame(MethodDefinition definition, int position) {
-    List<Pair<ElementImpl, List<MappedRange>>> mappings = new ArrayList<>();
+    List<Pair<RetraceClassElementImpl, List<MappedRange>>> mappings = new ArrayList<>();
     internalStream()
         .forEach(
             element ->
@@ -144,7 +149,7 @@ public class RetraceClassResultImpl implements RetraceClassResult {
   }
 
   private List<MappedRange> getMappedRangesForFrame(
-      ElementImpl element, MethodDefinition definition, int position) {
+      RetraceClassElementImpl element, MethodDefinition definition, int position) {
     if (mapper == null) {
       return null;
     }
@@ -168,53 +173,41 @@ public class RetraceClassResultImpl implements RetraceClassResult {
   }
 
   @Override
-  public Stream<Element> stream() {
+  public Stream<RetraceClassElement> stream() {
     return Stream.of(createElement());
   }
 
-  private Stream<ElementImpl> internalStream() {
+  private Stream<RetraceClassElementImpl> internalStream() {
     return Stream.of(createElement());
   }
 
-  private ElementImpl createElement() {
-    return new ElementImpl(
+  private RetraceClassElementImpl createElement() {
+    return new RetraceClassElementImpl(
         this,
-        RetracedClassImpl.create(
+        RetracedClassReferenceImpl.create(
             mapper == null
                 ? obfuscatedReference
                 : Reference.classFromTypeName(mapper.originalName)),
         mapper);
   }
 
-  @Override
-  public RetraceClassResultImpl forEach(Consumer<Element> resultConsumer) {
-    stream().forEach(resultConsumer);
-    return this;
-  }
-
   private interface ResultConstructor<T, R, D> {
     R create(
         RetraceClassResultImpl classResult,
-        List<Pair<ElementImpl, T>> mappings,
+        List<Pair<RetraceClassElementImpl, T>> mappings,
         D definition,
         Retracer retracer);
   }
 
-  @Override
-  public boolean isAmbiguous() {
-    // Currently we have no way of producing ambiguous class results.
-    return false;
-  }
-
-  public static class ElementImpl implements Element {
+  public static class RetraceClassElementImpl implements RetraceClassElement {
 
     private final RetraceClassResultImpl classResult;
-    private final RetracedClassImpl classReference;
+    private final RetracedClassReferenceImpl classReference;
     private final ClassNamingForNameMapper mapper;
 
-    public ElementImpl(
+    public RetraceClassElementImpl(
         RetraceClassResultImpl classResult,
-        RetracedClassImpl classReference,
+        RetracedClassReferenceImpl classReference,
         ClassNamingForNameMapper mapper) {
       this.classResult = classResult;
       this.classReference = classReference;
@@ -222,23 +215,24 @@ public class RetraceClassResultImpl implements RetraceClassResult {
     }
 
     @Override
-    public RetracedClassImpl getRetracedClass() {
+    public RetracedClassReferenceImpl getRetracedClass() {
       return classReference;
     }
 
     @Override
-    public RetraceClassResultImpl getRetraceClassResult() {
+    public RetraceClassResultImpl getRetraceResultContext() {
       return classResult;
     }
 
     @Override
     public RetraceSourceFileResultImpl retraceSourceFile(String sourceFile) {
-      if (mapper != null) {
-        for (MappingInformation mappingInformation : mapper.getAdditionalMappings()) {
-          if (mappingInformation.isFileNameInformation()) {
-            return new RetraceSourceFileResultImpl(
-                mappingInformation.asFileNameInformation().getFileName(), false);
-          }
+      for (MappingInformation info :
+          classResult
+              .getRetracerImpl()
+              .getAdditionalMappingInfo(
+                  ScopeReference.fromClassReference(classResult.obfuscatedReference))) {
+        if (info.isFileNameInformation()) {
+          return new RetraceSourceFileResultImpl(info.asFileNameInformation().getFileName(), false);
         }
       }
       return new RetraceSourceFileResultImpl(
@@ -290,7 +284,7 @@ public class RetraceClassResultImpl implements RetraceClassResult {
         D definition,
         BiFunction<ClassNamingForNameMapper, String, T> lookupFunction,
         ResultConstructor<T, R, D> constructor) {
-      List<Pair<ElementImpl, T>> mappings = ImmutableList.of();
+      List<Pair<RetraceClassElementImpl, T>> mappings = ImmutableList.of();
       if (mapper != null) {
         T result = lookupFunction.apply(mapper, definition.getName());
         if (result != null) {

@@ -5,17 +5,9 @@
 package com.android.tools.r8.retrace;
 
 import com.android.tools.r8.Keep;
-import com.android.tools.r8.references.ClassReference;
-import com.android.tools.r8.retrace.internal.RetracedTypeImpl;
 
 @Keep
-public interface RetracedClass {
+public interface RetracedClassMemberReference {
 
-  String getTypeName();
-
-  String getBinaryName();
-
-  RetracedTypeImpl getRetracedType();
-
-  ClassReference getClassReference();
+  RetracedClassReference getHolderClass();
 }

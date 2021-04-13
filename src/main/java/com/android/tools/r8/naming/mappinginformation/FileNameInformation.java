@@ -6,9 +6,11 @@ package com.android.tools.r8.naming.mappinginformation;
 
 import com.android.tools.r8.DiagnosticsHandler;
 import com.android.tools.r8.naming.MapVersion;
+import com.android.tools.r8.naming.mappinginformation.ScopeReference.ClassScopeReference;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
+import java.util.function.BiConsumer;
 
 public class FileNameInformation extends MappingInformation {
 
@@ -18,20 +20,16 @@ public class FileNameInformation extends MappingInformation {
   static final String FILE_NAME_KEY = "fileName";
 
   private FileNameInformation(String fileName) {
-    super(NO_LINE_NUMBER);
     this.fileName = fileName;
+  }
+
+  @Override
+  public String getId() {
+    return ID;
   }
 
   public String getFileName() {
     return fileName;
-  }
-
-  @Override
-  public String serialize() {
-    JsonObject result = new JsonObject();
-    result.add(MAPPING_ID_KEY, new JsonPrimitive(ID));
-    result.add(FILE_NAME_KEY, new JsonPrimitive(fileName));
-    return result.toString();
   }
 
   @Override
@@ -53,23 +51,32 @@ public class FileNameInformation extends MappingInformation {
     return new FileNameInformation(fileName);
   }
 
-  public static FileNameInformation build(
+  @Override
+  public String serialize() {
+    JsonObject object = new JsonObject();
+    object.add(MAPPING_ID_KEY, new JsonPrimitive(ID));
+    object.add(FILE_NAME_KEY, new JsonPrimitive(fileName));
+    return object.toString();
+  }
+
+  public static void deserialize(
       MapVersion version,
       JsonObject object,
       DiagnosticsHandler diagnosticsHandler,
-      int lineNumber) {
-    // Source file information is valid for all map file versions.
+      int lineNumber,
+      ScopeReference implicitSingletonScope,
+      BiConsumer<ScopeReference, MappingInformation> onMappingInfo) {
+    assert implicitSingletonScope instanceof ClassScopeReference;
     try {
       JsonElement fileName =
           getJsonElementFromObject(object, diagnosticsHandler, lineNumber, FILE_NAME_KEY, ID);
-      if (fileName == null) {
-        return null;
+      if (fileName != null) {
+        onMappingInfo.accept(
+            implicitSingletonScope, new FileNameInformation(fileName.getAsString()));
       }
-      return new FileNameInformation(fileName.getAsString());
     } catch (UnsupportedOperationException | IllegalStateException ignored) {
       diagnosticsHandler.info(
           MappingInformationDiagnostics.invalidValueForObjectWithId(lineNumber, FILE_NAME_KEY, ID));
-      return null;
     }
   }
 }

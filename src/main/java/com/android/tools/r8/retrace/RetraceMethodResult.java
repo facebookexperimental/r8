@@ -5,31 +5,10 @@
 package com.android.tools.r8.retrace;
 
 import com.android.tools.r8.Keep;
-import java.util.function.Consumer;
-import java.util.stream.Stream;
 
 @Keep
-public interface RetraceMethodResult {
+public interface RetraceMethodResult extends RetraceResult<RetraceMethodElement> {
 
   RetraceFrameResult narrowByPosition(int position);
 
-  Stream<Element> stream();
-
-  RetraceMethodResult forEach(Consumer<Element> resultConsumer);
-
-  boolean isAmbiguous();
-
-  @Keep
-  interface Element {
-
-    boolean isUnknown();
-
-    RetracedMethod getRetracedMethod();
-
-    RetraceMethodResult getRetraceMethodResult();
-
-    RetraceClassResult.Element getClassElement();
-
-    RetraceSourceFileResult retraceSourceFile(String sourceFile);
-  }
 }

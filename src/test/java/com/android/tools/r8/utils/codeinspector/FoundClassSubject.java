@@ -6,6 +6,7 @@ package com.android.tools.r8.utils.codeinspector;
 
 import static com.android.tools.r8.KotlinTestBase.METADATA_TYPE;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import com.android.tools.r8.TestRuntime.CfRuntime;
 import com.android.tools.r8.ToolHelper;
@@ -33,18 +34,22 @@ import com.android.tools.r8.references.ClassReference;
 import com.android.tools.r8.references.FieldReference;
 import com.android.tools.r8.references.Reference;
 import com.android.tools.r8.references.TypeReference;
+import com.android.tools.r8.retrace.RetraceClassElement;
+import com.android.tools.r8.retrace.RetraceClassResult;
 import com.android.tools.r8.retrace.RetraceTypeResult;
-import com.android.tools.r8.retrace.RetracedField;
+import com.android.tools.r8.retrace.RetracedFieldReference;
 import com.android.tools.r8.retrace.Retracer;
 import com.android.tools.r8.synthesis.SyntheticItemsTestUtils;
 import com.android.tools.r8.utils.DescriptorUtils;
 import com.android.tools.r8.utils.StringUtils;
 import com.android.tools.r8.utils.ZipUtils;
+import com.android.tools.r8.utils.codeinspector.CodeInspector.MappingWrapper;
 import com.google.common.collect.Sets;
 import java.io.File;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -54,16 +59,16 @@ import org.junit.rules.TemporaryFolder;
 public class FoundClassSubject extends ClassSubject {
 
   private final DexClass dexClass;
-  final ClassNamingForNameMapper naming;
+  private final MappingWrapper mapping;
 
   FoundClassSubject(
       CodeInspector codeInspector,
       DexClass dexClass,
-      ClassNamingForNameMapper naming,
+      MappingWrapper mapping,
       ClassReference reference) {
     super(codeInspector, reference);
     this.dexClass = dexClass;
-    this.naming = naming;
+    this.mapping = mapping;
   }
 
   @Override
@@ -100,10 +105,10 @@ public class FoundClassSubject extends ClassSubject {
     DexProto proto =
         codeInspector.dexItemFactory.createProto(
             codeInspector.toDexType(codeInspector.getObfuscatedTypeName(returnType)), parameterTypes);
-    if (naming != null) {
+    if (getNaming() != null) {
       Signature signature =
           new MethodSignature(name, returnType, parameters.toArray(StringUtils.EMPTY_ARRAY));
-      MemberNaming methodNaming = naming.lookupByOriginalSignature(signature);
+      MemberNaming methodNaming = getNaming().lookupByOriginalSignature(signature);
       if (methodNaming != null) {
         name = methodNaming.getRenamedName();
       }
@@ -191,8 +196,8 @@ public class FoundClassSubject extends ClassSubject {
   public FieldSubject field(String type, String name) {
     String obfuscatedType = codeInspector.getObfuscatedTypeName(type);
     MemberNaming fieldNaming = null;
-    if (naming != null) {
-      fieldNaming = naming.lookupByOriginalSignature(new FieldSignature(name, type));
+    if (getNaming() != null) {
+      fieldNaming = getNaming().lookupByOriginalSignature(new FieldSignature(name, type));
     }
     String obfuscatedName = fieldNaming == null ? name : fieldNaming.getRenamedName();
 
@@ -233,7 +238,7 @@ public class FoundClassSubject extends ClassSubject {
           .retraceField(fieldReference)
           .forEach(
               element -> {
-                RetracedField field = element.getField();
+                RetracedFieldReference field = element.getField();
                 if (!element.isUnknown() && field.getFieldName().equals(name)) {
                   candidates.add(candidate);
                   // TODO(b/169953605): There should not be a need for mapping the final type.
@@ -357,8 +362,8 @@ public class FoundClassSubject extends ClassSubject {
 
   @Override
   public String getOriginalName() {
-    if (naming != null) {
-      return naming.originalName;
+    if (getNaming() != null) {
+      return getNaming().originalName;
     } else {
       return getFinalName();
     }
@@ -366,8 +371,8 @@ public class FoundClassSubject extends ClassSubject {
 
   @Override
   public String getOriginalDescriptor() {
-    if (naming != null) {
-      return DescriptorUtils.javaTypeToDescriptor(naming.originalName);
+    if (getNaming() != null) {
+      return DescriptorUtils.javaTypeToDescriptor(getNaming().originalName);
     } else {
       return getFinalDescriptor();
     }
@@ -409,15 +414,12 @@ public class FoundClassSubject extends ClassSubject {
 
   @Override
   public boolean isRenamed() {
-    return naming != null && !getFinalDescriptor().equals(getOriginalDescriptor());
+    return getNaming() != null && !getFinalDescriptor().equals(getOriginalDescriptor());
   }
 
   @Override
   public boolean isCompilerSynthesized() {
-    if (naming == null) {
-      return false;
-    }
-    for (MappingInformation info : naming.getAdditionalMappings()) {
+    for (MappingInformation info : mapping.getAdditionalMappings()) {
       if (info.isCompilerSynthesizedMappingInformation()) {
         return true;
       }
@@ -467,7 +469,7 @@ public class FoundClassSubject extends ClassSubject {
   public int hashCode() {
     int result = codeInspector.hashCode();
     result = 31 * result + dexClass.hashCode();
-    result = 31 * result + (naming != null ? naming.hashCode() : 0);
+    result = 31 * result + (getNaming() != null ? getNaming().hashCode() : 0);
     return result;
   }
 
@@ -479,7 +481,7 @@ public class FoundClassSubject extends ClassSubject {
     FoundClassSubject otherSubject = (FoundClassSubject) other;
     return codeInspector == otherSubject.codeInspector
         && dexClass == otherSubject.dexClass
-        && naming == otherSubject.naming;
+        && getNaming() == otherSubject.getNaming();
   }
 
   @Override
@@ -536,9 +538,28 @@ public class FoundClassSubject extends ClassSubject {
         codeInspector.getFactory().kotlin, annotationSubject.getAnnotation());
   }
 
+  public RetraceClassResult retrace() {
+    assertTrue(mapping.getNaming() != null);
+    return codeInspector
+        .getRetracer()
+        .retraceClass(Reference.classFromTypeName(mapping.getNaming().renamedName));
+  }
+
+  public RetraceClassElement retraceUnique() {
+    RetraceClassResult result = retrace();
+    if (result.isAmbiguous()) {
+      fail("Expected unique retrace of " + this + ", got ambiguous: " + result);
+    }
+    Optional<RetraceClassElement> first = result.stream().findFirst();
+    if (!first.isPresent()) {
+      fail("Expected unique retrace of " + this + ", got empty result");
+    }
+    return first.get();
+  }
+
   @Override
   public ClassNamingForNameMapper getNaming() {
-    return naming;
+    return mapping.getNaming();
   }
 
   @Override

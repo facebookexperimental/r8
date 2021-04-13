@@ -7,11 +7,11 @@ package com.android.tools.r8.retrace;
 import com.android.tools.r8.Keep;
 import com.android.tools.r8.references.TypeReference;
 import java.util.List;
-import java.util.function.Consumer;
-import java.util.stream.Stream;
 
 @Keep
-public interface RetraceClassResult {
+public interface RetraceClassResult extends RetraceResult<RetraceClassElement> {
+
+  boolean hasRetraceResult();
 
   RetraceFieldResult lookupField(String fieldName);
 
@@ -29,32 +29,4 @@ public interface RetraceClassResult {
   RetraceFrameResult lookupFrame(
       String methodName, int position, List<TypeReference> formalTypes, TypeReference returnType);
 
-  Stream<Element> stream();
-
-  RetraceClassResult forEach(Consumer<Element> resultConsumer);
-
-  boolean hasRetraceResult();
-
-  boolean isAmbiguous();
-
-  @Keep
-  interface Element {
-
-    RetracedClass getRetracedClass();
-
-    RetraceClassResult getRetraceClassResult();
-
-    RetraceSourceFileResult retraceSourceFile(String sourceFile);
-
-    RetraceFieldResult lookupField(String fieldName);
-
-    RetraceMethodResult lookupMethod(String methodName);
-
-    RetraceFrameResult lookupFrame(String methodName);
-
-    RetraceFrameResult lookupFrame(String methodName, int position);
-
-    RetraceFrameResult lookupFrame(
-        String methodName, int position, List<TypeReference> formalTypes, TypeReference returnType);
-  }
 }

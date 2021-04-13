@@ -12,12 +12,12 @@ import com.android.tools.r8.references.ClassReference;
 import com.android.tools.r8.references.MethodReference;
 import com.android.tools.r8.references.Reference;
 import com.android.tools.r8.references.TypeReference;
+import com.android.tools.r8.retrace.RetraceClassElement;
 import com.android.tools.r8.retrace.RetraceClassResult;
-import com.android.tools.r8.retrace.RetraceClassResult.Element;
 import com.android.tools.r8.retrace.RetraceSourceFileResult;
-import com.android.tools.r8.retrace.RetracedClass;
-import com.android.tools.r8.retrace.RetracedMethod;
-import com.android.tools.r8.retrace.RetracedMethod.KnownRetracedMethod;
+import com.android.tools.r8.retrace.RetracedClassReference;
+import com.android.tools.r8.retrace.RetracedMethodReference;
+import com.android.tools.r8.retrace.RetracedMethodReference.KnownRetracedMethodReference;
 import com.android.tools.r8.retrace.Retracer;
 import com.android.tools.r8.utils.Box;
 import com.android.tools.r8.utils.DescriptorUtils;
@@ -33,7 +33,7 @@ public class RetraceUtils {
   private static final Set<String> KEEP_SOURCEFILE_NAMES = Sets.newHashSet("Native Method");
 
   public static String methodDescriptionFromRetraceMethod(
-      RetracedMethod methodReference, boolean appendHolder, boolean verbose) {
+      RetracedMethodReference methodReference, boolean appendHolder, boolean verbose) {
     StringBuilder sb = new StringBuilder();
     if (appendHolder) {
       sb.append(methodReference.getHolderClass().getTypeName());
@@ -43,7 +43,7 @@ public class RetraceUtils {
       return sb.append(methodReference.getMethodName()).toString();
     }
     assert methodReference.isKnown();
-    KnownRetracedMethod knownRef = methodReference.asKnown();
+    KnownRetracedMethodReference knownRef = methodReference.asKnown();
     sb.append(knownRef.isVoid() ? "void" : knownRef.getReturnType().getTypeName());
     sb.append(" ");
     sb.append(methodReference.getMethodName());
@@ -76,7 +76,10 @@ public class RetraceUtils {
   }
 
   static RetraceSourceFileResult getSourceFile(
-      Element classElement, RetracedClass context, String sourceFile, Retracer retracer) {
+      RetraceClassElement classElement,
+      RetracedClassReference context,
+      String sourceFile,
+      Retracer retracer) {
     // If no context is specified always retrace using the found class element.
     if (context == null) {
       return classElement.retraceSourceFile(sourceFile);

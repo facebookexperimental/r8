@@ -9,9 +9,10 @@ import com.android.tools.r8.naming.MemberNaming.MethodSignature;
 import com.android.tools.r8.naming.MemberNaming.Signature;
 import com.android.tools.r8.naming.ProguardMap.Builder;
 import com.android.tools.r8.naming.mappinginformation.MappingInformation;
+import com.android.tools.r8.naming.mappinginformation.MappingInformationDiagnostics;
 import com.android.tools.r8.naming.mappinginformation.MetaInfMappingInformation;
-import com.android.tools.r8.naming.mappinginformation.ScopedMappingInformation.ClassScopeReference;
-import com.android.tools.r8.naming.mappinginformation.ScopedMappingInformation.ScopeReference;
+import com.android.tools.r8.naming.mappinginformation.ScopeReference;
+import com.android.tools.r8.naming.mappinginformation.ScopeReference.ClassScopeReference;
 import com.android.tools.r8.position.TextPosition;
 import com.android.tools.r8.references.Reference;
 import com.android.tools.r8.utils.IdentifierUtils;
@@ -24,6 +25,7 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.BiConsumer;
 
 /**
  * Parses a Proguard mapping file and produces mappings from obfuscated class names to the original
@@ -88,7 +90,7 @@ public class ProguardMapReader implements AutoCloseable {
   private int lineOffset = 0;
   private String line;
   private MapVersion version = MapVersion.MapVersionNone;
-  private ScopeReference implicitSingletonScope = null;
+  private ScopeReference implicitSingletonScope = ScopeReference.globalScope();
 
   private int peekCodePoint() {
     return lineOffset < line.length() ? line.codePointAt(lineOffset) : '\n';
@@ -224,12 +226,17 @@ public class ProguardMapReader implements AutoCloseable {
   // Parsing of entries
 
   private void parseClassMappings(ProguardMap.Builder mapBuilder) throws IOException {
+    assert implicitSingletonScope == ScopeReference.globalScope();
     while (hasLine()) {
       skipWhitespace();
       if (isCommentLineWithJsonBrace()) {
-        // TODO(b/179665169): Parse the mapping information without doing anything with it, since we
-        //  at this point do not have a global context.
-        parseMappingInformation();
+        parseMappingInformation(
+            (reference, info) -> {
+              if (!reference.isGlobalScope()) {
+                diagnosticsHandler.error(
+                    MappingInformationDiagnostics.invalidScopeFor(lineNo, reference, info));
+              }
+            });
         // Skip reading the rest of the line.
         lineOffset = line.length();
         nextLine();
@@ -260,18 +267,21 @@ public class ProguardMapReader implements AutoCloseable {
     }
   }
 
-  private MappingInformation parseMappingInformation() {
-    MappingInformation info =
-        MappingInformation.fromJsonObject(
-            version, parseJsonInComment(), diagnosticsHandler, lineNo, implicitSingletonScope);
-    if (info == null) {
-      return null;
-    }
-    MetaInfMappingInformation generatorInfo = info.asMetaInfMappingInformation();
-    if (generatorInfo != null) {
-      version = generatorInfo.getMapVersion();
-    }
-    return info;
+  private void parseMappingInformation(
+      BiConsumer<ScopeReference, MappingInformation> onMappingInfo) {
+    MappingInformation.fromJsonObject(
+        version,
+        parseJsonInComment(),
+        diagnosticsHandler,
+        lineNo,
+        implicitSingletonScope,
+        (reference, info) -> {
+          MetaInfMappingInformation generatorInfo = info.asMetaInfMappingInformation();
+          if (generatorInfo != null) {
+            version = generatorInfo.getMapVersion();
+          }
+          onMappingInfo.accept(reference, info);
+        });
   }
 
   private void parseMemberMappings(Builder mapBuilder, ClassNaming.Builder classNamingBuilder)
@@ -284,14 +294,15 @@ public class ProguardMapReader implements AutoCloseable {
       Range mappedRange = null;
       // Try to parse any information added in comments above member namings
       if (isCommentLineWithJsonBrace()) {
-        MappingInformation mappingInfo = parseMappingInformation();
-        if (mappingInfo != null) {
-          if (mappingInfo.isScopedMappingInformation()) {
-            mapBuilder.addScopedMappingInformation(mappingInfo.asScopedMappingInformation());
-          } else {
-            classNamingBuilder.addMappingInformation(mappingInfo, diagnosticsHandler, lineNo);
-          }
-        }
+        parseMappingInformation(
+            (reference, mappingInfo) ->
+                mapBuilder.addMappingInformation(
+                    reference,
+                    mappingInfo,
+                    conflictingInfo ->
+                        diagnosticsHandler.warning(
+                            MappingInformationDiagnostics.notAllowedCombination(
+                                reference, mappingInfo, conflictingInfo, lineNo))));
         // Skip reading the rest of the line.
         lineOffset = line.length();
         continue;

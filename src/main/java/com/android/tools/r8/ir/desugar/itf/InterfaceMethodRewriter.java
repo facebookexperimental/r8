@@ -74,9 +74,14 @@ import com.android.tools.r8.utils.DescriptorUtils;
 import com.android.tools.r8.utils.InternalOptions;
 import com.android.tools.r8.utils.IteratorUtils;
 import com.android.tools.r8.utils.Pair;
+import com.android.tools.r8.utils.ThreadUtils;
+import com.android.tools.r8.utils.collections.ProgramMethodSet;
 import com.android.tools.r8.utils.collections.SortedProgramMethodSet;
 import com.android.tools.r8.utils.structural.Ordered;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Sets;
+import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
 import java.util.Set;
@@ -84,7 +89,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.function.BiConsumer;
-import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 //
@@ -129,9 +133,8 @@ public final class InterfaceMethodRewriter {
   // The emulatedMethod set is there to avoid doing the emulated look-up too often.
   private final Set<DexString> emulatedMethods = Sets.newIdentityHashSet();
 
-  // All forwarding methods generated during desugaring. We don't synchronize access
-  // to this collection since it is only filled in ClassProcessor running synchronously.
-  private final SortedProgramMethodSet synthesizedMethods = SortedProgramMethodSet.create();
+  // All forwarding methods and all throwing methods generated during desugaring.
+  private final ProgramMethodSet synthesizedMethods = ProgramMethodSet.createConcurrent();
 
   // Caches default interface method info for already processed interfaces.
   private final Map<DexType, DefaultMethodsHelper.Collection> cache = new ConcurrentHashMap<>();
@@ -963,43 +966,35 @@ public final class InterfaceMethodRewriter {
   public void desugarInterfaceMethods(
       Builder<?> builder, Flavor flavour, ExecutorService executorService)
       throws ExecutionException {
-    // TODO(b/183998768): Merge the following four sequential loops into a single one.
-
+    // During L8 compilation, emulated interfaces are processed to be renamed, to have
+    // their interfaces fixed-up and to generate the emulated dispatch code.
     EmulatedInterfaceProcessor emulatedInterfaceProcessor =
         new EmulatedInterfaceProcessor(appView, this);
-    // TODO(b/183998768): Move this to emulatedInterfaceProcessor#process
-    forEachProgramEmulatedInterface(emulatedInterfaceProcessor::generateEmulateInterfaceLibrary);
 
     // Process all classes first. Add missing forwarding methods to
     // replace desugared default interface methods.
-    process(new ClassProcessor(appView, this), builder, flavour);
+    ClassProcessor classProcessor = new ClassProcessor(appView, this);
 
     // Process interfaces, create companion or dispatch class if needed, move static
     // methods to companion class, copy default interface methods to companion classes,
     // make original default methods abstract, remove bridge methods, create dispatch
     // classes if needed.
-    process(new InterfaceProcessor(appView, this), builder, flavour);
+    InterfaceProcessor interfaceProcessor = new InterfaceProcessor(appView, this);
 
-    // During L8 compilation, emulated interfaces are processed to be renamed, to have
-    // their interfaces fixed-up and to generate the emulated dispatch code.
-    process(emulatedInterfaceProcessor, builder, flavour);
+    // The interface processors must be ordered so that finalization of the processing is performed
+    // in that order. The emulatedInterfaceProcessor has to be last at this point to avoid renaming
+    // emulated interfaces before the other processing.
+    ImmutableList<InterfaceDesugaringProcessor> orderedInterfaceDesugaringProcessors =
+        ImmutableList.of(classProcessor, interfaceProcessor, emulatedInterfaceProcessor);
+    processClassesConcurrently(
+        orderedInterfaceDesugaringProcessors, builder, flavour, executorService);
 
-    converter.processMethodsConcurrently(synthesizedMethods, executorService);
+    SortedProgramMethodSet sortedSynthesizedMethods = SortedProgramMethodSet.create();
+    sortedSynthesizedMethods.addAll(synthesizedMethods);
+    converter.processMethodsConcurrently(sortedSynthesizedMethods, executorService);
 
     // Cached data is not needed any more.
     clear();
-  }
-
-  private void forEachProgramEmulatedInterface(Consumer<DexProgramClass> consumer) {
-    if (!appView.options().isDesugaredLibraryCompilation()) {
-      return;
-    }
-    for (DexType interfaceType : emulatedInterfaces.keySet()) {
-      DexClass theInterface = appView.definitionFor(interfaceType);
-      if (theInterface != null && theInterface.isProgramClass()) {
-        consumer.accept(theInterface.asProgramClass());
-      }
-    }
   }
 
   private void clear() {
@@ -1014,13 +1009,32 @@ public final class InterfaceMethodRewriter {
     return (!clazz.originatesFromDexResource() || flavour == Flavor.IncludeAllResources);
   }
 
+  private void processClassesConcurrently(
+      List<InterfaceDesugaringProcessor> processors,
+      Builder<?> builder,
+      Flavor flavour,
+      ExecutorService executorService)
+      throws ExecutionException {
+    ThreadUtils.processItems(
+        Iterables.filter(
+            builder.getProgramClasses(), (DexProgramClass clazz) -> shouldProcess(clazz, flavour)),
+        clazz -> {
+          for (InterfaceDesugaringProcessor processor : processors) {
+            processor.process(clazz, synthesizedMethods);
+          }
+        },
+        executorService);
+    for (InterfaceDesugaringProcessor processor : processors) {
+      processor.finalizeProcessing(builder, synthesizedMethods);
+    }
+  }
+
   private void process(InterfaceDesugaringProcessor processor, Builder<?> builder, Flavor flavour) {
     for (DexProgramClass clazz : builder.getProgramClasses()) {
-      if (shouldProcess(clazz, flavour) && processor.shouldProcess(clazz)) {
+      if (shouldProcess(clazz, flavour)) {
         processor.process(clazz, synthesizedMethods);
       }
     }
-    processor.finalizeProcessing(builder, synthesizedMethods);
   }
 
   final boolean isDefaultMethod(DexEncodedMethod method) {

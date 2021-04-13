@@ -5,16 +5,16 @@
 package com.android.tools.r8.retrace;
 
 import com.android.tools.r8.Keep;
-import com.android.tools.r8.references.TypeReference;
+import com.android.tools.r8.references.ClassReference;
 
 @Keep
-public interface RetracedType {
-
-  boolean isVoid();
-
-  TypeReference toArray(int dimensions);
+public interface RetracedClassReference {
 
   String getTypeName();
 
-  TypeReference getTypeReference();
+  String getBinaryName();
+
+  RetracedTypeReference getRetracedType();
+
+  ClassReference getClassReference();
 }

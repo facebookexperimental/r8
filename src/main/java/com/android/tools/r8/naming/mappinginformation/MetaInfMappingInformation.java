@@ -10,6 +10,7 @@ import com.android.tools.r8.DiagnosticsHandler;
 import com.android.tools.r8.naming.MapVersion;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
+import java.util.function.BiConsumer;
 
 public class MetaInfMappingInformation extends MappingInformation {
 
@@ -19,8 +20,13 @@ public class MetaInfMappingInformation extends MappingInformation {
   private final MapVersion mapVersion;
 
   public MetaInfMappingInformation(MapVersion mapVersion) {
-    super(NO_LINE_NUMBER);
+    super();
     this.mapVersion = mapVersion;
+  }
+
+  @Override
+  public String getId() {
+    return ID;
   }
 
   @Override
@@ -35,7 +41,7 @@ public class MetaInfMappingInformation extends MappingInformation {
 
   @Override
   public boolean allowOther(MappingInformation information) {
-    return !information.isMetaInfMappingInformation();
+    return true;
   }
 
   public MapVersion getMapVersion() {
@@ -50,22 +56,23 @@ public class MetaInfMappingInformation extends MappingInformation {
     return result.toString();
   }
 
-  public static MetaInfMappingInformation deserialize(
+  public static void deserialize(
       MapVersion version,
       JsonObject object,
       DiagnosticsHandler diagnosticsHandler,
-      int lineNumber) {
+      int lineNumber,
+      BiConsumer<ScopeReference, MappingInformation> onMappingInfo) {
     // Parsing the generator information must support parsing at all map versions as it itself is
     // what establishes the version.
     String mapVersion = object.get(MAP_VERSION_KEY).getAsString();
     if (mapVersion == null) {
       noKeyForObjectWithId(lineNumber, MAP_VERSION_KEY, MAPPING_ID_KEY, ID);
-      return null;
+      return;
     }
     MapVersion mapVersion1 = MapVersion.fromName(mapVersion);
     if (mapVersion1 == null) {
-      return null;
+      return;
     }
-    return new MetaInfMappingInformation(mapVersion1);
+    onMappingInfo.accept(ScopeReference.globalScope(), new MetaInfMappingInformation(mapVersion1));
   }
 }
