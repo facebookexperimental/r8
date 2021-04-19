@@ -20,6 +20,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 
 /**
  * Stores name information for a class.
@@ -36,6 +37,7 @@ public class ClassNamingForNameMapper implements ClassNaming {
     private final Map<FieldSignature, MemberNaming> fieldMembers = Maps.newHashMap();
     private final Map<String, List<MappedRange>> mappedRangesByName = Maps.newHashMap();
     private final Map<String, List<MemberNaming>> mappedFieldNamingsByName = Maps.newHashMap();
+    private final List<MappingInformation> additionalMappingInfo = new ArrayList<>();
 
     private Builder(String renamedName, String originalName) {
       this.originalName = originalName;
@@ -69,19 +71,38 @@ public class ClassNamingForNameMapper implements ClassNaming {
       }
 
       return new ClassNamingForNameMapper(
-          renamedName, originalName, methodMembers, fieldMembers, map, mappedFieldNamingsByName);
+          renamedName,
+          originalName,
+          methodMembers,
+          fieldMembers,
+          map,
+          mappedFieldNamingsByName,
+          additionalMappingInfo);
     }
 
     /** The parameters are forwarded to MappedRange constructor, see explanation there. */
     @Override
-    public void addMappedRange(
+    public MappedRange addMappedRange(
         Range minifiedRange,
         MemberNaming.MethodSignature originalSignature,
         Object originalRange,
         String renamedName) {
-      mappedRangesByName
-          .computeIfAbsent(renamedName, k -> new ArrayList<>())
-          .add(new MappedRange(minifiedRange, originalSignature, originalRange, renamedName));
+      MappedRange range =
+          new MappedRange(minifiedRange, originalSignature, originalRange, renamedName);
+      mappedRangesByName.computeIfAbsent(renamedName, k -> new ArrayList<>()).add(range);
+      return range;
+    }
+
+    @Override
+    public void addMappingInformation(
+        MappingInformation info, Consumer<MappingInformation> onProhibitedAddition) {
+      for (MappingInformation existing : additionalMappingInfo) {
+        if (!existing.allowOther(info)) {
+          onProhibitedAddition.accept(existing);
+          return;
+        }
+      }
+      additionalMappingInfo.add(info);
     }
   }
 
@@ -200,19 +221,27 @@ public class ClassNamingForNameMapper implements ClassNaming {
 
   public final Map<String, List<MemberNaming>> mappedFieldNamingsByName;
 
+  private final List<MappingInformation> additionalMappingInfo;
+
   private ClassNamingForNameMapper(
       String renamedName,
       String originalName,
       Map<MethodSignature, MemberNaming> methodMembers,
       Map<FieldSignature, MemberNaming> fieldMembers,
       Map<String, MappedRangesOfName> mappedRangesByRenamedName,
-      Map<String, List<MemberNaming>> mappedFieldNamingsByName) {
+      Map<String, List<MemberNaming>> mappedFieldNamingsByName,
+      List<MappingInformation> additionalMappingInfo) {
     this.renamedName = renamedName;
     this.originalName = originalName;
     this.methodMembers = ImmutableMap.copyOf(methodMembers);
     this.fieldMembers = ImmutableMap.copyOf(fieldMembers);
     this.mappedRangesByRenamedName = mappedRangesByRenamedName;
     this.mappedFieldNamingsByName = mappedFieldNamingsByName;
+    this.additionalMappingInfo = additionalMappingInfo;
+  }
+
+  public List<MappingInformation> getAdditionalMappingInfo() {
+    return Collections.unmodifiableList(additionalMappingInfo);
   }
 
   public MappedRangesOfName getMappedRangesForRenamedName(String renamedName) {
@@ -297,7 +326,7 @@ public class ClassNamingForNameMapper implements ClassNaming {
     return methodMembers.values();
   }
 
-  void write(ChainableStringConsumer consumer, List<MappingInformation> additionalMappingInfo) {
+  void write(ChainableStringConsumer consumer) {
     consumer.accept(originalName).accept(" -> ").accept(renamedName).accept(":\n");
 
     // Print all additional mapping information.
@@ -315,13 +344,16 @@ public class ClassNamingForNameMapper implements ClassNaming {
     mappedRangesSorted.sort(Comparator.comparingInt(range -> range.sequenceNumber));
     for (MappedRange range : mappedRangesSorted) {
       consumer.accept("    ").accept(range.toString()).accept("\n");
+      for (MappingInformation info : range.additionalMappingInfo) {
+        consumer.accept("      # ").accept(info.serialize()).accept("\n");
+      }
     }
   }
 
   @Override
   public String toString() {
     StringBuilder builder = new StringBuilder();
-    write(ChainableStringConsumer.wrap(builder::append), Collections.emptyList());
+    write(ChainableStringConsumer.wrap(builder::append));
     return builder.toString();
   }
 
@@ -390,6 +422,8 @@ public class ClassNamingForNameMapper implements ClassNaming {
      */
     private final int sequenceNumber = getNextSequenceNumber();
 
+    private List<MappingInformation> additionalMappingInfo = new ArrayList<>();
+
     private MappedRange(
         Range minifiedRange, MethodSignature signature, Object originalRange, String renamedName) {
 
@@ -401,6 +435,26 @@ public class ClassNamingForNameMapper implements ClassNaming {
       this.signature = signature;
       this.originalRange = originalRange;
       this.renamedName = renamedName;
+    }
+
+    public void addMappingInformation(
+        MappingInformation info, Consumer<MappingInformation> onProhibitedAddition) {
+      for (MappingInformation existing : additionalMappingInfo) {
+        if (!existing.allowOther(info)) {
+          onProhibitedAddition.accept(existing);
+          return;
+        }
+      }
+      additionalMappingInfo.add(info);
+    }
+
+    public boolean isCompilerSynthesized() {
+      for (MappingInformation info : additionalMappingInfo) {
+        if (info.isCompilerSynthesizedMappingInformation()) {
+          return true;
+        }
+      }
+      return false;
     }
 
     public int getOriginalLineNumber(int lineNumberAfterMinification) {
@@ -478,6 +532,10 @@ public class ClassNamingForNameMapper implements ClassNaming {
       result = 31 * result + signature.hashCode();
       result = 31 * result + renamedName.hashCode();
       return result;
+    }
+
+    public List<MappingInformation> getAdditionalMappingInfo() {
+      return additionalMappingInfo;
     }
   }
 }

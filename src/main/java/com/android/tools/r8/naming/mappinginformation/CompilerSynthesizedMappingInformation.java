@@ -8,10 +8,11 @@ import com.android.tools.r8.DiagnosticsHandler;
 import com.android.tools.r8.naming.MapVersion;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
-import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 public class CompilerSynthesizedMappingInformation extends MappingInformation {
 
+  public static final MapVersion SUPPORTED_VERSION = MapVersion.MapVersionExperimental;
   public static final String ID = "com.android.tools.r8.synthesized";
 
   public static class Builder {
@@ -19,6 +20,10 @@ public class CompilerSynthesizedMappingInformation extends MappingInformation {
     public CompilerSynthesizedMappingInformation build() {
       return new CompilerSynthesizedMappingInformation();
     }
+  }
+
+  public static boolean isSupported(MapVersion version) {
+    return version.isGreaterThanOrEqualTo(SUPPORTED_VERSION);
   }
 
   private CompilerSynthesizedMappingInformation() {}
@@ -59,16 +64,9 @@ public class CompilerSynthesizedMappingInformation extends MappingInformation {
       JsonObject object,
       DiagnosticsHandler diagnosticsHandler,
       int lineNumber,
-      ScopeReference implicitSingletonScope,
-      BiConsumer<ScopeReference, MappingInformation> onMappingInfo) {
-    if (version.isLessThan(MapVersion.MapVersionExperimental)) {
-      return;
-    }
-    CompilerSynthesizedMappingInformation info = builder().build();
-    for (ScopeReference reference :
-        ScopedMappingInformation.deserializeScope(
-            object, implicitSingletonScope, diagnosticsHandler, lineNumber, version)) {
-      onMappingInfo.accept(reference, info);
+      Consumer<MappingInformation> onMappingInfo) {
+    if (isSupported(version)) {
+      onMappingInfo.accept(builder().build());
     }
   }
 }

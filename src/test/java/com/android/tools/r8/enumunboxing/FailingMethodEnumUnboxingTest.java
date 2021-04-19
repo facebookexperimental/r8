@@ -9,7 +9,7 @@ import static org.junit.Assert.assertEquals;
 import com.android.tools.r8.NeverClassInline;
 import com.android.tools.r8.NeverInline;
 import com.android.tools.r8.R8TestCompileResult;
-import com.android.tools.r8.R8TestRunResult;
+import com.android.tools.r8.SingleTestRunResult;
 import com.android.tools.r8.TestParameters;
 import com.android.tools.r8.utils.codeinspector.CodeInspector;
 import java.util.EnumSet;
@@ -21,7 +21,7 @@ import org.junit.runners.Parameterized.Parameters;
 
 @RunWith(Parameterized.class)
 public class FailingMethodEnumUnboxingTest extends EnumUnboxingTestBase {
-  private static final Class<?>[] FAILURES = {
+  private static final Class<?>[] TESTS = {
     InstanceFieldPutObject.class,
     StaticFieldPutObject.class,
     EnumSetTest.class,
@@ -50,30 +50,31 @@ public class FailingMethodEnumUnboxingTest extends EnumUnboxingTestBase {
     R8TestCompileResult compile =
         testForR8(parameters.getBackend())
             .addInnerClasses(FailingMethodEnumUnboxingTest.class)
-            .addKeepMainRules(FAILURES)
+            .addKeepMainRules(TESTS)
             .addKeepRules(enumKeepRules.getKeepRules())
             .addOptionsModification(opt -> enableEnumOptions(opt, enumValueOptimization))
-            .allowDiagnosticInfoMessages()
+            .addEnumUnboxingInspector(
+                inspector ->
+                    inspector.assertNotUnboxed(
+                        InstanceFieldPutObject.MyEnum.class,
+                        StaticFieldPutObject.MyEnum.class,
+                        EnumSetTest.MyEnum.class,
+                        FailingPhi.MyEnum.class,
+                        FailingReturnType.MyEnum.class,
+                        FailingParameterType.MyEnum.class))
             .enableInliningAnnotations()
             .enableNeverClassInliningAnnotations()
             .setMinApi(parameters.getApiLevel())
             .compile()
             .inspect(this::assertEnumsAsExpected);
-    for (Class<?> failure : FAILURES) {
-      R8TestRunResult run =
-          compile
-              .inspectDiagnosticMessages(
-                  m ->
-                      assertEnumIsBoxed(
-                          failure.getDeclaredClasses()[0], failure.getSimpleName(), m))
-              .run(parameters.getRuntime(), failure);
-      if (failure == EnumSetTest.class && enumKeepRules.getKeepRules().isEmpty()) {
-        // EnumSet and EnumMap cannot be used without the enumKeepRules.
-        run.assertFailure();
-      } else {
-        run.assertSuccess();
-        assertLines2By2Correct(run.getStdOut());
-      }
+    for (Class<?> main : TESTS) {
+      compile
+          .run(parameters.getRuntime(), main)
+          .applyIf(
+              main == EnumSetTest.class && enumKeepRules.getKeepRules().isEmpty(),
+              // EnumSet and EnumMap cannot be used without the enumKeepRules.
+              SingleTestRunResult::assertFailure,
+              result -> result.assertSuccess().inspectStdOut(this::assertLines2By2Correct));
     }
   }
 

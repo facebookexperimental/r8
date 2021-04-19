@@ -4,6 +4,8 @@
 
 package com.android.tools.r8.ir.optimize.info;
 
+import static java.util.Collections.emptySet;
+
 import com.android.tools.r8.graph.AppInfoWithClassHierarchy;
 import com.android.tools.r8.graph.AppView;
 import com.android.tools.r8.graph.DexType;
@@ -23,7 +25,6 @@ import com.android.tools.r8.shaking.AppInfoWithLiveness;
 import com.android.tools.r8.utils.BooleanUtils;
 import java.util.BitSet;
 import java.util.Set;
-import java.util.function.Function;
 
 public class UpdatableMethodOptimizationInfo extends MethodOptimizationInfo {
 
@@ -147,14 +148,21 @@ public class UpdatableMethodOptimizationInfo extends MethodOptimizationInfo {
   }
 
   public UpdatableMethodOptimizationInfo fixupClassTypeReferences(
-      Function<DexType, DexType> mapping, AppView<? extends AppInfoWithClassHierarchy> appView) {
+      AppView<? extends AppInfoWithClassHierarchy> appView, GraphLens lens) {
+    return fixupClassTypeReferences(appView, lens, emptySet());
+  }
+
+  public UpdatableMethodOptimizationInfo fixupClassTypeReferences(
+      AppView<? extends AppInfoWithClassHierarchy> appView,
+      GraphLens lens,
+      Set<DexType> prunedTypes) {
     if (returnsObjectWithUpperBoundType != null) {
       returnsObjectWithUpperBoundType =
-          returnsObjectWithUpperBoundType.fixupClassTypeReferences(mapping, appView);
+          returnsObjectWithUpperBoundType.rewrittenWithLens(appView, lens, prunedTypes);
     }
     if (returnsObjectWithLowerBoundType != null) {
       TypeElement returnsObjectWithLowerBoundType =
-          this.returnsObjectWithLowerBoundType.fixupClassTypeReferences(mapping, appView);
+          this.returnsObjectWithLowerBoundType.rewrittenWithLens(appView, lens, prunedTypes);
       if (returnsObjectWithLowerBoundType.isClassType()) {
         this.returnsObjectWithLowerBoundType = returnsObjectWithLowerBoundType.asClassType();
       } else {

@@ -7,7 +7,6 @@ package com.android.tools.r8.enumunboxing;
 import com.android.tools.r8.NeverClassInline;
 import com.android.tools.r8.NeverInline;
 import com.android.tools.r8.R8TestCompileResult;
-import com.android.tools.r8.R8TestRunResult;
 import com.android.tools.r8.TestParameters;
 import java.util.List;
 import org.junit.Test;
@@ -18,15 +17,11 @@ import org.junit.runners.Parameterized.Parameters;
 @RunWith(Parameterized.class)
 public class InstanceFieldsEnumUnboxingTest extends EnumUnboxingTestBase {
 
-  private static final Class<?>[] FAILURES = {
+  private static final Class<?>[] TESTS = {
     FailureIntField.class,
-    FailurePrivateIntField.class,
     FailureBoxedInnerEnumField.class,
     FailureUnboxedEnumField.class,
-    FailureTooManyUsedFields.class
-  };
-
-  private static final Class<?>[] SUCCESSES = {
+    FailureTooManyUsedFields.class,
     SuccessUnusedField.class,
     SuccessIntField.class,
     SuccessDoubleField.class,
@@ -34,6 +29,7 @@ public class InstanceFieldsEnumUnboxingTest extends EnumUnboxingTestBase {
     SuccessIntFieldInitializerInit.class,
     SuccessStringField.class,
     SuccessMultiConstructorIntField.class,
+    SuccessPrivateIntField.class,
   };
 
   private final TestParameters parameters;
@@ -57,44 +53,41 @@ public class InstanceFieldsEnumUnboxingTest extends EnumUnboxingTestBase {
     R8TestCompileResult compile =
         testForR8(parameters.getBackend())
             .addInnerClasses(InstanceFieldsEnumUnboxingTest.class)
-            .addKeepMainRules(SUCCESSES)
-            .addKeepMainRules(FAILURES)
+            .addKeepMainRules(TESTS)
+            .addEnumUnboxingInspector(
+                inspector ->
+                    inspector
+                        .assertUnboxed(
+                            SuccessUnusedField.EnumField.class,
+                            SuccessIntField.EnumField.class,
+                            SuccessDoubleField.EnumField.class,
+                            SuccessIntFieldOrdinal.EnumField.class,
+                            SuccessIntFieldInitializerInit.EnumField.class,
+                            SuccessStringField.EnumField.class,
+                            SuccessMultiConstructorIntField.EnumField.class,
+                            SuccessPrivateIntField.EnumField.class)
+                        .assertNotUnboxed(
+                            FailureIntField.EnumField.class,
+                            FailureBoxedInnerEnumField.EnumField.class,
+                            FailureUnboxedEnumField.EnumField.class,
+                            FailureTooManyUsedFields.EnumField.class))
             .noMinification()
             .enableInliningAnnotations()
             .enableNeverClassInliningAnnotations()
             .addKeepRules(enumKeepRules.getKeepRules())
             .addOptionsModification(opt -> enableEnumOptions(opt, enumValueOptimization))
-            .allowDiagnosticInfoMessages()
             .setMinApi(parameters.getApiLevel())
             .compile();
-    for (Class<?> failure : FAILURES) {
-      testClass(compile, failure, true);
-    }
-    for (Class<?> success : SUCCESSES) {
-      testClass(compile, success, false);
+    for (Class<?> main : TESTS) {
+      testClass(compile, main);
     }
   }
 
-  private void testClass(R8TestCompileResult compile, Class<?> testClass, boolean failure)
-      throws Exception {
-    R8TestRunResult run =
-        compile
-            .inspectDiagnosticMessages(
-                m -> {
-                  for (Class<?> declaredClass : testClass.getDeclaredClasses()) {
-                    if (declaredClass.isEnum()
-                        && !declaredClass.getSimpleName().equals("InnerEnum")) {
-                      if (failure) {
-                        assertEnumIsBoxed(declaredClass, testClass.getSimpleName(), m);
-                      } else {
-                        assertEnumIsUnboxed(declaredClass, testClass.getSimpleName(), m);
-                      }
-                    }
-                  }
-                })
-            .run(parameters.getRuntime(), testClass)
-            .assertSuccess();
-    assertLines2By2Correct(run.getStdOut());
+  private void testClass(R8TestCompileResult compile, Class<?> testClass) throws Exception {
+    compile
+        .run(parameters.getRuntime(), testClass)
+        .assertSuccess()
+        .inspectStdOut(this::assertLines2By2Correct);
   }
 
   static class SuccessUnusedField {
@@ -161,7 +154,7 @@ public class InstanceFieldsEnumUnboxingTest extends EnumUnboxingTestBase {
     }
   }
 
-  static class FailurePrivateIntField {
+  static class SuccessPrivateIntField {
 
     public static void main(String[] args) {
       System.out.println(getEnumA().field);

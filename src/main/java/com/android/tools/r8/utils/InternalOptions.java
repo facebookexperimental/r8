@@ -47,6 +47,7 @@ import com.android.tools.r8.ir.desugar.DesugaredLibraryConfiguration;
 import com.android.tools.r8.ir.desugar.nest.Nest;
 import com.android.tools.r8.ir.optimize.Inliner;
 import com.android.tools.r8.ir.optimize.enums.EnumDataMap;
+import com.android.tools.r8.naming.MapVersion;
 import com.android.tools.r8.origin.Origin;
 import com.android.tools.r8.position.Position;
 import com.android.tools.r8.references.Reference;
@@ -269,6 +270,7 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
   public boolean encodeChecksums = false;
   public BiPredicate<String, Long> dexClassChecksumFilter = (name, checksum) -> true;
   public boolean cfToCfDesugar = false;
+  public boolean forceAnnotateSynthetics = false;
 
   public int callGraphLikelySpuriousCallEdgeThreshold = 50;
 
@@ -1396,6 +1398,12 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     public Predicate<DexMethod> cfByteCodePassThrough = null;
 
     public boolean enableExperimentalMapFileVersion = false;
+  }
+
+  public MapVersion getMapFileVersion() {
+    return testing.enableExperimentalMapFileVersion
+        ? MapVersion.MapVersionExperimental
+        : MapVersion.STABLE;
   }
 
   @VisibleForTesting

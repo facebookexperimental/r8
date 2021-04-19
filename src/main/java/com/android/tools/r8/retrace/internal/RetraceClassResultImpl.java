@@ -11,7 +11,6 @@ import com.android.tools.r8.naming.ClassNamingForNameMapper.MappedRange;
 import com.android.tools.r8.naming.ClassNamingForNameMapper.MappedRangesOfName;
 import com.android.tools.r8.naming.MemberNaming;
 import com.android.tools.r8.naming.mappinginformation.MappingInformation;
-import com.android.tools.r8.naming.mappinginformation.ScopeReference;
 import com.android.tools.r8.references.ClassReference;
 import com.android.tools.r8.references.Reference;
 import com.android.tools.r8.references.TypeReference;
@@ -225,14 +224,25 @@ public class RetraceClassResultImpl implements RetraceClassResult {
     }
 
     @Override
+    public boolean isCompilerSynthesized() {
+      if (classResult.mapper != null) {
+        for (MappingInformation info : classResult.mapper.getAdditionalMappingInfo()) {
+          if (info.isCompilerSynthesizedMappingInformation()) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    @Override
     public RetraceSourceFileResultImpl retraceSourceFile(String sourceFile) {
-      for (MappingInformation info :
-          classResult
-              .getRetracerImpl()
-              .getAdditionalMappingInfo(
-                  ScopeReference.fromClassReference(classResult.obfuscatedReference))) {
-        if (info.isFileNameInformation()) {
-          return new RetraceSourceFileResultImpl(info.asFileNameInformation().getFileName(), false);
+      if (classResult.mapper != null) {
+        for (MappingInformation info : classResult.mapper.getAdditionalMappingInfo()) {
+          if (info.isFileNameInformation()) {
+            return new RetraceSourceFileResultImpl(
+                info.asFileNameInformation().getFileName(), false);
+          }
         }
       }
       return new RetraceSourceFileResultImpl(

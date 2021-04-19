@@ -390,6 +390,8 @@ public class DexItemFactory {
   public final DexType stringBuilderType = createStaticallyKnownType(stringBuilderDescriptor);
   public final DexType stringBufferType = createStaticallyKnownType(stringBufferDescriptor);
 
+  public final DexType javaLangReflectArrayType =
+      createStaticallyKnownType("Ljava/lang/reflect/Array;");
   public final DexType javaLangSystemType = createStaticallyKnownType(javaLangSystemDescriptor);
   public final DexType javaIoPrintStreamType = createStaticallyKnownType("Ljava/io/PrintStream;");
 
@@ -557,6 +559,8 @@ public class DexItemFactory {
   public final ClassMethods classMethods = new ClassMethods();
   public final ConstructorMethods constructorMethods = new ConstructorMethods();
   public final EnumMembers enumMembers = new EnumMembers();
+  public final JavaLangReflectArrayMembers javaLangReflectArrayMembers =
+      new JavaLangReflectArrayMembers();
   public final JavaLangSystemMethods javaLangSystemMethods = new JavaLangSystemMethods();
   public final NullPointerExceptionMethods npeMethods = new NullPointerExceptionMethods();
   public final IllegalArgumentExceptionMethods illegalArgumentExceptionMethods =
@@ -1451,6 +1455,17 @@ public class DexItemFactory {
               objectDescriptor,
               new DexString[] {objectArrayDescriptor});
     }
+  }
+
+  public class JavaLangReflectArrayMembers {
+
+    public final DexMethod newInstanceMethodWithDimensions =
+        createMethod(
+            javaLangReflectArrayType,
+            createProto(objectType, classType, intArrayType),
+            "newInstance");
+
+    private JavaLangReflectArrayMembers() {}
   }
 
   public class JavaLangSystemMethods {
@@ -2568,12 +2583,15 @@ public class DexItemFactory {
               if (type.isClassType()) {
                 if (!appView.enableWholeProgramOptimizations()) {
                   // Don't reason at the level of interfaces in D8.
-                  return ClassTypeElement.create(type, nullability, InterfaceCollection.empty());
+                  return ClassTypeElement.createForD8(type, nullability);
                 }
                 assert appView.appInfo().hasClassHierarchy();
                 if (appView.isInterface(type).isTrue()) {
                   return ClassTypeElement.create(
-                      objectType, nullability, InterfaceCollection.singleton(type));
+                      objectType,
+                      nullability,
+                      appView.withClassHierarchy(),
+                      InterfaceCollection.singleton(type));
                 }
                 // In theory, `interfaces` is the least upper bound of implemented interfaces.
                 // It is expensive to walk through type hierarchy; collect implemented interfaces;

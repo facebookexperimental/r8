@@ -8,7 +8,6 @@ import static org.junit.Assert.assertEquals;
 import com.android.tools.r8.NeverClassInline;
 import com.android.tools.r8.NeverInline;
 import com.android.tools.r8.R8TestCompileResult;
-import com.android.tools.r8.R8TestRunResult;
 import com.android.tools.r8.TestParameters;
 import java.util.List;
 import org.junit.Test;
@@ -19,7 +18,7 @@ import org.junit.runners.Parameterized.Parameters;
 @RunWith(Parameterized.class)
 public class ComparisonEnumUnboxingTest extends EnumUnboxingTestBase {
 
-  private static final Class<?>[] INPUTS = new Class<?>[] {NullCheck.class, EnumComparison.class};
+  private static final Class<?>[] TESTS = new Class<?>[] {NullCheck.class, EnumComparison.class};
 
   private final TestParameters parameters;
   private final boolean enumValueOptimization;
@@ -42,12 +41,14 @@ public class ComparisonEnumUnboxingTest extends EnumUnboxingTestBase {
     R8TestCompileResult compile =
         testForR8(parameters.getBackend())
             .addInnerClasses(ComparisonEnumUnboxingTest.class)
-            .addKeepMainRules(INPUTS)
+            .addKeepMainRules(TESTS)
             .enableInliningAnnotations()
             .enableNeverClassInliningAnnotations()
             .addKeepRules(enumKeepRules.getKeepRules())
             .addOptionsModification(opt -> enableEnumOptions(opt, enumValueOptimization))
-            .allowDiagnosticInfoMessages()
+            .addEnumUnboxingInspector(
+                inspector ->
+                    inspector.assertUnboxed(NullCheck.MyEnum.class, EnumComparison.MyEnum.class))
             .setMinApi(parameters.getApiLevel())
             .compile()
             .inspect(
@@ -55,14 +56,11 @@ public class ComparisonEnumUnboxingTest extends EnumUnboxingTestBase {
                   assertEquals(3, inspector.clazz(NullCheck.class).allMethods().size());
                   assertEquals(2, inspector.clazz(EnumComparison.class).allMethods().size());
                 });
-    for (Class<?> input : INPUTS) {
-      R8TestRunResult run =
-          compile
-              .inspectDiagnosticMessages(
-                  m -> assertEnumIsUnboxed(input.getDeclaredClasses()[0], input.getSimpleName(), m))
-              .run(parameters.getRuntime(), input)
-              .assertSuccess();
-      assertLines2By2Correct(run.getStdOut());
+    for (Class<?> main : TESTS) {
+      compile
+          .run(parameters.getRuntime(), main)
+          .assertSuccess()
+          .inspectStdOut(this::assertLines2By2Correct);
     }
   }
 

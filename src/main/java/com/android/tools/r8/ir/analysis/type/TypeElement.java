@@ -3,13 +3,17 @@
 // BSD-style license that can be found in the LICENSE file.
 package com.android.tools.r8.ir.analysis.type;
 
+import static java.util.Collections.emptySet;
+
 import com.android.tools.r8.errors.Unreachable;
 import com.android.tools.r8.graph.AppInfoWithClassHierarchy;
 import com.android.tools.r8.graph.AppView;
 import com.android.tools.r8.graph.DexDefinitionSupplier;
 import com.android.tools.r8.graph.DexItemFactory;
 import com.android.tools.r8.graph.DexType;
+import com.android.tools.r8.graph.GraphLens;
 import com.android.tools.r8.ir.code.Value;
+import java.util.Set;
 import java.util.function.Function;
 
 /** The base abstraction of lattice elements for local type analysis. */
@@ -67,9 +71,28 @@ public abstract class TypeElement {
     return ReferenceTypeElement.getNullType();
   }
 
+  public final TypeElement fixupClassTypeReferences(
+      AppView<? extends AppInfoWithClassHierarchy> appView, Function<DexType, DexType> mapping) {
+    return fixupClassTypeReferences(appView, mapping, emptySet());
+  }
+
   public TypeElement fixupClassTypeReferences(
-      Function<DexType, DexType> mapping, AppView<? extends AppInfoWithClassHierarchy> appView) {
+      AppView<? extends AppInfoWithClassHierarchy> appView,
+      Function<DexType, DexType> mapping,
+      Set<DexType> prunedTypes) {
     return this;
+  }
+
+  public final TypeElement rewrittenWithLens(
+      AppView<? extends AppInfoWithClassHierarchy> appView, GraphLens graphLens) {
+    return rewrittenWithLens(appView, graphLens, emptySet());
+  }
+
+  public final TypeElement rewrittenWithLens(
+      AppView<? extends AppInfoWithClassHierarchy> appView,
+      GraphLens graphLens,
+      Set<DexType> prunedTypes) {
+    return fixupClassTypeReferences(appView, graphLens::lookupType, prunedTypes);
   }
 
   public boolean isNullable() {

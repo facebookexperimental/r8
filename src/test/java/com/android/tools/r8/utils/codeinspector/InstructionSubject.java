@@ -17,7 +17,11 @@ public interface InstructionSubject {
     DISALLOW
   };
 
+  boolean isDexInstruction();
+
   DexInstructionSubject asDexInstruction();
+
+  boolean isCfInstruction();
 
   CfInstructionSubject asCfInstruction();
 
@@ -41,9 +45,16 @@ public interface InstructionSubject {
 
   boolean isInvokeStatic();
 
-  boolean isInvokeSpecial();
-
   boolean isInvokeDynamic();
+
+  default boolean isInvokeSpecialOrDirect() {
+    if (isCfInstruction()) {
+      return asCfInstruction().isInvokeSpecial();
+    } else {
+      assert isDexInstruction();
+      return asDexInstruction().isInvokeDirect();
+    }
+  }
 
   DexMethod getMethod();
 

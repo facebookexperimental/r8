@@ -13,6 +13,7 @@ import com.android.tools.r8.graph.DexProgramClass;
 import com.android.tools.r8.graph.DexProto;
 import com.android.tools.r8.graph.DexType;
 import com.android.tools.r8.ir.optimize.enums.eligibility.Reason;
+import com.android.tools.r8.ir.optimize.enums.eligibility.Reason.UnsupportedStaticFieldReason;
 import com.android.tools.r8.shaking.AppInfoWithLiveness;
 import com.android.tools.r8.shaking.KeepInfoCollection;
 
@@ -53,50 +54,62 @@ class EnumUnboxingCandidateAnalysis {
     if (!clazz.isEnum()) {
       return false;
     }
+
+    boolean result = true;
     if (clazz.superType != factory.enumType || !clazz.isEffectivelyFinal(appView)) {
-      enumUnboxer.reportFailure(clazz.type, Reason.SUBTYPES);
-      return false;
+      if (!enumUnboxer.reportFailure(clazz, Reason.SUBTYPES)) {
+        return false;
+      }
+      // Record that `clazz` is ineligible, and continue analysis to ensure all reasons are reported
+      // for debugging.
+      result = false;
     }
     if (clazz.instanceFields().size() > MAX_INSTANCE_FIELDS_FOR_UNBOXING) {
-      enumUnboxer.reportFailure(clazz.type, Reason.MANY_INSTANCE_FIELDS);
-      return false;
+      if (!enumUnboxer.reportFailure(clazz, Reason.MANY_INSTANCE_FIELDS)) {
+        return false;
+      }
+      result = false;
     }
     if (!enumHasBasicStaticFields(clazz)) {
-      enumUnboxer.reportFailure(clazz.type, Reason.UNEXPECTED_STATIC_FIELD);
-      return false;
+      result = false;
     }
-    return true;
+    return result;
   }
 
   // The enum should have the $VALUES static field and only fields directly referencing the enum
   // instances.
   private boolean enumHasBasicStaticFields(DexProgramClass clazz) {
+    boolean result = true;
     for (DexEncodedField staticField : clazz.staticFields()) {
-      if (isEnumField(staticField, clazz.type)) {
+      if (isEnumField(staticField, clazz)) {
         // Enum field, valid, do nothing.
-      } else if (matchesValuesField(staticField, clazz.type, factory)) {
+      } else if (matchesValuesField(staticField, clazz, factory)) {
         // Field $VALUES, valid, do nothing.
       } else if (appView.appInfo().isFieldRead(staticField)) {
         // Only non read static fields are valid, and they are assumed unused.
-        return false;
+        if (!enumUnboxer.reportFailure(
+            clazz, new UnsupportedStaticFieldReason(staticField.getReference()))) {
+          return false;
+        }
+        result = false;
       }
     }
-    return true;
+    return result;
   }
 
-  static boolean isEnumField(DexEncodedField staticField, DexType enumType) {
-    return staticField.getReference().type == enumType
-        && staticField.accessFlags.isEnum()
-        && staticField.accessFlags.isFinal();
+  static boolean isEnumField(DexEncodedField staticField, DexProgramClass enumClass) {
+    return staticField.getType() == enumClass.getType()
+        && staticField.isEnum()
+        && staticField.isFinal();
   }
 
   static boolean matchesValuesField(
-      DexEncodedField staticField, DexType enumType, DexItemFactory factory) {
-    return staticField.getReference().type.isArrayType()
-        && staticField.getReference().type.toArrayElementType(factory) == enumType
-        && staticField.accessFlags.isSynthetic()
-        && staticField.accessFlags.isFinal()
-        && staticField.getReference().name == factory.enumValuesFieldName;
+      DexEncodedField staticField, DexProgramClass enumClass, DexItemFactory factory) {
+    return staticField.getType().isArrayType()
+        && staticField.getType().toArrayElementType(factory) == enumClass.getType()
+        && staticField.isSynthetic()
+        && staticField.isFinal()
+        && staticField.getName() == factory.enumValuesFieldName;
   }
 
   private void removeEnumsInAnnotations() {
@@ -116,8 +129,9 @@ class EnumUnboxingCandidateAnalysis {
           || appView.options().testing.allowInjectedAnnotationMethods;
       DexType valueType = method.returnType().toBaseType(appView.dexItemFactory());
       if (enumToUnboxCandidates.isCandidate(valueType)) {
-        enumUnboxer.reportFailure(valueType, Reason.ANNOTATION);
-        enumToUnboxCandidates.removeCandidate(valueType);
+        if (!enumUnboxer.reportFailure(valueType, Reason.ANNOTATION)) {
+          enumToUnboxCandidates.removeCandidate(valueType);
+        }
       }
     }
   }

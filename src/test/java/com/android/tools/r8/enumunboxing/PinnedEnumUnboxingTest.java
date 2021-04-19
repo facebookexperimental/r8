@@ -7,6 +7,7 @@ package com.android.tools.r8.enumunboxing;
 import com.android.tools.r8.NeverClassInline;
 import com.android.tools.r8.R8TestCompileResult;
 import com.android.tools.r8.TestParameters;
+import com.android.tools.r8.enumunboxing.PinnedEnumUnboxingTest.MainWithKeptEnum.MyEnum;
 import java.util.List;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -16,7 +17,7 @@ import org.junit.runners.Parameterized.Parameters;
 @RunWith(Parameterized.class)
 public class PinnedEnumUnboxingTest extends EnumUnboxingTestBase {
 
-  private static final Class<?>[] BOXED = {MainWithKeptEnum.class, MainWithKeptEnumArray.class};
+  private static final Class<?>[] TESTS = {MainWithKeptEnum.class, MainWithKeptEnumArray.class};
 
   private final TestParameters parameters;
   private final boolean enumValueOptimization;
@@ -39,21 +40,20 @@ public class PinnedEnumUnboxingTest extends EnumUnboxingTestBase {
     R8TestCompileResult compileResult =
         testForR8(parameters.getBackend())
             .addInnerClasses(PinnedEnumUnboxingTest.class)
-            .addKeepMainRules(BOXED)
-            .addKeepClassRules(MainWithKeptEnum.MyEnum.class)
+            .addKeepMainRules(TESTS)
+            .addKeepClassRules(MyEnum.class)
             .addKeepMethodRules(MainWithKeptEnumArray.class, "keptMethod()")
             .addKeepRules(enumKeepRules.getKeepRules())
+            .addEnumUnboxingInspector(
+                inspector ->
+                    inspector.assertNotUnboxed(
+                        MainWithKeptEnum.MyEnum.class, MainWithKeptEnumArray.MyEnum.class))
             .enableNeverClassInliningAnnotations()
             .addOptionsModification(opt -> enableEnumOptions(opt, enumValueOptimization))
-            .allowDiagnosticInfoMessages()
             .setMinApi(parameters.getApiLevel())
             .compile();
-    for (Class<?> boxed : BOXED) {
-      compileResult
-          .inspectDiagnosticMessages(
-              m -> assertEnumIsBoxed(boxed.getDeclaredClasses()[0], boxed.getSimpleName(), m))
-          .run(parameters.getRuntime(), boxed)
-          .assertSuccessWithOutputLines("0");
+    for (Class<?> main : TESTS) {
+      compileResult.run(parameters.getRuntime(), main).assertSuccessWithOutputLines("0");
     }
   }
 

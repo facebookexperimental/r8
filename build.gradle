@@ -46,7 +46,7 @@ ext {
     // The kotlin version is only here to specify the kotlin language level,
     // all kotlin compilations are done in tests.
     kotlinVersion = '1.3.72'
-    kotlinExtMetadataJVMVersion = '0.1.0'
+    kotlinExtMetadataJVMVersion = '0.2.0'
     smaliVersion = '2.2b4'
     errorproneVersion = '2.3.2'
     testngVersion = '6.10'
@@ -327,6 +327,7 @@ def cloudDependencies = [
                 "kotlin/kotlin-compiler-1.3.41",
                 "kotlin/kotlin-compiler-1.3.72",
                 "kotlin/kotlin-compiler-1.4.20",
+                "kotlin/kotlin-compiler-1.5.0-M2",
                 "kotlinx-coroutines-1.3.6",
                 "openjdk/openjdk-rt-1.8",
                 "openjdk/desugar_jdk_libs",
@@ -441,7 +442,8 @@ def x20Dependencies = [
         "youtube/youtube.android_14.44",
         "youtube/youtube.android_15.08",
         "youtube/youtube.android_15.09",
-        "youtube/youtube.android_15.33"
+        "youtube/youtube.android_15.33",
+        "youtube/youtube.android_16.12"
     ],
 ]
 
@@ -731,7 +733,7 @@ static mergeServiceFiles(ShadowJar task) {
 task repackageDepsNew(type: ShadowJar) {
     configurations = [project.configurations.runtimeClasspath]
     mergeServiceFiles(it)
-    exclude { it.getRelativePath().getPathString() == "module-info.class" }
+    exclude { it.getRelativePath().getPathString().endsWith("module-info.class") }
     exclude { it.getRelativePath().getPathString().startsWith("META-INF/maven/") }
     baseName 'deps_all'
 }

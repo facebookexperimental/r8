@@ -4,6 +4,8 @@
 
 package com.android.tools.r8.ir.optimize.info;
 
+import static java.util.Collections.emptySet;
+
 import com.android.tools.r8.graph.AppInfoWithClassHierarchy;
 import com.android.tools.r8.graph.AppView;
 import com.android.tools.r8.graph.DexType;
@@ -13,7 +15,7 @@ import com.android.tools.r8.ir.analysis.type.TypeElement;
 import com.android.tools.r8.ir.analysis.value.AbstractValue;
 import com.android.tools.r8.ir.analysis.value.UnknownValue;
 import com.android.tools.r8.shaking.AppInfoWithLiveness;
-import java.util.function.Function;
+import java.util.Set;
 
 /**
  * Optimization info for fields.
@@ -35,13 +37,20 @@ public class MutableFieldOptimizationInfo extends FieldOptimizationInfo {
   private TypeElement dynamicUpperBoundType = null;
 
   public MutableFieldOptimizationInfo fixupClassTypeReferences(
-      Function<DexType, DexType> mapping, AppView<? extends AppInfoWithClassHierarchy> appView) {
+      AppView<? extends AppInfoWithClassHierarchy> appView, GraphLens lens) {
+    return fixupClassTypeReferences(appView, lens, emptySet());
+  }
+
+  public MutableFieldOptimizationInfo fixupClassTypeReferences(
+      AppView<? extends AppInfoWithClassHierarchy> appView,
+      GraphLens lens,
+      Set<DexType> prunedTypes) {
     if (dynamicUpperBoundType != null) {
-      dynamicUpperBoundType = dynamicUpperBoundType.fixupClassTypeReferences(mapping, appView);
+      dynamicUpperBoundType = dynamicUpperBoundType.rewrittenWithLens(appView, lens, prunedTypes);
     }
     if (dynamicLowerBoundType != null) {
       TypeElement dynamicLowerBoundType =
-          this.dynamicLowerBoundType.fixupClassTypeReferences(mapping, appView);
+          this.dynamicLowerBoundType.rewrittenWithLens(appView, lens);
       if (dynamicLowerBoundType.isClassType()) {
         this.dynamicLowerBoundType = dynamicLowerBoundType.asClassType();
       } else {

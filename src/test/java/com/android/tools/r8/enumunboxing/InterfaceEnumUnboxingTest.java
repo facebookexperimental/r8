@@ -8,7 +8,6 @@ import com.android.tools.r8.NeverClassInline;
 import com.android.tools.r8.NeverInline;
 import com.android.tools.r8.NoVerticalClassMerging;
 import com.android.tools.r8.R8TestCompileResult;
-import com.android.tools.r8.R8TestRunResult;
 import com.android.tools.r8.TestParameters;
 import java.util.List;
 import org.junit.Test;
@@ -19,11 +18,9 @@ import org.junit.runners.Parameterized.Parameters;
 @RunWith(Parameterized.class)
 public class InterfaceEnumUnboxingTest extends EnumUnboxingTestBase {
 
-  private static final Class<?>[] FAILURES = {
-    FailureDefaultMethodUsed.class, FailureUsedAsInterface.class,
-  };
-
-  private static final Class<?>[] SUCCESSES = {
+  private static final Class<?>[] TESTS = {
+    FailureDefaultMethodUsed.class,
+    FailureUsedAsInterface.class,
     SuccessAbstractMethod.class,
     SuccessEmptyInterface.class,
     SuccessUnusedDefaultMethod.class,
@@ -52,44 +49,37 @@ public class InterfaceEnumUnboxingTest extends EnumUnboxingTestBase {
     R8TestCompileResult compile =
         testForR8(parameters.getBackend())
             .addInnerClasses(InterfaceEnumUnboxingTest.class)
-            .addKeepMainRules(SUCCESSES)
-            .addKeepMainRules(FAILURES)
+            .addKeepMainRules(TESTS)
+            .addEnumUnboxingInspector(
+                inspector ->
+                    inspector
+                        .assertUnboxed(
+                            SuccessAbstractMethod.EnumInterface.class,
+                            SuccessEmptyInterface.EnumInterface.class,
+                            SuccessUnusedDefaultMethod.EnumInterface.class,
+                            SuccessUnusedDefaultMethodOverride.EnumInterface.class,
+                            SuccessUnusedDefaultMethodOverrideEnum.EnumInterface.class)
+                        .assertNotUnboxed(
+                            FailureDefaultMethodUsed.EnumInterface.class,
+                            FailureUsedAsInterface.EnumInterface.class))
             .noMinification()
             .enableNoVerticalClassMergingAnnotations()
             .enableInliningAnnotations()
             .enableNeverClassInliningAnnotations()
             .addKeepRules(enumKeepRules.getKeepRules())
             .addOptionsModification(opt -> enableEnumOptions(opt, enumValueOptimization))
-            .allowDiagnosticInfoMessages()
             .setMinApi(parameters.getApiLevel())
             .compile();
-    for (Class<?> failure : FAILURES) {
-      testClass(compile, failure, true);
-    }
-    for (Class<?> success : SUCCESSES) {
-      testClass(compile, success, false);
+    for (Class<?> main : TESTS) {
+      testClass(compile, main);
     }
   }
 
-  private void testClass(R8TestCompileResult compile, Class<?> testClass, boolean failure)
-      throws Exception {
-    R8TestRunResult run =
-        compile
-            .inspectDiagnosticMessages(
-                m -> {
-                  for (Class<?> declaredClass : testClass.getDeclaredClasses()) {
-                    if (declaredClass.isEnum()) {
-                      if (failure) {
-                        assertEnumIsBoxed(declaredClass, testClass.getSimpleName(), m);
-                      } else {
-                        assertEnumIsUnboxed(declaredClass, testClass.getSimpleName(), m);
-                      }
-                    }
-                  }
-                })
-            .run(parameters.getRuntime(), testClass)
-            .assertSuccess();
-    assertLines2By2Correct(run.getStdOut());
+  private void testClass(R8TestCompileResult compile, Class<?> testClass) throws Exception {
+    compile
+        .run(parameters.getRuntime(), testClass)
+        .assertSuccess()
+        .inspectStdOut(this::assertLines2By2Correct);
   }
 
   static class SuccessEmptyInterface {

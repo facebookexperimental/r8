@@ -3,8 +3,11 @@
 // BSD-style license that can be found in the LICENSE file.
 package com.android.tools.r8.naming;
 
+import com.android.tools.r8.naming.ClassNamingForNameMapper.MappedRange;
 import com.android.tools.r8.naming.MemberNaming.Signature;
+import com.android.tools.r8.naming.mappinginformation.MappingInformation;
 import com.android.tools.r8.utils.ThrowingConsumer;
+import java.util.function.Consumer;
 
 /**
  * Stores name information for a class.
@@ -20,11 +23,14 @@ public interface ClassNaming {
     public abstract ClassNaming build();
 
     /** This is an optional method, may be implemented as no-op */
-    public abstract void addMappedRange(
+    public abstract MappedRange addMappedRange(
         Range obfuscatedRange,
         MemberNaming.MethodSignature originalSignature,
         Object originalRange,
         String obfuscatedName);
+
+    public abstract void addMappingInformation(
+        MappingInformation info, Consumer<MappingInformation> onProhibitedAddition);
   }
 
   MemberNaming lookup(Signature renamedSignature);

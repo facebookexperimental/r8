@@ -3,10 +3,7 @@
 // BSD-style license that can be found in the LICENSE file.
 package com.android.tools.r8.internal;
 
-import static com.android.tools.r8.ToolHelper.isLocalDevelopment;
-import static com.android.tools.r8.ToolHelper.shouldRunSlowTests;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assume.assumeTrue;
 
 import com.android.tools.r8.R8TestCompileResult;
 import com.android.tools.r8.TestParameters;
@@ -23,7 +20,7 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 @RunWith(Parameterized.class)
-public class YouTubeV1533TreeShakeJarVerificationTest extends YouTubeCompilationBase {
+public class YouTubeV1533TreeShakeJarVerificationTest extends YouTubeCompilationTestBase {
 
   private static final boolean DUMP = false;
   private static final int MAX_SIZE = 27500000;
@@ -41,8 +38,8 @@ public class YouTubeV1533TreeShakeJarVerificationTest extends YouTubeCompilation
   @Test
   public void testR8() throws Exception {
     // TODO(b/141603168): Enable this on the bots.
-    assumeTrue(isLocalDevelopment());
-    assumeTrue(shouldRunSlowTests());
+    // assumeTrue(isLocalDevelopment());
+    // assumeTrue(shouldRunSlowTests());
 
     LibrarySanitizer librarySanitizer =
         new LibrarySanitizer(temp)
@@ -57,7 +54,9 @@ public class YouTubeV1533TreeShakeJarVerificationTest extends YouTubeCompilation
             .addLibraryFiles(librarySanitizer.getSanitizedLibrary())
             .addKeepRuleFiles(getKeepRuleFiles())
             .addMainDexRuleFiles(getMainDexRuleFiles())
+            .addIgnoreWarnings()
             .allowDiagnosticMessages()
+            .allowUnusedDontWarnPatterns()
             .allowUnusedProguardConfigurationRules()
             .setMinApi(AndroidApiLevel.H_MR2)
             .compile();

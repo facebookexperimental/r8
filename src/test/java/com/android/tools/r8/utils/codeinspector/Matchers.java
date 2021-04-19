@@ -521,9 +521,8 @@ public class Matchers {
         RetraceFrameElement single = item.stream().collect(Collectors.toSingle());
         Box<LinePosition> currentPosition = new Box<>(startPosition);
         Box<Boolean> returnValue = new Box<>();
-        single.visitFrames(
+        single.visitAllFrames(
             (method, __) -> {
-              boolean sameMethod;
               LinePosition currentInline = currentPosition.get();
               if (currentInline == null) {
                 returnValue.set(false);
@@ -533,7 +532,7 @@ public class Matchers {
                 returnValue.set(false);
                 return;
               }
-              sameMethod =
+              boolean sameMethod =
                   method.asKnown().getMethodReference().equals(currentInline.methodReference);
               boolean samePosition =
                   method.getOriginalPositionOrDefault(currentInline.minifiedPosition)
@@ -560,7 +559,7 @@ public class Matchers {
       protected boolean matchesSafely(RetraceFrameResult item) {
         RetraceFrameElement single = item.stream().collect(Collectors.toSingle());
         Box<Boolean> matches = new Box<>(true);
-        single.visitFrames(
+        single.visitAllFrames(
             (method, index) -> {
               StackTraceLine stackTraceLine = stackTrace.get(index);
               if (!stackTraceLine.methodName.equals(method.getMethodName())
