@@ -4,10 +4,7 @@
 
 package com.android.tools.r8.graph;
 
-import static com.android.tools.r8.graph.GenericSignature.EMPTY_SUPER_INTERFACES;
 import static com.android.tools.r8.graph.GenericSignature.EMPTY_TYPE_ARGUMENTS;
-import static com.android.tools.r8.graph.GenericSignature.EMPTY_TYPE_PARAMS;
-import static com.android.tools.r8.graph.GenericSignature.EMPTY_TYPE_SIGNATURES;
 import static com.google.common.base.Predicates.alwaysFalse;
 
 import com.android.tools.r8.graph.GenericSignature.ClassSignature;
@@ -28,9 +25,9 @@ public class GenericSignatureTypeRewriter {
   private final DexItemFactory factory;
   private final Predicate<DexType> wasPruned;
   private final Function<DexType, DexType> lookupType;
-  private final DexProgramClass context;
+  private final DexType context;
 
-  private final FieldTypeSignature objectTypeSignature;
+  private final ClassTypeSignature objectTypeSignature;
 
   public GenericSignatureTypeRewriter(AppView<?> appView, DexProgramClass context) {
     this(
@@ -39,14 +36,14 @@ public class GenericSignatureTypeRewriter {
             ? appView.appInfo().withLiveness()::wasPruned
             : alwaysFalse(),
         appView.graphLens()::lookupType,
-        context);
+        context.getType());
   }
 
   public GenericSignatureTypeRewriter(
       DexItemFactory factory,
       Predicate<DexType> wasPruned,
       Function<DexType, DexType> lookupType,
-      DexProgramClass context) {
+      DexType context) {
     this.factory = factory;
     this.wasPruned = wasPruned;
     this.lookupType = lookupType;
@@ -120,20 +117,28 @@ public class GenericSignatureTypeRewriter {
     public List<FormalTypeParameter> visitFormalTypeParameters(
         List<FormalTypeParameter> formalTypeParameters) {
       if (formalTypeParameters.isEmpty()) {
-        return EMPTY_TYPE_PARAMS;
+        return formalTypeParameters;
       }
       return ListUtils.mapOrElse(formalTypeParameters, this::visitFormalTypeParameter);
     }
 
     @Override
     public FormalTypeParameter visitFormalTypeParameter(FormalTypeParameter formalTypeParameter) {
-      return formalTypeParameter.visit(this);
+      FormalTypeParameter rewritten = formalTypeParameter.visit(this);
+      // Guard against no information being present in bounds.
+      boolean isEmptyClassBound =
+          rewritten.getClassBound() == null || rewritten.getClassBound().hasNoSignature();
+      if (isEmptyClassBound && rewritten.getInterfaceBounds().isEmpty()) {
+        return new FormalTypeParameter(
+            formalTypeParameter.getName(), objectTypeSignature, rewritten.getInterfaceBounds());
+      }
+      return rewritten;
     }
 
     @Override
     public ClassTypeSignature visitSuperClass(ClassTypeSignature classTypeSignature) {
       ClassTypeSignature rewritten = classTypeSignature.visit(this);
-      return rewritten == null || rewritten.type() == context.type
+      return rewritten == null || rewritten.type() == context
           ? new ClassTypeSignature(factory.objectType, EMPTY_TYPE_ARGUMENTS)
           : rewritten;
     }
@@ -142,7 +147,7 @@ public class GenericSignatureTypeRewriter {
     public List<ClassTypeSignature> visitSuperInterfaces(
         List<ClassTypeSignature> interfaceSignatures) {
       if (interfaceSignatures.isEmpty()) {
-        return EMPTY_SUPER_INTERFACES;
+        return interfaceSignatures;
       }
       return ListUtils.mapOrElse(interfaceSignatures, this::visitSuperInterface);
     }
@@ -150,13 +155,13 @@ public class GenericSignatureTypeRewriter {
     @Override
     public ClassTypeSignature visitSuperInterface(ClassTypeSignature classTypeSignature) {
       ClassTypeSignature rewritten = classTypeSignature.visit(this);
-      return rewritten == null || rewritten.type() == context.type ? null : rewritten;
+      return rewritten == null || rewritten.type() == context ? null : rewritten;
     }
 
     @Override
     public List<TypeSignature> visitMethodTypeSignatures(List<TypeSignature> typeSignatures) {
       if (typeSignatures.isEmpty()) {
-        return EMPTY_TYPE_SIGNATURES;
+        return typeSignatures;
       }
       return ListUtils.mapOrElse(
           typeSignatures,
@@ -186,7 +191,7 @@ public class GenericSignatureTypeRewriter {
     @Override
     public List<TypeSignature> visitThrowsSignatures(List<TypeSignature> typeSignatures) {
       if (typeSignatures.isEmpty()) {
-        return EMPTY_TYPE_SIGNATURES;
+        return typeSignatures;
       }
       // If a throwing type is no longer found we remove it from the signature.
       return ListUtils.mapOrElse(typeSignatures, this::visitTypeSignature);
@@ -199,11 +204,8 @@ public class GenericSignatureTypeRewriter {
 
     @Override
     public List<FieldTypeSignature> visitInterfaceBounds(List<FieldTypeSignature> fieldSignatures) {
-      if (fieldSignatures == null) {
-        return null;
-      }
-      if (fieldSignatures.isEmpty()) {
-        return EMPTY_TYPE_ARGUMENTS;
+      if (fieldSignatures == null || fieldSignatures.isEmpty()) {
+        return fieldSignatures;
       }
       return ListUtils.mapOrElse(fieldSignatures, this::visitFieldTypeSignature);
     }
@@ -221,7 +223,7 @@ public class GenericSignatureTypeRewriter {
     @Override
     public List<FieldTypeSignature> visitTypeArguments(List<FieldTypeSignature> typeArguments) {
       if (typeArguments.isEmpty()) {
-        return EMPTY_TYPE_ARGUMENTS;
+        return typeArguments;
       }
       return ListUtils.mapOrElse(
           typeArguments,

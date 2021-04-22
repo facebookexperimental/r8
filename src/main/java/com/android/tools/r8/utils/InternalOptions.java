@@ -82,6 +82,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -1268,6 +1269,8 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
 
     public BiConsumer<DexItemFactory, HorizontallyMergedClasses> horizontallyMergedClassesConsumer =
         ConsumerUtils.emptyBiConsumer();
+    public BiFunction<Iterable<DexProgramClass>, DexProgramClass, DexProgramClass>
+        horizontalClassMergingTarget = (candidates, target) -> target;
 
     public BiConsumer<DexItemFactory, EnumDataMap> unboxedEnumsConsumer =
         ConsumerUtils.emptyBiConsumer();
@@ -1515,8 +1518,7 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
   }
 
   public boolean canUseDexPcAsDebugInformation() {
-    // TODO(b/37830524): Enable for min-api 26 (OREO) and above.
-    return enablePcDebugInfoOutput;
+    return enablePcDebugInfoOutput && !debug && hasMinApi(AndroidApiLevel.O);
   }
 
   public boolean isInterfaceMethodDesugaringEnabled() {

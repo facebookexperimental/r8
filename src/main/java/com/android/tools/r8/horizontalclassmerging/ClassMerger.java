@@ -8,6 +8,7 @@ import static com.google.common.base.Predicates.not;
 
 import com.android.tools.r8.cf.CfVersion;
 import com.android.tools.r8.dex.Constants;
+import com.android.tools.r8.graph.AppInfoWithClassHierarchy;
 import com.android.tools.r8.graph.AppView;
 import com.android.tools.r8.graph.CfCode;
 import com.android.tools.r8.graph.DexAnnotationSet;
@@ -17,6 +18,7 @@ import com.android.tools.r8.graph.DexEncodedField;
 import com.android.tools.r8.graph.DexEncodedMethod;
 import com.android.tools.r8.graph.DexItemFactory;
 import com.android.tools.r8.graph.DexMethod;
+import com.android.tools.r8.graph.DexMethodSignature;
 import com.android.tools.r8.graph.DexProgramClass;
 import com.android.tools.r8.graph.DexProto;
 import com.android.tools.r8.graph.DexType;
@@ -30,10 +32,8 @@ import com.android.tools.r8.graph.ProgramMethod;
 import com.android.tools.r8.ir.analysis.value.NumberFromIntervalValue;
 import com.android.tools.r8.ir.optimize.info.OptimizationFeedback;
 import com.android.tools.r8.ir.optimize.info.OptimizationFeedbackSimple;
-import com.android.tools.r8.shaking.AppInfoWithLiveness;
+import com.android.tools.r8.shaking.KeepClassInfo;
 import com.android.tools.r8.utils.IterableUtils;
-import com.android.tools.r8.utils.MethodSignatureEquivalence;
-import com.google.common.base.Equivalence.Wrapper;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Sets;
 import it.unimi.dsi.fastutil.objects.Reference2IntMap;
@@ -41,6 +41,7 @@ import it.unimi.dsi.fastutil.objects.Reference2IntOpenHashMap;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -58,7 +59,7 @@ public class ClassMerger {
 
   private static final OptimizationFeedback feedback = OptimizationFeedbackSimple.getInstance();
 
-  private final AppView<AppInfoWithLiveness> appView;
+  private final AppView<? extends AppInfoWithClassHierarchy> appView;
   private final MergeGroup group;
   private final DexItemFactory dexItemFactory;
   private final ClassInitializerSynthesizedCode classInitializerSynthesizedCode;
@@ -72,7 +73,7 @@ public class ClassMerger {
   private final Collection<ConstructorMerger> constructorMergers;
 
   private ClassMerger(
-      AppView<AppInfoWithLiveness> appView,
+      AppView<? extends AppInfoWithClassHierarchy> appView,
       HorizontalClassMergerGraphLens.Builder lensBuilder,
       MergeGroup group,
       Collection<VirtualMethodMerger> virtualMethodMergers,
@@ -191,6 +192,8 @@ public class ClassMerger {
   }
 
   void appendClassIdField() {
+    assert appView.hasLiveness();
+
     boolean deprecated = false;
     boolean d8R8Synthesized = true;
     DexEncodedField classIdField =
@@ -211,7 +214,7 @@ public class ClassMerger {
     // be able to recognize that {0, 1, 2, 3} is useless, we record that the value of the field is
     // known to be in [0; 3] here.
     NumberFromIntervalValue abstractValue = new NumberFromIntervalValue(0, group.size() - 1);
-    feedback.recordFieldHasAbstractValue(classIdField, appView, abstractValue);
+    feedback.recordFieldHasAbstractValue(classIdField, appView.withLiveness(), abstractValue);
 
     classInstanceFieldsMerger.setClassIdField(classIdField);
   }
@@ -261,7 +264,10 @@ public class ClassMerger {
 
   public void mergeGroup(SyntheticArgumentClass syntheticArgumentClass) {
     fixAccessFlags();
-    appendClassIdField();
+
+    if (group.hasClassIdField()) {
+      appendClassIdField();
+    }
 
     mergeAnnotations();
     mergeInterfaces();
@@ -275,102 +281,131 @@ public class ClassMerger {
   }
 
   public static class Builder {
-    private final AppView<AppInfoWithLiveness> appView;
+    private final AppView<? extends AppInfoWithClassHierarchy> appView;
     private final MergeGroup group;
-    private final ClassInitializerSynthesizedCode.Builder classInitializerSynthesizedCodeBuilder =
-        new ClassInitializerSynthesizedCode.Builder();
-    private final Map<DexProto, ConstructorMerger.Builder> constructorMergerBuilders =
-        new LinkedHashMap<>();
-    private final List<ConstructorMerger.Builder> unmergedConstructorBuilders = new ArrayList<>();
-    private final Map<Wrapper<DexMethod>, VirtualMethodMerger.Builder> virtualMethodMergerBuilders =
-        new LinkedHashMap<>();
 
-    public Builder(AppView<AppInfoWithLiveness> appView, MergeGroup group) {
+    public Builder(AppView<? extends AppInfoWithClassHierarchy> appView, MergeGroup group) {
       this.appView = appView;
       this.group = group;
     }
 
-    private Builder setup() {
-      DexItemFactory dexItemFactory = appView.dexItemFactory();
-      DexProgramClass target =
-          IterableUtils.findOrDefault(group, DexClass::isPublic, group.iterator().next());
-      // TODO(b/165498187): ensure the name for the field is fresh
-      group.setClassIdField(
-          dexItemFactory.createField(
-              target.getType(), dexItemFactory.intType, CLASS_ID_FIELD_NAME));
-      group.setTarget(target);
-      setupForMethodMerging(target);
-      group.forEachSource(this::setupForMethodMerging);
-      return this;
-    }
-
-    private void setupForMethodMerging(DexProgramClass toMerge) {
-      if (toMerge.hasClassInitializer()) {
-        classInitializerSynthesizedCodeBuilder.add(toMerge.getClassInitializer());
+    private void selectTarget() {
+      Iterable<DexProgramClass> candidates = Iterables.filter(group, DexClass::isPublic);
+      if (IterableUtils.isEmpty(candidates)) {
+        candidates = group;
       }
-      toMerge.forEachProgramDirectMethodMatching(
-          DexEncodedMethod::isInstanceInitializer, this::addConstructor);
-      toMerge.forEachProgramVirtualMethod(this::addVirtualMethod);
+      Iterator<DexProgramClass> candidateIterator = candidates.iterator();
+      DexProgramClass target = IterableUtils.first(candidates);
+      while (candidateIterator.hasNext()) {
+        DexProgramClass current = candidateIterator.next();
+        KeepClassInfo keepClassInfo = appView.getKeepInfo().getClassInfo(current);
+        if (keepClassInfo.isMinificationAllowed(appView.options())) {
+          target = current;
+          break;
+        }
+        // Select the target with the shortest name.
+        if (current.getType().getDescriptor().size() < target.getType().getDescriptor().size) {
+          target = current;
+        }
+      }
+      group.setTarget(appView.testing().horizontalClassMergingTarget.apply(candidates, target));
     }
 
-    private void addConstructor(ProgramMethod method) {
-      assert method.getDefinition().isInstanceInitializer();
+    private ClassInitializerSynthesizedCode createClassInitializerMerger() {
+      ClassInitializerSynthesizedCode.Builder builder =
+          new ClassInitializerSynthesizedCode.Builder();
+      group.forEach(
+          clazz -> {
+            if (clazz.hasClassInitializer()) {
+              builder.add(clazz.getClassInitializer());
+            }
+          });
+      return builder.build();
+    }
+
+    private List<ConstructorMerger> createInstanceInitializerMergers() {
+      List<ConstructorMerger> constructorMergers = new ArrayList<>();
       if (appView.options().horizontalClassMergerOptions().isConstructorMergingEnabled()) {
-        constructorMergerBuilders
-            .computeIfAbsent(
-                method.getDefinition().getProto(), ignore -> new ConstructorMerger.Builder(appView))
-            .add(method.getDefinition());
+        Map<DexProto, ConstructorMerger.Builder> buildersByProto = new LinkedHashMap<>();
+        group.forEach(
+            clazz ->
+                clazz.forEachProgramDirectMethodMatching(
+                    DexEncodedMethod::isInstanceInitializer,
+                    method ->
+                        buildersByProto
+                            .computeIfAbsent(
+                                method.getDefinition().getProto(),
+                                ignore -> new ConstructorMerger.Builder(appView))
+                            .add(method.getDefinition())));
+        for (ConstructorMerger.Builder builder : buildersByProto.values()) {
+          constructorMergers.addAll(builder.build(group));
+        }
       } else {
-        unmergedConstructorBuilders.add(
-            new ConstructorMerger.Builder(appView).add(method.getDefinition()));
+        group.forEach(
+            clazz ->
+                clazz.forEachProgramDirectMethodMatching(
+                    DexEncodedMethod::isInstanceInitializer,
+                    method ->
+                        constructorMergers.addAll(
+                            new ConstructorMerger.Builder(appView)
+                                .add(method.getDefinition())
+                                .build(group))));
       }
+
+      // Try and merge the constructors with the most arguments first, to avoid using synthetic
+      // arguments if possible.
+      constructorMergers.sort(Comparator.comparing(ConstructorMerger::getArity).reversed());
+      return constructorMergers;
     }
 
-    private void addVirtualMethod(ProgramMethod method) {
-      assert method.getDefinition().isNonPrivateVirtualMethod();
-      virtualMethodMergerBuilders
-          .computeIfAbsent(
-              MethodSignatureEquivalence.get().wrap(method.getReference()),
-              ignore -> new VirtualMethodMerger.Builder())
-          .add(method);
-    }
-
-    private Collection<ConstructorMerger.Builder> getConstructorMergerBuilders() {
-      return appView.options().horizontalClassMergerOptions().isConstructorMergingEnabled()
-          ? constructorMergerBuilders.values()
-          : unmergedConstructorBuilders;
-    }
-
-    public ClassMerger build(
-        HorizontalClassMergerGraphLens.Builder lensBuilder) {
-      setup();
+    private List<VirtualMethodMerger> createVirtualMethodMergers() {
+      Map<DexMethodSignature, VirtualMethodMerger.Builder> virtualMethodMergerBuilders =
+          new LinkedHashMap<>();
+      group.forEach(
+          clazz ->
+              clazz.forEachProgramVirtualMethod(
+                  virtualMethod ->
+                      virtualMethodMergerBuilders
+                          .computeIfAbsent(
+                              virtualMethod.getReference().getSignature(),
+                              ignore -> new VirtualMethodMerger.Builder())
+                          .add(virtualMethod)));
       List<VirtualMethodMerger> virtualMethodMergers =
           new ArrayList<>(virtualMethodMergerBuilders.size());
       for (VirtualMethodMerger.Builder builder : virtualMethodMergerBuilders.values()) {
         virtualMethodMergers.add(builder.build(appView, group));
       }
-      // Try and merge the functions with the most arguments first, to avoid using synthetic
-      // arguments if possible.
-      virtualMethodMergers.sort(Comparator.comparing(VirtualMethodMerger::getArity).reversed());
+      return virtualMethodMergers;
+    }
 
-      List<ConstructorMerger> constructorMergers =
-          new ArrayList<>(constructorMergerBuilders.size());
-      for (ConstructorMerger.Builder builder : getConstructorMergerBuilders()) {
-        constructorMergers.addAll(builder.build(appView, group));
+    private void createClassIdField() {
+      // TODO(b/165498187): ensure the name for the field is fresh
+      DexItemFactory dexItemFactory = appView.dexItemFactory();
+      group.setClassIdField(
+          dexItemFactory.createField(
+              group.getTarget().getType(), dexItemFactory.intType, CLASS_ID_FIELD_NAME));
+    }
+
+    public ClassMerger build(
+        HorizontalClassMergerGraphLens.Builder lensBuilder) {
+      selectTarget();
+
+      List<VirtualMethodMerger> virtualMethodMergers = createVirtualMethodMergers();
+
+      boolean requiresClassIdField =
+          virtualMethodMergers.stream()
+              .anyMatch(virtualMethodMerger -> !virtualMethodMerger.isNopOrTrivial());
+      if (requiresClassIdField) {
+        createClassIdField();
       }
-
-      // Try and merge the functions with the most arguments first, to avoid using synthetic
-      // arguments if possible.
-      virtualMethodMergers.sort(Comparator.comparing(VirtualMethodMerger::getArity).reversed());
-      constructorMergers.sort(Comparator.comparing(ConstructorMerger::getArity).reversed());
 
       return new ClassMerger(
           appView,
           lensBuilder,
           group,
           virtualMethodMergers,
-          constructorMergers,
-          classInitializerSynthesizedCodeBuilder.build());
+          createInstanceInitializerMergers(),
+          createClassInitializerMerger());
     }
   }
 }

@@ -8,6 +8,7 @@ import static com.android.tools.r8.dex.Constants.TEMPORARY_INSTANCE_INITIALIZER_
 
 import com.android.tools.r8.cf.CfVersion;
 import com.android.tools.r8.dex.Constants;
+import com.android.tools.r8.graph.AppInfoWithClassHierarchy;
 import com.android.tools.r8.graph.AppView;
 import com.android.tools.r8.graph.DexAnnotationSet;
 import com.android.tools.r8.graph.DexEncodedMethod;
@@ -20,7 +21,6 @@ import com.android.tools.r8.graph.ParameterAnnotationsList;
 import com.android.tools.r8.ir.conversion.ExtraConstantIntParameter;
 import com.android.tools.r8.ir.conversion.ExtraParameter;
 import com.android.tools.r8.ir.conversion.ExtraUnusedNullParameter;
-import com.android.tools.r8.shaking.AppInfoWithLiveness;
 import com.android.tools.r8.utils.ListUtils;
 import com.android.tools.r8.utils.structural.Ordered;
 import it.unimi.dsi.fastutil.ints.Int2ReferenceAVLTreeMap;
@@ -69,11 +69,10 @@ public class ConstructorMerger {
   public static class Builder {
     private int estimatedDexCodeSize;
     private final List<List<DexEncodedMethod>> constructorGroups = new ArrayList<>();
-    private AppView<AppInfoWithLiveness> appView;
+    private final AppView<? extends AppInfoWithClassHierarchy> appView;
 
-    public Builder(AppView<AppInfoWithLiveness> appView) {
+    public Builder(AppView<? extends AppInfoWithClassHierarchy> appView) {
       this.appView = appView;
-
       createNewGroup();
     }
 
@@ -96,7 +95,7 @@ public class ConstructorMerger {
       return this;
     }
 
-    public List<ConstructorMerger> build(AppView<?> appView, MergeGroup group) {
+    public List<ConstructorMerger> build(MergeGroup group) {
       assert constructorGroups.stream().noneMatch(List::isEmpty);
       return ListUtils.map(
           constructorGroups, constructors -> new ConstructorMerger(appView, group, constructors));
@@ -185,7 +184,7 @@ public class ConstructorMerger {
         new ConstructorEntryPointSynthesizedCode(
             typeConstructorClassMap,
             newConstructorReference,
-            group.getClassIdField(),
+            group.hasClassIdField() ? group.getClassIdField() : null,
             bridgeConstructorReference);
     DexEncodedMethod newConstructor =
         new DexEncodedMethod(

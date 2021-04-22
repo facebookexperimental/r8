@@ -7,11 +7,11 @@ import static com.android.tools.r8.utils.DescriptorUtils.getClassBinaryNameFromD
 import static com.android.tools.r8.utils.DescriptorUtils.getDescriptorFromClassBinaryName;
 import static com.google.common.base.Predicates.alwaysTrue;
 
+import com.android.tools.r8.DiagnosticsHandler;
 import com.android.tools.r8.errors.Unreachable;
 import com.android.tools.r8.naming.NamingLens;
 import com.android.tools.r8.origin.Origin;
 import com.android.tools.r8.utils.DescriptorUtils;
-import com.android.tools.r8.utils.Reporter;
 import com.google.common.collect.ImmutableList;
 import java.lang.reflect.GenericSignatureFormatError;
 import java.nio.CharBuffer;
@@ -139,6 +139,10 @@ public class GenericSignature {
       return false;
     }
 
+    default boolean isValid() {
+      return !isInvalid();
+    }
+
     DexDefinitionSignature<T> toInvalid();
   }
 
@@ -153,6 +157,7 @@ public class GenericSignature {
       this.name = name;
       this.classBound = classBound;
       this.interfaceBounds = interfaceBounds;
+      assert interfaceBounds != null;
     }
 
     public String getName() {
@@ -516,7 +521,9 @@ public class GenericSignature {
       this.type = type;
       this.typeArguments = typeArguments;
       this.enclosingTypeSignature = enclosingTypeSignature;
+      assert type != DexItemFactory.nullValueType || indicator == WildcardIndicator.NOT_AN_ARGUMENT;
       assert typeArguments.stream().allMatch(FieldTypeSignature::isArgument);
+      assert typeArguments.stream().allMatch(FieldTypeSignature::hasSignature);
     }
 
     public DexType type() {
@@ -540,6 +547,7 @@ public class GenericSignature {
     @Override
     public ClassTypeSignature asArgument(WildcardIndicator indicator) {
       assert indicator != WildcardIndicator.NOT_AN_ARGUMENT;
+      assert hasSignature();
       return new ClassTypeSignature(type, typeArguments, enclosingTypeSignature, indicator);
     }
 
@@ -857,7 +865,7 @@ public class GenericSignature {
       String signature,
       Origin origin,
       DexItemFactory factory,
-      Reporter reporter) {
+      DiagnosticsHandler diagnosticsHandler) {
     if (signature == null || signature.isEmpty()) {
       return ClassSignature.NO_CLASS_SIGNATURE;
     }
@@ -865,7 +873,7 @@ public class GenericSignature {
     try {
       return parser.parseClassSignature(signature);
     } catch (GenericSignatureFormatError e) {
-      reporter.warning(
+      diagnosticsHandler.warning(
           GenericSignatureDiagnostic.invalidClassSignature(signature, className, origin, e));
       return ClassSignature.NO_CLASS_SIGNATURE;
     }
@@ -876,7 +884,7 @@ public class GenericSignature {
       String signature,
       Origin origin,
       DexItemFactory factory,
-      Reporter reporter) {
+      DiagnosticsHandler diagnosticsHandler) {
     if (signature == null || signature.isEmpty()) {
       return NO_FIELD_TYPE_SIGNATURE;
     }
@@ -884,7 +892,7 @@ public class GenericSignature {
     try {
       return parser.parseFieldTypeSignature(signature);
     } catch (GenericSignatureFormatError e) {
-      reporter.warning(
+      diagnosticsHandler.warning(
           GenericSignatureDiagnostic.invalidFieldSignature(signature, fieldName, origin, e));
       return GenericSignature.NO_FIELD_TYPE_SIGNATURE;
     }
@@ -895,7 +903,7 @@ public class GenericSignature {
       String signature,
       Origin origin,
       DexItemFactory factory,
-      Reporter reporter) {
+      DiagnosticsHandler diagnosticsHandler) {
     if (signature == null || signature.isEmpty()) {
       return MethodTypeSignature.NO_METHOD_TYPE_SIGNATURE;
     }
@@ -903,7 +911,7 @@ public class GenericSignature {
     try {
       return parser.parseMethodTypeSignature(signature);
     } catch (GenericSignatureFormatError e) {
-      reporter.warning(
+      diagnosticsHandler.warning(
           GenericSignatureDiagnostic.invalidMethodSignature(signature, methodName, origin, e));
       return MethodTypeSignature.NO_METHOD_TYPE_SIGNATURE;
     }
@@ -1071,7 +1079,7 @@ public class GenericSignature {
         builder.add(parseFieldTypeSignature());
       }
       if (builder == null) {
-        return new FormalTypeParameter(typeParameterIdentifier, classBound, null);
+        return new FormalTypeParameter(typeParameterIdentifier, classBound, EMPTY_TYPE_ARGUMENTS);
       }
       return new FormalTypeParameter(typeParameterIdentifier, classBound, builder.build());
     }

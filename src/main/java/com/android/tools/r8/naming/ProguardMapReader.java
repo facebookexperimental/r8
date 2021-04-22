@@ -9,9 +9,9 @@ import com.android.tools.r8.naming.MemberNaming.FieldSignature;
 import com.android.tools.r8.naming.MemberNaming.MethodSignature;
 import com.android.tools.r8.naming.MemberNaming.Signature;
 import com.android.tools.r8.naming.ProguardMap.Builder;
+import com.android.tools.r8.naming.mappinginformation.MapVersionMappingInformation;
 import com.android.tools.r8.naming.mappinginformation.MappingInformation;
 import com.android.tools.r8.naming.mappinginformation.MappingInformationDiagnostics;
-import com.android.tools.r8.naming.mappinginformation.MetaInfMappingInformation;
 import com.android.tools.r8.position.TextPosition;
 import com.android.tools.r8.utils.IdentifierUtils;
 import com.android.tools.r8.utils.StringUtils;
@@ -66,6 +66,7 @@ public class ProguardMapReader implements AutoCloseable {
   private final JsonParser jsonParser = new JsonParser();
   private final DiagnosticsHandler diagnosticsHandler;
   private final boolean allowEmptyMappedRanges;
+  private final boolean allowExperimentalMapping;
 
   @Override
   public void close() throws IOException {
@@ -75,10 +76,12 @@ public class ProguardMapReader implements AutoCloseable {
   ProguardMapReader(
       BufferedReader reader,
       DiagnosticsHandler diagnosticsHandler,
-      boolean allowEmptyMappedRanges) {
+      boolean allowEmptyMappedRanges,
+      boolean allowExperimentalMapping) {
     this.reader = reader;
     this.diagnosticsHandler = diagnosticsHandler;
     this.allowEmptyMappedRanges = allowEmptyMappedRanges;
+    this.allowExperimentalMapping = allowExperimentalMapping;
     assert reader != null;
     assert diagnosticsHandler != null;
   }
@@ -266,9 +269,18 @@ public class ProguardMapReader implements AutoCloseable {
         diagnosticsHandler,
         lineNo,
         info -> {
-          MetaInfMappingInformation generatorInfo = info.asMetaInfMappingInformation();
+          MapVersionMappingInformation generatorInfo = info.asMetaInfMappingInformation();
           if (generatorInfo != null) {
-            version = generatorInfo.getMapVersion();
+            if (generatorInfo.getMapVersion().equals(MapVersion.MapVersionExperimental)) {
+              // A mapping file that is marked "experimental" will be treated as an unversioned
+              // file if the compiler/tool is not explicitly running with experimental support.
+              version =
+                  allowExperimentalMapping
+                      ? MapVersion.MapVersionExperimental
+                      : MapVersion.MapVersionNone;
+            } else {
+              version = generatorInfo.getMapVersion();
+            }
           }
           onMappingInfo.accept(info);
         });
