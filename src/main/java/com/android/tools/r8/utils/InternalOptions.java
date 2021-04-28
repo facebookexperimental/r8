@@ -1325,6 +1325,7 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     public boolean enableSwitchToIfRewriting = true;
     public boolean enableEnumUnboxingDebugLogs = false;
     public boolean forceRedundantConstNumberRemoval = false;
+    public boolean enableExperimentalDesugaredLibraryKeepRuleGenerator = false;
     public boolean enableExperimentalRecordDesugaring = false;
     public boolean invertConditionals = false;
     public boolean placeExceptionalBlocksLast = false;
@@ -1560,7 +1561,11 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     return !isDesugaring() || hasMinApi(AndroidApiLevel.K);
   }
 
-  public boolean canUseRequireNonNull() {
+  public boolean canUseJavaUtilObjectsIsNull() {
+    return isGeneratingDex() && hasMinApi(AndroidApiLevel.N);
+  }
+
+  public boolean canUseJavaUtilObjectsRequireNonNull() {
     return isGeneratingDex() && hasMinApi(AndroidApiLevel.K);
   }
 

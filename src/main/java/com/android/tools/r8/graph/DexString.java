@@ -50,6 +50,10 @@ public class DexString extends IndexedDexItem implements NamingLensComparable<De
     throw new Unreachable();
   }
 
+  public byte byteAt(int index) {
+    return content[index];
+  }
+
   /** DexString is a leaf item so we directly define its compareTo which avoids overhead. */
   @Override
   public int compareTo(DexString other) {
@@ -437,11 +441,19 @@ public class DexString extends IndexedDexItem implements NamingLensComparable<De
   }
 
   public boolean startsWith(DexString prefix) {
-    if (content.length < prefix.content.length) {
+    return startsWith(prefix.content);
+  }
+
+  public boolean startsWith(String prefix) {
+    return startsWith(encodeToMutf8(prefix));
+  }
+
+  public boolean startsWith(byte[] prefixContent) {
+    if (content.length < prefixContent.length) {
       return false;
     }
-    for (int i = 0; i < prefix.content.length - 1; i++) {
-      if (content[i] != prefix.content[i]) {
+    for (int i = 0; i < prefixContent.length - 1; i++) {
+      if (content[i] != prefixContent[i]) {
         return false;
       }
     }
