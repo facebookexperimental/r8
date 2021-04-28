@@ -12,10 +12,8 @@ import com.android.tools.r8.graph.DexClass;
 import com.android.tools.r8.graph.DexDefinitionSupplier;
 import com.android.tools.r8.graph.DexEncodedField;
 import com.android.tools.r8.graph.DexEncodedMethod;
-import com.android.tools.r8.graph.DexItemFactory;
 import com.android.tools.r8.naming.NamingLens;
 import com.android.tools.r8.shaking.EnqueuerMetadataTraceable;
-import com.android.tools.r8.utils.Reporter;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -42,9 +40,9 @@ public class KotlinPackageInfo implements EnqueuerMetadataTraceable {
   public static KotlinPackageInfo create(
       KmPackage kmPackage,
       DexClass clazz,
-      DexItemFactory factory,
-      Reporter reporter,
-      Consumer<DexEncodedMethod> keepByteCode) {
+      AppView<?> appView,
+      Consumer<DexEncodedMethod> keepByteCode,
+      KotlinJvmSignatureExtensionInformation extensionInformation) {
     Map<String, DexEncodedField> fieldMap = new HashMap<>();
     for (DexEncodedField field : clazz.fields()) {
       fieldMap.put(toJvmFieldSignature(field.getReference()).asString(), field);
@@ -56,26 +54,36 @@ public class KotlinPackageInfo implements EnqueuerMetadataTraceable {
     return new KotlinPackageInfo(
         JvmExtensionsKt.getModuleName(kmPackage),
         KotlinDeclarationContainerInfo.create(
-            kmPackage, methodMap, fieldMap, factory, reporter, keepByteCode),
+            kmPackage,
+            methodMap,
+            fieldMap,
+            appView.dexItemFactory(),
+            appView.reporter(),
+            keepByteCode,
+            extensionInformation),
         KotlinLocalDelegatedPropertyInfo.create(
-            JvmExtensionsKt.getLocalDelegatedProperties(kmPackage), factory, reporter));
+            JvmExtensionsKt.getLocalDelegatedProperties(kmPackage),
+            appView.dexItemFactory(),
+            appView.reporter()));
   }
 
-  public void rewrite(
-      KmPackage kmPackage, DexClass clazz, AppView<?> appView, NamingLens namingLens) {
-    containerInfo.rewrite(
-        kmPackage::visitFunction,
-        kmPackage::visitProperty,
-        kmPackage::visitTypeAlias,
-        clazz,
-        appView,
-        namingLens);
+  boolean rewrite(KmPackage kmPackage, DexClass clazz, AppView<?> appView, NamingLens namingLens) {
+    boolean rewritten =
+        containerInfo.rewrite(
+            kmPackage::visitFunction,
+            kmPackage::visitProperty,
+            kmPackage::visitTypeAlias,
+            clazz,
+            appView,
+            namingLens);
     JvmPackageExtensionVisitor extensionVisitor =
         (JvmPackageExtensionVisitor) kmPackage.visitExtensions(JvmPackageExtensionVisitor.TYPE);
-    localDelegatedProperties.rewrite(
-        extensionVisitor::visitLocalDelegatedProperty, appView, namingLens);
+    rewritten |=
+        localDelegatedProperties.rewrite(
+            extensionVisitor::visitLocalDelegatedProperty, appView, namingLens);
     extensionVisitor.visitModuleName(moduleName);
     extensionVisitor.visitEnd();
+    return rewritten;
   }
 
   @Override

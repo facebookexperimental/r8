@@ -18,6 +18,8 @@ import com.android.tools.r8.graph.DexProgramClass;
 import com.android.tools.r8.graph.DexType;
 import com.android.tools.r8.graph.GraphLens;
 import com.android.tools.r8.graph.InnerClassAttribute;
+import com.android.tools.r8.kotlin.KotlinMemberLevelInfo;
+import com.android.tools.r8.kotlin.KotlinPropertyInfo;
 import com.android.tools.r8.utils.InternalOptions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
@@ -191,32 +193,54 @@ public class AnnotationRemover {
       stripAttributes(clazz);
       clazz.setAnnotations(
           clazz.annotations().rewrite(annotation -> rewriteAnnotation(clazz, annotation)));
-      clazz.forEachMethod(method -> processMethod(method, clazz));
-      clazz.forEachField(field -> processField(field, clazz));
+      // Kotlin properties are split over fields and methods. Check if any is pinned before pruning
+      // the information.
+      Set<KotlinPropertyInfo> pinnedKotlinProperties = Sets.newIdentityHashSet();
+      clazz.forEachMethod(method -> processMethod(method, clazz, pinnedKotlinProperties));
+      clazz.forEachField(field -> processField(field, clazz, pinnedKotlinProperties));
+      clazz.forEachProgramMember(
+          member -> {
+            KotlinMemberLevelInfo kotlinInfo = member.getKotlinInfo();
+            if (kotlinInfo.isProperty()
+                && !pinnedKotlinProperties.contains(kotlinInfo.asProperty())) {
+              member.clearKotlinInfo();
+            }
+          });
     }
   }
 
-  private void processMethod(DexEncodedMethod method, DexProgramClass clazz) {
+  private void processMethod(
+      DexEncodedMethod method,
+      DexProgramClass clazz,
+      Set<KotlinPropertyInfo> pinnedKotlinProperties) {
     method.setAnnotations(
         method.annotations().rewrite(annotation -> rewriteAnnotation(method, annotation)));
     method.parameterAnnotationsList =
         method.parameterAnnotationsList.keepIf(this::filterParameterAnnotations);
-    if (appView
-        .getKeepInfo()
-        .getMethodInfo(method, clazz)
-        .isAllowSignatureAttributeRemovalAllowed(options)) {
+    KeepMethodInfo methodInfo = appView.getKeepInfo().getMethodInfo(method, clazz);
+    if (methodInfo.isAllowSignatureAttributeRemovalAllowed(options)) {
       method.clearGenericSignature();
+    }
+    if (!methodInfo.isPinned() && method.getKotlinInfo().isFunction()) {
+      method.clearKotlinMemberInfo();
+    }
+    if (methodInfo.isPinned() && method.getKotlinInfo().isProperty()) {
+      pinnedKotlinProperties.add(method.getKotlinInfo().asProperty());
     }
   }
 
-  private void processField(DexEncodedField field, DexProgramClass clazz) {
+  private void processField(
+      DexEncodedField field,
+      DexProgramClass clazz,
+      Set<KotlinPropertyInfo> pinnedKotlinProperties) {
     field.setAnnotations(
         field.annotations().rewrite(annotation -> rewriteAnnotation(field, annotation)));
-    if (appView
-        .getKeepInfo()
-        .getFieldInfo(field, clazz)
-        .isAllowSignatureAttributeRemovalAllowed(options)) {
+    KeepFieldInfo fieldInfo = appView.getKeepInfo().getFieldInfo(field, clazz);
+    if (fieldInfo.isAllowSignatureAttributeRemovalAllowed(options)) {
       field.clearGenericSignature();
+    }
+    if (fieldInfo.isPinned() && field.getKotlinInfo().isProperty()) {
+      pinnedKotlinProperties.add(field.getKotlinInfo().asProperty());
     }
   }
 

@@ -5,7 +5,7 @@
 package com.android.tools.r8.kotlin;
 
 import static com.android.tools.r8.kotlin.KotlinClassMetadataReader.hasKotlinClassMetadataAnnotation;
-import static com.android.tools.r8.kotlin.KotlinMetadataUtils.NO_KOTLIN_INFO;
+import static com.android.tools.r8.kotlin.KotlinMetadataUtils.getNoKotlinInfo;
 
 import com.android.tools.r8.graph.AppView;
 import com.android.tools.r8.graph.DexClass;
@@ -67,24 +67,19 @@ public class KotlinMetadataEnqueuerExtension extends EnqueuerAnalysis {
                   && clazz.hasClassInitializer()) {
                 feedback.classInitializerMayBePostponed(clazz.getClassInitializer());
               }
-              clazz.setKotlinInfo(NO_KOTLIN_INFO);
+              clazz.setKotlinInfo(getNoKotlinInfo());
               clazz.removeAnnotations(
                   annotation -> annotation.getAnnotationType() == kotlinMetadataType);
             } else {
               clazz.setKotlinInfo(
                   KotlinClassMetadataReader.getKotlinInfo(
-                      appView.dexItemFactory().kotlin,
-                      clazz,
-                      appView.dexItemFactory(),
-                      appView.options().reporter,
-                      method -> keepByteCodeFunctions.add(method.getReference())));
+                      clazz, appView, method -> keepByteCodeFunctions.add(method.getReference())));
               if (clazz.getEnclosingMethodAttribute() != null
                   && clazz.getEnclosingMethodAttribute().getEnclosingMethod() != null) {
                 localOrAnonymousClasses.add(clazz);
               }
             }
           });
-      appView.setCfByteCodePassThrough(keepByteCodeFunctions);
       for (DexProgramClass localOrAnonymousClass : localOrAnonymousClasses) {
         EnclosingMethodAttribute enclosingAttribute =
             localOrAnonymousClass.getEnclosingMethodAttribute();
@@ -97,12 +92,13 @@ public class KotlinMetadataEnqueuerExtension extends EnqueuerAnalysis {
         DexEncodedMethod method = holder.lookupMethod(enclosingAttribute.getEnclosingMethod());
         // If we cannot lookup the method, the conservative choice is keep the byte code.
         if (method == null
-            || (method.getKotlinMemberInfo().isFunction()
-                && method.getKotlinMemberInfo().asFunction().hasCrossInlineParameter())) {
+            || (method.getKotlinInfo().isFunction()
+                && method.getKotlinInfo().asFunction().hasCrossInlineParameter())) {
           localOrAnonymousClass.forEachProgramMethod(
               m -> keepByteCodeFunctions.add(m.getReference()));
         }
       }
+      appView.setCfByteCodePassThrough(keepByteCodeFunctions);
     } else {
       assert verifyKotlinMetadataModeledForAllClasses(enqueuer, keepMetadata);
     }
@@ -112,10 +108,7 @@ public class KotlinMetadataEnqueuerExtension extends EnqueuerAnalysis {
           clazz.getKotlinInfo().trace(definitionsForContext(clazz));
           clazz.forEachProgramMember(
               member ->
-                  member
-                      .getDefinition()
-                      .getKotlinMemberInfo()
-                      .trace(definitionsForContext(member)));
+                  member.getDefinition().getKotlinInfo().trace(definitionsForContext(member)));
         });
   }
 
@@ -127,7 +120,7 @@ public class KotlinMetadataEnqueuerExtension extends EnqueuerAnalysis {
           assert !hasKotlinClassMetadataAnnotation(clazz, definitionsForContext(clazz))
               || !keepMetadata
               || !enqueuer.isPinned(clazz.type)
-              || clazz.getKotlinInfo() != NO_KOTLIN_INFO;
+              || clazz.getKotlinInfo() != getNoKotlinInfo();
         });
     return true;
   }

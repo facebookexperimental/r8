@@ -3,8 +3,8 @@
 // BSD-style license that can be found in the LICENSE file.
 package com.android.tools.r8.kotlin;
 
-import static com.android.tools.r8.kotlin.KotlinMetadataUtils.INVALID_KOTLIN_INFO;
-import static com.android.tools.r8.kotlin.KotlinMetadataUtils.NO_KOTLIN_INFO;
+import static com.android.tools.r8.kotlin.KotlinMetadataUtils.getInvalidKotlinInfo;
+import static com.android.tools.r8.kotlin.KotlinMetadataUtils.getNoKotlinInfo;
 
 import com.android.tools.r8.graph.AppView;
 import com.android.tools.r8.graph.DexAnnotation;
@@ -20,7 +20,7 @@ import com.android.tools.r8.graph.DexValue.DexValueInt;
 import com.android.tools.r8.graph.DexValue.DexValueString;
 import com.android.tools.r8.naming.NamingLens;
 import com.android.tools.r8.utils.ConsumerUtils;
-import com.android.tools.r8.utils.Reporter;
+import com.android.tools.r8.utils.Pair;
 import com.android.tools.r8.utils.ThreadUtils;
 import java.util.ArrayList;
 import java.util.List;
@@ -101,15 +101,15 @@ public class KotlinMetadataRewriter {
         appView.appInfo().classes(),
         clazz -> {
           KotlinClassLevelInfo kotlinInfo = clazz.getKotlinInfo();
-          DexAnnotation oldMeta = clazz.annotations().getFirstMatching(rewrittenMetadataType);
-          if (kotlinInfo == INVALID_KOTLIN_INFO) {
+          if (kotlinInfo == getInvalidKotlinInfo()) {
             // Maintain invalid kotlin info for classes.
             return;
           }
+          DexAnnotation oldMeta = clazz.annotations().getFirstMatching(rewrittenMetadataType);
           // TODO(b/181103083): Consider removing if rewrittenMetadataType
           //  != factory.kotlinMetadataType
           if (oldMeta == null
-              || kotlinInfo == NO_KOTLIN_INFO
+              || kotlinInfo == getNoKotlinInfo()
               || (appView.appInfo().hasLiveness()
                   && !appView.withLiveness().appInfo().isPinned(clazz.type))) {
             // Remove @Metadata in DexAnnotation when there is no kotlin info and the type is not
@@ -131,8 +131,6 @@ public class KotlinMetadataRewriter {
     if (lens.isIdentityLens()) {
       return;
     }
-    final Kotlin kotlin = factory.kotlin;
-    final Reporter reporter = appView.options().reporter;
     final WriteMetadataFieldInfo writeMetadataFieldInfo = WriteMetadataFieldInfo.rewriteAll();
     ThreadUtils.processItems(
         appView.appInfo().classes(),
@@ -141,10 +139,10 @@ public class KotlinMetadataRewriter {
           if (metadata == null) {
             return;
           }
-          final KotlinClassLevelInfo kotlinInfo =
+          KotlinClassLevelInfo kotlinInfo =
               KotlinClassMetadataReader.getKotlinInfo(
-                  kotlin, clazz, factory, reporter, ConsumerUtils.emptyConsumer(), metadata);
-          if (kotlinInfo == NO_KOTLIN_INFO) {
+                  clazz, appView, ConsumerUtils.emptyConsumer(), metadata);
+          if (kotlinInfo == getNoKotlinInfo()) {
             return;
           }
           writeKotlinInfoToAnnotation(clazz, kotlinInfo, metadata, writeMetadataFieldInfo);
@@ -158,10 +156,15 @@ public class KotlinMetadataRewriter {
       DexAnnotation oldMeta,
       WriteMetadataFieldInfo writeMetadataFieldInfo) {
     try {
-      KotlinClassHeader kotlinClassHeader = kotlinInfo.rewrite(clazz, appView, lens);
+      Pair<KotlinClassHeader, Boolean> kotlinClassHeader = kotlinInfo.rewrite(clazz, appView, lens);
+      // TODO(b/185756596): Remove when special handling is no longer needed.
+      if (!kotlinClassHeader.getSecond() && !appView.enableWholeProgramOptimizations()) {
+        // No rewrite occurred and the data is the same as before.
+        return;
+      }
       DexAnnotation newMeta =
           createKotlinMetadataAnnotation(
-              kotlinClassHeader,
+              kotlinClassHeader.getFirst(),
               kotlinInfo.getPackageName(),
               getMaxVersion(METADATA_VERSION_1_4, kotlinInfo.getMetadataVersion()),
               writeMetadataFieldInfo);

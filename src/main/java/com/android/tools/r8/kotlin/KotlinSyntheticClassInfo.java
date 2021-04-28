@@ -7,9 +7,8 @@ package com.android.tools.r8.kotlin;
 import com.android.tools.r8.graph.AppView;
 import com.android.tools.r8.graph.DexClass;
 import com.android.tools.r8.graph.DexDefinitionSupplier;
-import com.android.tools.r8.graph.DexItemFactory;
 import com.android.tools.r8.naming.NamingLens;
-import com.android.tools.r8.utils.Reporter;
+import com.android.tools.r8.utils.Pair;
 import kotlinx.metadata.KmLambda;
 import kotlinx.metadata.jvm.KotlinClassHeader;
 import kotlinx.metadata.jvm.KotlinClassMetadata;
@@ -45,15 +44,17 @@ public class KotlinSyntheticClassInfo implements KotlinClassLevelInfo {
       int[] metadataVersion,
       DexClass clazz,
       Kotlin kotlin,
-      DexItemFactory factory,
-      Reporter reporter) {
-    KmLambda lambda = null;
-    if (syntheticClass.isLambda()) {
-      lambda = syntheticClass.toKmLambda();
-      assert lambda != null;
-    }
+      AppView<?> appView) {
+    KmLambda lambda = syntheticClass.toKmLambda();
+    assert lambda == null || syntheticClass.isLambda();
+    KotlinJvmSignatureExtensionInformation extensionInformation =
+        KotlinJvmSignatureExtensionInformation.readInformationFromMessage(
+            syntheticClass, appView.options());
     return new KotlinSyntheticClassInfo(
-        lambda != null ? KotlinLambdaInfo.create(clazz, lambda, factory, reporter) : null,
+        lambda != null
+            ? KotlinLambdaInfo.create(
+                clazz, lambda, appView.dexItemFactory(), appView.reporter(), extensionInformation)
+            : null,
         getFlavour(syntheticClass, clazz, kotlin),
         packageName,
         metadataVersion);
@@ -82,15 +83,16 @@ public class KotlinSyntheticClassInfo implements KotlinClassLevelInfo {
   }
 
   @Override
-  public KotlinClassHeader rewrite(DexClass clazz, AppView<?> appView, NamingLens namingLens) {
+  public Pair<KotlinClassHeader, Boolean> rewrite(
+      DexClass clazz, AppView<?> appView, NamingLens namingLens) {
     Writer writer = new Writer();
+    boolean rewritten = false;
     if (lambda != null) {
       KmLambda kmLambda = new KmLambda();
-      if (lambda.rewrite(() -> kmLambda, clazz, appView, namingLens)) {
-        kmLambda.accept(writer);
-      }
+      rewritten = lambda.rewrite(() -> kmLambda, clazz, appView, namingLens);
+      kmLambda.accept(writer);
     }
-    return writer.write().getHeader();
+    return Pair.create(writer.write().getHeader(), rewritten);
   }
 
   @Override

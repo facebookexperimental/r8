@@ -55,8 +55,10 @@ public class KotlinDeclarationContainerInfo implements EnqueuerMetadataTraceable
       Map<String, DexEncodedField> fieldSignatureMap,
       DexItemFactory factory,
       Reporter reporter,
-      Consumer<DexEncodedMethod> keepByteCode) {
+      Consumer<DexEncodedMethod> keepByteCode,
+      KotlinJvmSignatureExtensionInformation extensionInformation) {
     ImmutableList.Builder<KotlinFunctionInfo> notBackedFunctions = ImmutableList.builder();
+    int functionCounter = 0;
     for (KmFunction kmFunction : container.getFunctions()) {
       JvmMethodSignature signature = JvmExtensionsKt.getSignature(kmFunction);
       if (signature == null) {
@@ -64,7 +66,11 @@ public class KotlinDeclarationContainerInfo implements EnqueuerMetadataTraceable
         continue;
       }
       KotlinFunctionInfo kotlinFunctionInfo =
-          KotlinFunctionInfo.create(kmFunction, factory, reporter);
+          KotlinFunctionInfo.create(
+              kmFunction,
+              factory,
+              reporter,
+              extensionInformation.hasJvmMethodSignatureExtensionForFunction(functionCounter++));
       DexEncodedMethod method = methodSignatureMap.get(signature.asString());
       if (method == null) {
         notBackedFunctions.add(kotlinFunctionInfo);
@@ -149,7 +155,7 @@ public class KotlinDeclarationContainerInfo implements EnqueuerMetadataTraceable
     return builder.build();
   }
 
-  public void rewrite(
+  boolean rewrite(
       KmVisitorProviders.KmFunctionVisitorProvider functionProvider,
       KmVisitorProviders.KmPropertyVisitorProvider propertyProvider,
       KmVisitorProviders.KmTypeAliasVisitorProvider typeAliasProvider,
@@ -157,28 +163,26 @@ public class KotlinDeclarationContainerInfo implements EnqueuerMetadataTraceable
       AppView<?> appView,
       NamingLens namingLens) {
     // Type aliases only have a representation here, so we can generate them directly.
+    boolean rewritten = false;
     for (KotlinTypeAliasInfo typeAlias : typeAliases) {
-      typeAlias.rewrite(typeAliasProvider, appView, namingLens);
+      rewritten |= typeAlias.rewrite(typeAliasProvider, appView, namingLens);
     }
     // For properties, we need to combine potentially a field, setter and getter.
     Map<KotlinPropertyInfo, KotlinPropertyGroup> properties = new IdentityHashMap<>();
     for (DexEncodedField field : clazz.fields()) {
-      if (field.getKotlinMemberInfo().isFieldProperty()) {
+      if (field.getKotlinInfo().isProperty()) {
         properties
             .computeIfAbsent(
-                field.getKotlinMemberInfo().asFieldProperty(), ignored -> new KotlinPropertyGroup())
+                field.getKotlinInfo().asProperty(), ignored -> new KotlinPropertyGroup())
             .setBackingField(field);
       }
     }
     for (DexEncodedMethod method : clazz.methods()) {
-      if (method.getKotlinMemberInfo().isFunction()) {
-        method
-            .getKotlinMemberInfo()
-            .asFunction()
-            .rewrite(functionProvider, method, appView, namingLens);
+      if (method.getKotlinInfo().isFunction()) {
+        method.getKotlinInfo().asFunction().rewrite(functionProvider, method, appView, namingLens);
         continue;
       }
-      KotlinPropertyInfo kotlinPropertyInfo = method.getKotlinMemberInfo().asProperty();
+      KotlinPropertyInfo kotlinPropertyInfo = method.getKotlinInfo().asProperty();
       if (kotlinPropertyInfo == null) {
         continue;
       }
@@ -193,21 +197,24 @@ public class KotlinDeclarationContainerInfo implements EnqueuerMetadataTraceable
     }
     for (KotlinPropertyInfo kotlinPropertyInfo : properties.keySet()) {
       KotlinPropertyGroup kotlinPropertyGroup = properties.get(kotlinPropertyInfo);
-      kotlinPropertyInfo.rewrite(
-          propertyProvider,
-          kotlinPropertyGroup.backingField,
-          kotlinPropertyGroup.getter,
-          kotlinPropertyGroup.setter,
-          appView,
-          namingLens);
+      rewritten |=
+          kotlinPropertyInfo.rewrite(
+              propertyProvider,
+              kotlinPropertyGroup.backingField,
+              kotlinPropertyGroup.getter,
+              kotlinPropertyGroup.setter,
+              appView,
+              namingLens);
     }
     // Add all not backed functions and properties.
     for (KotlinFunctionInfo notBackedFunction : functionsWithNoBacking) {
-      notBackedFunction.rewrite(functionProvider, null, appView, namingLens);
+      rewritten |= notBackedFunction.rewrite(functionProvider, null, appView, namingLens);
     }
     for (KotlinPropertyInfo notBackedProperty : propertiesWithNoBacking) {
-      notBackedProperty.rewrite(propertyProvider, null, null, null, appView, namingLens);
+      rewritten |=
+          notBackedProperty.rewrite(propertyProvider, null, null, null, appView, namingLens);
     }
+    return rewritten;
   }
 
   @Override

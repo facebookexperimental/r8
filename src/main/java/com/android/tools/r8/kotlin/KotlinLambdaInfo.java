@@ -30,13 +30,21 @@ public class KotlinLambdaInfo implements EnqueuerMetadataTraceable {
   }
 
   static KotlinLambdaInfo create(
-      DexClass clazz, KmLambda lambda, DexItemFactory factory, Reporter reporter) {
+      DexClass clazz,
+      KmLambda lambda,
+      DexItemFactory factory,
+      Reporter reporter,
+      KotlinJvmSignatureExtensionInformation extensionInformation) {
     if (lambda == null) {
       assert false;
       return null;
     }
     KotlinFunctionInfo kotlinFunctionInfo =
-        KotlinFunctionInfo.create(lambda.function, factory, reporter);
+        KotlinFunctionInfo.create(
+            lambda.function,
+            factory,
+            reporter,
+            extensionInformation.hasJvmMethodSignatureExtensionForFunction(0));
     JvmMethodSignature signature = JvmExtensionsKt.getSignature(lambda.function);
     if (signature != null) {
       for (DexEncodedMethod method : clazz.methods()) {
@@ -60,7 +68,7 @@ public class KotlinLambdaInfo implements EnqueuerMetadataTraceable {
     }
     DexEncodedMethod backing = null;
     for (DexEncodedMethod method : clazz.methods()) {
-      if (method.getKotlinMemberInfo() == function) {
+      if (method.getKotlinInfo() == function) {
         backing = method;
         break;
       }
@@ -69,12 +77,10 @@ public class KotlinLambdaInfo implements EnqueuerMetadataTraceable {
       appView
           .options()
           .reporter
-          .info(
-              KotlinMetadataDiagnostic.lambdaBackingNotFound(clazz.type, function.getSignature()));
+          .info(KotlinMetadataDiagnostic.lambdaBackingNotFound(clazz.type, function.getName()));
       return false;
     }
-    function.rewrite(visitorProvider.get()::visitFunction, backing, appView, namingLens);
-    return true;
+    return function.rewrite(visitorProvider.get()::visitFunction, backing, appView, namingLens);
   }
 
   @Override

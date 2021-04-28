@@ -5,7 +5,7 @@ package com.android.tools.r8.graph;
 
 import static com.android.tools.r8.graph.DexProgramClass.asProgramClassOrNull;
 import static com.android.tools.r8.ir.analysis.type.Nullability.maybeNull;
-import static com.android.tools.r8.kotlin.KotlinMetadataUtils.NO_KOTLIN_INFO;
+import static com.android.tools.r8.kotlin.KotlinMetadataUtils.getNoKotlinInfo;
 
 import com.android.tools.r8.dex.MixedSectionCollection;
 import com.android.tools.r8.graph.GenericSignature.FieldTypeSignature;
@@ -38,7 +38,7 @@ public class DexEncodedField extends DexEncodedMember<DexEncodedField, DexField>
   private FieldTypeSignature genericSignature;
 
   private FieldOptimizationInfo optimizationInfo = DefaultFieldOptimizationInfo.getInstance();
-  private KotlinFieldLevelInfo kotlinMemberInfo = NO_KOTLIN_INFO;
+  private KotlinFieldLevelInfo kotlinMemberInfo = getNoKotlinInfo();
 
   private static void specify(StructuralSpecification<DexEncodedField, ?> spec) {
     spec.withItem(DexEncodedField::getReference)
@@ -135,8 +135,13 @@ public class DexEncodedField extends DexEncodedMember<DexEncodedField, DexField>
   }
 
   @Override
-  public KotlinFieldLevelInfo getKotlinMemberInfo() {
+  public KotlinFieldLevelInfo getKotlinInfo() {
     return kotlinMemberInfo;
+  }
+
+  @Override
+  public void clearKotlinInfo() {
+    kotlinMemberInfo = getNoKotlinInfo();
   }
 
   @Override
@@ -145,7 +150,7 @@ public class DexEncodedField extends DexEncodedMember<DexEncodedField, DexField>
   }
 
   public void setKotlinMemberInfo(KotlinFieldLevelInfo kotlinMemberInfo) {
-    assert this.kotlinMemberInfo == NO_KOTLIN_INFO;
+    assert this.kotlinMemberInfo == getNoKotlinInfo();
     this.kotlinMemberInfo = kotlinMemberInfo;
   }
 

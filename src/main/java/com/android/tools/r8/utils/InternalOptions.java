@@ -81,6 +81,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
@@ -815,6 +816,8 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
   /** A set of dexitems we have reported missing to dedupe warnings. */
   private final Set<DexItem> reportedMissingForDesugaring = Sets.newConcurrentHashSet();
 
+  private final AtomicBoolean reportedErrorReadingKotlinMetadataReflectively =
+      new AtomicBoolean(false);
   private final Set<DexItem> invalidLibraryClasses = Sets.newConcurrentHashSet();
 
   public RuntimeException errorMissingNestHost(DexClass clazz) {
@@ -900,6 +903,16 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
               classToDesugar == implementing
                   ? null
                   : Reference.classFromDescriptor(implementing.getType().toDescriptorString())));
+    }
+  }
+
+  public void warningReadingKotlinMetadataReflective() {
+    if (reportedErrorReadingKotlinMetadataReflectively.compareAndSet(false, true)) {
+      reporter.warning(
+          new StringDiagnostic(
+              "Could not read the kotlin metadata message reflectively which indicates the"
+                  + " compiler running in the context of a Security Manager. Not being able to"
+                  + " read the kotlin metadata will have a negative effect oncode size"));
     }
   }
 
@@ -1176,7 +1189,6 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
         !Version.isDevelopmentVersion()
             || System.getProperty("com.android.tools.r8.disableHorizontalClassMerging") == null;
     public boolean enableConstructorMerging = true;
-    public boolean enableJavaLambdaMerging = true;
 
     public int maxGroupSize = 30;
 
@@ -1190,10 +1202,6 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
 
     public void enableIf(boolean enable) {
       this.enable = enable;
-    }
-
-    public void enableJavaLambdaMerging() {
-      enableJavaLambdaMerging = true;
     }
 
     public int getMaxGroupSize() {
@@ -1211,10 +1219,6 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     public boolean isEnabled() {
       return enable;
     }
-
-    public boolean isJavaLambdaMergingEnabled() {
-      return enableJavaLambdaMerging;
-    }
   }
 
   public static class ProtoShrinkingOptions {
@@ -1227,6 +1231,14 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     // Breaks the Chrome build if this is not enabled because of MethodToInvoke switchMaps.
     // See b/174530756 for more details.
     public boolean enableProtoEnumSwitchMapShrinking = true;
+
+    public void disable() {
+      enableGeneratedExtensionRegistryShrinking = false;
+      enableGeneratedMessageLiteShrinking = false;
+      enableGeneratedMessageLiteBuilderShrinking = false;
+      traverseOneOfAndRepeatedProtoFields = false;
+      enableEnumLiteProtoShrinking = false;
+    }
 
     public boolean enableRemoveProtoEnumSwitchMap() {
       return isProtoShrinkingEnabled() && enableProtoEnumSwitchMapShrinking;
