@@ -18,6 +18,7 @@ import com.android.tools.r8.graph.DexType;
 import com.android.tools.r8.graph.GenericSignature.MethodTypeSignature;
 import com.android.tools.r8.graph.MethodAccessFlags;
 import com.android.tools.r8.graph.ParameterAnnotationsList;
+import com.android.tools.r8.horizontalclassmerging.code.ConstructorEntryPointSynthesizedCode;
 import com.android.tools.r8.ir.conversion.ExtraConstantIntParameter;
 import com.android.tools.r8.ir.conversion.ExtraParameter;
 import com.android.tools.r8.ir.conversion.ExtraUnusedNullParameter;
@@ -109,7 +110,7 @@ public class ConstructorMerger {
   private DexMethod moveConstructor(
       ClassMethodsBuilder classMethodsBuilder, DexEncodedMethod constructor) {
     DexMethod method =
-        dexItemFactory.createFreshMethodName(
+        dexItemFactory.createFreshMethodNameWithHolder(
             TEMPORARY_INSTANCE_INITIALIZER_PREFIX,
             constructor.getHolderType(),
             constructor.getProto(),
@@ -173,9 +174,8 @@ public class ConstructorMerger {
     // unintended side-effects such as leading to unused argument removal being applied to the
     // synthesized constructor all-though it by construction doesn't have any unused arguments.
     DexMethod bridgeConstructorReference =
-        dexItemFactory.createFreshMethodName(
+        dexItemFactory.createFreshMethodNameWithoutHolder(
             "$r8$init$bridge",
-            null,
             originalConstructorReference.getProto(),
             originalConstructorReference.getHolderType(),
             classMethodsBuilder::isFresh);

@@ -18,6 +18,7 @@ import com.android.tools.r8.graph.MethodAccessFlags;
 import com.android.tools.r8.graph.ParameterAnnotationsList;
 import com.android.tools.r8.graph.ProgramMethod;
 import com.android.tools.r8.graph.ResolutionResult.SingleResolutionResult;
+import com.android.tools.r8.horizontalclassmerging.code.VirtualMethodEntryPointSynthesizedCode;
 import com.android.tools.r8.ir.synthetic.AbstractSynthesizedCode;
 import com.android.tools.r8.utils.ListUtils;
 import com.android.tools.r8.utils.OptionalBool;
@@ -101,7 +102,7 @@ public class VirtualMethodMerger {
   private DexMethod moveMethod(ClassMethodsBuilder classMethodsBuilder, ProgramMethod oldMethod) {
     DexMethod oldMethodReference = oldMethod.getReference();
     DexMethod method =
-        dexItemFactory.createFreshMethodName(
+        dexItemFactory.createFreshMethodNameWithHolder(
             oldMethodReference.name.toSourceString(),
             oldMethod.getHolderType(),
             oldMethodReference.proto,
@@ -131,8 +132,10 @@ public class VirtualMethodMerger {
     if (result.isBridge() && Iterables.any(allFlags, flags -> !flags.isBridge())) {
       result.unsetBridge();
     }
-    if (result.isFinal() && Iterables.any(allFlags, flags -> !flags.isFinal())) {
-      result.unsetFinal();
+    if (result.isFinal()) {
+      if (methods.size() < group.size() || Iterables.any(allFlags, flags -> !flags.isFinal())) {
+        result.unsetFinal();
+      }
     }
     if (result.isSynthetic() && Iterables.any(allFlags, flags -> !flags.isSynthetic())) {
       result.unsetSynthetic();
@@ -259,9 +262,8 @@ public class VirtualMethodMerger {
     DexMethod originalMethodReference =
         appView.graphLens().getOriginalMethodSignature(representative.getReference());
     DexMethod bridgeMethodReference =
-        dexItemFactory.createFreshMethodName(
+        dexItemFactory.createFreshMethodNameWithoutHolder(
             originalMethodReference.getName().toSourceString() + "$bridge",
-            null,
             originalMethodReference.proto,
             originalMethodReference.getHolderType(),
             classMethodsBuilder::isFresh);

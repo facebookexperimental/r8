@@ -5,6 +5,7 @@
 package com.android.tools.r8.internal.proto;
 
 import static com.android.tools.r8.utils.codeinspector.Matchers.isPresent;
+import static com.android.tools.r8.utils.codeinspector.Matchers.notIf;
 import static org.hamcrest.CoreMatchers.anyOf;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.equalTo;
@@ -233,7 +234,10 @@ public class Proto2ShrinkingTest extends ProtoShrinkingTestBase {
     }
 
     // Verify that the registry methods are still present in the output.
-    // TODO(b/112437944): Should they be optimized into a single findLiteExtensionByNumber() method?
+    //
+    // We expect findLiteExtensionByNumber2() to be inlined into findLiteExtensionByNumber1(). The
+    // method findLiteExtensionByNumber1() has two call sites from findLiteExtensionByNumber(),
+    // which prevents it from being single-caller inlined.
     {
       ClassSubject generatedExtensionRegistryLoader = outputInspector.clazz(extensionRegistryName);
       assertThat(generatedExtensionRegistryLoader, isPresent());
@@ -245,7 +249,7 @@ public class Proto2ShrinkingTest extends ProtoShrinkingTestBase {
           isPresent());
       assertThat(
           generatedExtensionRegistryLoader.uniqueMethodWithName("findLiteExtensionByNumber2"),
-          isPresent());
+          notIf(isPresent(), enableMinification));
     }
 
     // Verify that unused extensions have been removed with -allowaccessmodification.
