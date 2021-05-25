@@ -71,7 +71,7 @@ abstract class SyntheticDefinition<
       ClassToFeatureSplitMap classToFeatureSplitMap,
       SyntheticItems syntheticItems) {
     Hasher hasher = Hashing.murmur3_128().newHasher();
-    hasher.putInt(kind.id);
+    hasher.putInt(kind.hashCode());
     if (getKind().isFixedSuffixSynthetic) {
       // Fixed synthetics are non-shareable. Its unique type is used as the hash key.
       getHolder().getType().hash(hasher);
