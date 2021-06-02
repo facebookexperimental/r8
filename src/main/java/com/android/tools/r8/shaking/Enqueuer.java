@@ -1797,6 +1797,8 @@ public class Enqueuer {
       enqueueFirstNonSerializableClassInitializer(clazz, reason);
     }
 
+    checkDefinitionForSoftPinning(clazz);
+
     processAnnotations(clazz);
 
     // If this type has deferred annotations, we have to process those now, too.
@@ -2602,7 +2604,7 @@ public class Enqueuer {
     // Add all dependent members to the workqueue.
     enqueueRootItems(rootSet.getDependentItems(field.getDefinition()));
 
-    checkMemberForSoftPinning(field);
+    checkDefinitionForSoftPinning(field);
 
     // Notify analyses.
     analyses.forEach(analysis -> analysis.processNewlyLiveField(field, context));
@@ -3851,7 +3853,7 @@ public class Enqueuer {
     // Add all dependent members to the workqueue.
     enqueueRootItems(rootSet.getDependentItems(definition));
 
-    checkMemberForSoftPinning(method);
+    checkDefinitionForSoftPinning(method);
 
     // Notify analyses.
     analyses.forEach(analysis -> analysis.processNewlyLiveMethod(method, context));
@@ -3898,15 +3900,15 @@ public class Enqueuer {
     method.registerCodeReferences(useRegistryFactory.create(appView, method, this));
   }
 
-  private void checkMemberForSoftPinning(ProgramMember<?, ?> member) {
-    DexMember<?, ?> reference = member.getDefinition().getReference();
+  private void checkDefinitionForSoftPinning(ProgramDefinition definition) {
+    DexReference reference = definition.getReference();
     Set<ProguardKeepRuleBase> softPinRules = rootSet.softPinned.getRulesForReference(reference);
     if (softPinRules != null) {
       assert softPinRules.stream().noneMatch(r -> r.getModifiers().allowsOptimization);
       keepInfo.joinInfo(reference, appInfo, Joiner::pin);
     }
     // Identify dependent soft pinning.
-    MutableItemsWithRules items = rootSet.dependentSoftPinned.get(member.getHolderType());
+    MutableItemsWithRules items = rootSet.dependentSoftPinned.get(definition.getContextType());
     if (items != null && items.containsReference(reference)) {
       assert items.getRulesForReference(reference).stream()
           .noneMatch(r -> r.getModifiers().allowsOptimization);
