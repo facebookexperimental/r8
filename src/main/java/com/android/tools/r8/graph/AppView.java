@@ -48,6 +48,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 public class AppView<T extends AppInfo> implements DexDefinitionSupplier, LibraryModeledPredicate {
 
@@ -714,5 +715,9 @@ public class AppView<T extends AppInfo> implements DexDefinitionSupplier, Librar
     }
     assert alreadyLibraryDesugared != null;
     return alreadyLibraryDesugared.contains(clazz.getType());
+  }
+
+  public boolean checkForTesting(Supplier<Boolean> test) {
+    return testing().enableTestAssertions ? test.get() : true;
   }
 }
