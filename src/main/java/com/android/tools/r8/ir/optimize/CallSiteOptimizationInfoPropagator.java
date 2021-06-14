@@ -99,10 +99,6 @@ public class CallSiteOptimizationInfoPropagator implements PostOptimization {
       return;
     }
 
-    if (appView.appInfo().isMethodTargetedByInvokeDynamic(code.context().getReference())) {
-      abandonCallSitePropagationForMethodAndOverrides(code.context());
-    }
-
     ProgramMethod context = code.context();
     for (Instruction instruction : code.instructions()) {
       if (instruction.isInvokeMethod()) {
@@ -292,6 +288,30 @@ public class CallSiteOptimizationInfoPropagator implements PostOptimization {
       }
     } else {
       methods.forEach(method -> method.getDefinition().abandonCallSiteOptimizationInfo());
+    }
+  }
+
+  public void abandonCallSitePropagationForLambdaImplementationMethods(
+      ExecutorService executorService, Timing timing) throws ExecutionException {
+    if (appView.options().isGeneratingClassFiles()) {
+      timing.begin("Call site optimization: abandon lambda implementation methods");
+      ForEachable<ProgramMethod> lambdaImplementationMethods =
+          consumer ->
+              appView
+                  .appInfo()
+                  .forEachMethod(
+                      method -> {
+                        if (appView
+                            .appInfo()
+                            .isMethodTargetedByInvokeDynamic(method.getReference())) {
+                          consumer.accept(method);
+                        }
+                      });
+      ThreadUtils.processItems(
+          lambdaImplementationMethods,
+          this::abandonCallSitePropagationForMethodAndOverrides,
+          executorService);
+      timing.end();
     }
   }
 
