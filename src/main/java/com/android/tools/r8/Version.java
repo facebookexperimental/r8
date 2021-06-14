@@ -11,7 +11,7 @@ public final class Version {
 
   // This field is accessed from release scripts using simple pattern matching.
   // Therefore, changing this field could break our release scripts.
-  public static final String LABEL = "3.0.49";
+  public static final String LABEL = "3.0.50";
 
   private Version() {
   }
