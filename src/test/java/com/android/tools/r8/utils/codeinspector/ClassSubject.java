@@ -6,6 +6,7 @@ package com.android.tools.r8.utils.codeinspector;
 
 import static com.android.tools.r8.ir.desugar.itf.InterfaceMethodRewriter.COMPANION_CLASS_NAME_SUFFIX;
 
+import com.android.tools.r8.graph.ClassAccessFlags;
 import com.android.tools.r8.graph.DexMethod;
 import com.android.tools.r8.graph.DexProgramClass;
 import com.android.tools.r8.naming.ClassNamingForNameMapper;
@@ -184,6 +185,9 @@ public abstract class ClassSubject extends ClassOrMemberSubject {
             dump.append(method.getMethod().toString()).append(method.getMethod().codeToString()));
     return dump.toString();
   }
+
+  @Override
+  public abstract ClassAccessFlags getAccessFlags();
 
   public abstract DexProgramClass getDexProgramClass();
 
