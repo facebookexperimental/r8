@@ -890,12 +890,21 @@ public class DexEncodedMethod extends DexEncodedMember<DexEncodedMethod, DexMeth
     return builder.toString();
   }
 
+  @Override
+  public boolean hasAnyAnnotations() {
+    return hasAnnotations() || hasParameterAnnotations();
+  }
+
   public ParameterAnnotationsList getParameterAnnotations() {
     return parameterAnnotationsList;
   }
 
   public void clearParameterAnnotations() {
     parameterAnnotationsList = ParameterAnnotationsList.empty();
+  }
+
+  public boolean hasParameterAnnotations() {
+    return !getParameterAnnotations().isEmpty();
   }
 
   public String toSmaliString(ClassNameMapper naming) {
@@ -1456,11 +1465,6 @@ public class DexEncodedMethod extends DexEncodedMember<DexEncodedMethod, DexMeth
   public DexEncodedMethod asDexEncodedMethod() {
     checkIfObsolete();
     return this;
-  }
-
-  public boolean hasAnnotation() {
-    checkIfObsolete();
-    return !annotations().isEmpty() || !parameterAnnotationsList.isEmpty();
   }
 
   public static int slowCompare(DexEncodedMethod m1, DexEncodedMethod m2) {
