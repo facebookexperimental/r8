@@ -1404,14 +1404,14 @@ public class DexEncodedMethod extends DexEncodedMember<DexEncodedMethod, DexMeth
         true);
   }
 
-  public DexEncodedMethod toStaticMethodWithoutThis() {
+  public DexEncodedMethod toStaticMethodWithoutThis(AppView<AppInfoWithLiveness> appView) {
     checkIfObsolete();
     assert !accessFlags.isStatic();
     Builder builder =
         builder(this)
             .promoteToStatic()
             .withoutThisParameter()
-            .adjustOptimizationInfoAfterRemovingThisParameter();
+            .adjustOptimizationInfoAfterRemovingThisParameter(appView);
     DexEncodedMethod method = builder.build();
     method.copyMetadata(this);
     setObsolete();
@@ -1698,10 +1698,12 @@ public class DexEncodedMethod extends DexEncodedMember<DexEncodedMethod, DexMeth
       return this;
     }
 
-    public Builder adjustOptimizationInfoAfterRemovingThisParameter() {
+    public Builder adjustOptimizationInfoAfterRemovingThisParameter(
+        AppView<AppInfoWithLiveness> appView) {
       if (optimizationInfo.isUpdatableMethodOptimizationInfo()) {
-        optimizationInfo.asUpdatableMethodOptimizationInfo()
-            .adjustOptimizationInfoAfterRemovingThisParameter();
+        optimizationInfo
+            .asUpdatableMethodOptimizationInfo()
+            .adjustOptimizationInfoAfterRemovingThisParameter(appView);
       }
       return this;
     }
