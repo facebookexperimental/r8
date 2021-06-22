@@ -3853,8 +3853,6 @@ public class Enqueuer {
     // Add all dependent members to the workqueue.
     enqueueRootItems(rootSet.getDependentItems(definition));
 
-    checkDefinitionForSoftPinning(method);
-
     // Notify analyses.
     analyses.forEach(analysis -> analysis.processNewlyLiveMethod(method, context));
   }
@@ -3879,6 +3877,7 @@ public class Enqueuer {
   }
 
   void traceMethodDefinitionExcludingCode(ProgramMethod method) {
+    checkDefinitionForSoftPinning(method);
     markReferencedTypesAsLive(method);
     processAnnotations(method);
     method
