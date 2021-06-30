@@ -273,7 +273,7 @@ public class EnumUnboxingRewriter {
             if (unboxedEnumsData.matchesValuesField(field)) {
               utilityMethods.computeIfAbsent(
                   valuesUtilityMethod, m -> synthesizeValuesUtilityMethod());
-              DexField fieldValues = null;
+              DexField fieldValues = createValuesField(holder);
               DexMethod methodValues = createValuesMethod(holder);
               utilityMethods.computeIfAbsent(
                   methodValues,
@@ -449,7 +449,7 @@ public class EnumUnboxingRewriter {
         new EnumUnboxingCfCodeProvider.EnumUnboxingValuesCfCodeProvider(
                 appView, method.holder, fieldValues, numEnumInstances, valuesUtilityMethod)
             .generateCfCode();
-    return synthesizeUtilityMethod(cfCode, method, false);
+    return synthesizeUtilityMethod(cfCode, method, true);
   }
 
   private DexMethod computeInstanceFieldUtilityMethod(DexType enumType, DexField field) {
@@ -628,7 +628,6 @@ public class EnumUnboxingRewriter {
   }
 
   private DexEncodedMethod synthesizeUtilityMethod(CfCode cfCode, DexMethod method, boolean sync) {
-    assert !sync;
     return new DexEncodedMethod(
         method,
         synthesizedMethodAccessFlags(sync),

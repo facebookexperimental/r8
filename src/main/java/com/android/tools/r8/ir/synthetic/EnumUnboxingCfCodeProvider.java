@@ -7,6 +7,7 @@ package com.android.tools.r8.ir.synthetic;
 import com.android.tools.r8.cf.code.CfConstNull;
 import com.android.tools.r8.cf.code.CfConstNumber;
 import com.android.tools.r8.cf.code.CfConstString;
+import com.android.tools.r8.cf.code.CfFieldInstruction;
 import com.android.tools.r8.cf.code.CfFrame;
 import com.android.tools.r8.cf.code.CfFrame.FrameType;
 import com.android.tools.r8.cf.code.CfIf;
@@ -217,7 +218,7 @@ public abstract class EnumUnboxingCfCodeProvider extends SyntheticCfCodeProvider
         int numEnumInstances,
         DexMethod initializationMethod) {
       super(appView, holder);
-      assert utilityField == null;
+      assert utilityField.type == appView.dexItemFactory().intArrayType;
       this.utilityField = utilityField;
       this.numEnumInstances = numEnumInstances;
       this.initializationMethod = initializationMethod;
@@ -232,14 +233,19 @@ public abstract class EnumUnboxingCfCodeProvider extends SyntheticCfCodeProvider
       //      VALUES$com$x$MyEnum = EnumUnboxingMethods_values(2);
       //    }
       //    return VALUES$com$x$MyEnum;
-      // Due to b/191993388, this generates instead something like:
-      //  int[] UtilityClass#com$x$MyEnum_VALUES() {
-      //    return EnumUnboxingMethods_values(2);
-      //  }
       List<CfInstruction> instructions = new ArrayList<>();
+      CfLabel nullDest = new CfLabel();
+      instructions.add(new CfFieldInstruction(Opcodes.GETSTATIC, utilityField, utilityField));
+      instructions.add(new CfIf(If.Type.NE, ValueType.OBJECT, nullDest));
       instructions.add((new CfConstNumber(numEnumInstances, ValueType.INT)));
       assert initializationMethod.getArity() == 1;
       instructions.add(new CfInvoke(Opcodes.INVOKESTATIC, initializationMethod, false));
+      instructions.add(new CfFieldInstruction(Opcodes.PUTSTATIC, utilityField, utilityField));
+      instructions.add(nullDest);
+      instructions.add(
+          new CfFrame(
+              ImmutableInt2ReferenceSortedMap.<FrameType>builder().build(), ImmutableDeque.of()));
+      instructions.add(new CfFieldInstruction(Opcodes.GETSTATIC, utilityField, utilityField));
       instructions.add(new CfReturn(ValueType.OBJECT));
       return standardCfCodeFromInstructions(instructions);
     }
