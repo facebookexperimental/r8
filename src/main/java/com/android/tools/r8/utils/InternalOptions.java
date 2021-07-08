@@ -218,6 +218,7 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     enableValuePropagation = false;
     enableSideEffectAnalysis = false;
     enableTreeShakingOfLibraryMethodOverrides = false;
+    enableInitializedClassesAnalysis = false;
     callSiteOptimizationOptions.disableOptimization();
   }
 
@@ -574,6 +575,10 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     assert proguardConfiguration == null
         || enableMinification == proguardConfiguration.isObfuscating();
     return enableMinification;
+  }
+
+  public boolean isOptimizing() {
+    return hasProguardConfiguration() && getProguardConfiguration().isOptimizing();
   }
 
   @Override
