@@ -324,6 +324,10 @@ public class UpdatableMethodOptimizationInfo extends MethodOptimizationInfo {
     this.bridgeInfo = bridgeInfo;
   }
 
+  void unsetBridgeInfo() {
+    this.bridgeInfo = null;
+  }
+
   @Override
   public AbstractValue getAbstractReturnValue() {
     return abstractReturnValue;
