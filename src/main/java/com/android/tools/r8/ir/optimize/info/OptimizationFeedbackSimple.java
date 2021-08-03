@@ -163,8 +163,8 @@ public class OptimizationFeedbackSimple extends OptimizationFeedback {
   }
 
   public void unsetBridgeInfo(DexEncodedMethod method) {
-    if (method.getOptimizationInfo().isMutableOptimizationInfo()) {
-      method.getOptimizationInfo().asMutableMethodOptimizationInfo().unsetBridgeInfo();
+    if (method.getOptimizationInfo().isUpdatableMethodOptimizationInfo()) {
+      method.getOptimizationInfo().asUpdatableMethodOptimizationInfo().unsetBridgeInfo();
     }
   }
 
