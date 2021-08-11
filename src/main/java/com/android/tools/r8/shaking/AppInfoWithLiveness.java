@@ -38,6 +38,7 @@ import com.android.tools.r8.graph.LookupTarget;
 import com.android.tools.r8.graph.MethodAccessInfoCollection;
 import com.android.tools.r8.graph.ObjectAllocationInfoCollection;
 import com.android.tools.r8.graph.ObjectAllocationInfoCollectionImpl;
+import com.android.tools.r8.graph.ProgramDefinition;
 import com.android.tools.r8.graph.ProgramField;
 import com.android.tools.r8.graph.ProgramMethod;
 import com.android.tools.r8.graph.PrunedItems;
@@ -950,6 +951,10 @@ public class AppInfoWithLiveness extends AppInfoWithClassHierarchy
   public boolean isMinificationAllowed(DexReference reference) {
     return options().isMinificationEnabled()
         && keepInfo.getInfo(reference, this).isMinificationAllowed(options());
+  }
+
+  public boolean isAccessModificationAllowed(ProgramDefinition definition) {
+    return isAccessModificationAllowed(definition.getReference());
   }
 
   public boolean isAccessModificationAllowed(DexReference reference) {

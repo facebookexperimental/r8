@@ -104,7 +104,9 @@ public final class ClassAndMemberPublicizer {
   }
 
   private void publicizeClass(DexProgramClass clazz) {
-    doPublicize(clazz);
+    if (!clazz.isPublic() && appView.appInfo().isAccessModificationAllowed(clazz)) {
+      doPublicize(clazz);
+    }
 
     // Publicize fields.
     clazz.forEachProgramField(
@@ -152,7 +154,7 @@ public final class ClassAndMemberPublicizer {
     }
     // If this method is mentioned in keep rules, do not transform (rule applications changed).
     DexEncodedMethod definition = method.getDefinition();
-    if (!appView.appInfo().isAccessModificationAllowed(method.getReference())) {
+    if (!appView.appInfo().isAccessModificationAllowed(method)) {
       // TODO(b/131130038): Also do not publicize package-private and protected methods that are
       //  kept.
       if (definition.isPrivate()) {
