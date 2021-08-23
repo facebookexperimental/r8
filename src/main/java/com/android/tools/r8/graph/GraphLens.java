@@ -623,7 +623,11 @@ public abstract class GraphLens {
           continue;
         }
         DexMethod originalMethod = getOriginalMethodSignature(method.getReference());
-        assert originalMethods.contains(originalMethod);
+        assert originalMethods.contains(originalMethod)
+            : "Method could not be mapped back: "
+                + method.toSourceString()
+                + ", originalMethod: "
+                + originalMethod.toSourceString();
       }
     }
 
