@@ -33,6 +33,7 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 public class MissingClasses {
@@ -56,6 +57,10 @@ public class MissingClasses {
         // TODO(b/175542052): Synthetic types should not be reported as missing in the first place.
         .removeAlreadyMissingClasses(committedItems.getLegacySyntheticTypes())
         .build();
+  }
+
+  public void forEach(Consumer<DexType> missingClassConsumer) {
+    missingClasses.forEach(missingClassConsumer);
   }
 
   public boolean contains(DexType type) {
