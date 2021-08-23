@@ -323,6 +323,8 @@ APPS = [
     'url': 'https://github.com/tuskyapp/Tusky',
     'revision': '814a9b8f9bacf8d26f712b06a0313a3534a2be95',
     'folder': 'tusky',
+    # Disabled due to b/197480128.
+    'skip_recompilation': True,
   }),
   App({
     'id': 'org.wikipedia',
