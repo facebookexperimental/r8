@@ -2,6 +2,7 @@ package com.android.tools.r8.graph;
 
 import static com.google.common.base.Predicates.alwaysTrue;
 
+import com.android.tools.r8.utils.InternalOptions;
 import com.android.tools.r8.utils.IterableUtils;
 import com.android.tools.r8.utils.TraversalContinuation;
 import java.util.ArrayList;
@@ -23,7 +24,7 @@ public class MethodCollection {
   private MethodCollectionBacking backing;
   private DexEncodedMethod cachedClassInitializer = DexEncodedMethod.SENTINEL;
 
-  public MethodCollection(
+  MethodCollection(
       DexClass holder, DexEncodedMethod[] directMethods, DexEncodedMethod[] virtualMethods) {
     this.holder = holder;
     if (directMethods.length + virtualMethods.length > ARRAY_BACKING_THRESHOLD) {
@@ -33,6 +34,14 @@ public class MethodCollection {
     }
     backing.setDirectMethods(directMethods);
     backing.setVirtualMethods(virtualMethods);
+  }
+
+  public static MethodCollection create(
+      DexClass holder, DexEncodedMethod[] directMethods, DexEncodedMethod[] virtualMethods) {
+    if (InternalOptions.USE_METHOD_COLLECTION_CONCURRENCY_CHECKED) {
+      return new MethodCollectionConcurrencyChecked(holder, directMethods, virtualMethods);
+    }
+    return new MethodCollection(holder, directMethods, virtualMethods);
   }
 
   private void resetCaches() {
