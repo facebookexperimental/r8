@@ -123,7 +123,13 @@ public class ExtractWrapperTypesTest extends DesugaredLibraryTestBase {
 
   // TODO(b/238179854): Investigate how to fix these.
   private static final Set<String> MISSING_GENERIC_TYPE_CONVERSION_PATH =
-      ImmutableSet.of("java.lang.Iterable java.nio.file.FileSystem.getFileStores()");
+      ImmutableSet.of(
+          "java.lang.Iterable java.nio.file.FileSystem.getFileStores()",
+          // The Acl seems to be unusable on Android anyway.
+          "java.util.Set java.nio.file.attribute.AclEntry.permissions()",
+          "java.util.Set java.nio.file.attribute.AclEntry.flags()",
+          "java.util.List java.nio.file.attribute.AclFileAttributeView.getAcl()",
+          "void java.nio.file.attribute.AclFileAttributeView.setAcl(java.util.List)");
 
   // TODO(b/238179854): Investigate how to fix these.
   private static final Set<String> MISSING_GENERIC_TYPE_CONVERSION_FLOW =
@@ -233,10 +239,13 @@ public class ExtractWrapperTypesTest extends DesugaredLibraryTestBase {
         specification.getWrappers().keySet().stream()
             .map(DexType::toString)
             .collect(Collectors.toSet());
-    Set<String> customConversionsInSpec =
+    Set<String> customConversionsOnly =
         specification.getCustomConversions().keySet().stream()
             .map(DexType::toString)
             .collect(Collectors.toSet());
+    // Some types are present both as custom conversions and wrappers, so that the custom conversion
+    // can catch some specific cases on top of the wrapper. We are not interested in those.
+    customConversionsOnly.removeAll(wrappersInSpec);
     Set<String> maintainTypeInSet =
         specification.getMaintainType().stream().map(DexType::toString).collect(Collectors.toSet());
     Map<String, boolean[]> genericConversionsInSpec = new HashMap<>();
@@ -251,9 +260,6 @@ public class ExtractWrapperTypesTest extends DesugaredLibraryTestBase {
               genericConversionsInSpec.put(method.toString(), indexes);
             });
 
-    assertEquals(
-        Collections.emptySet(), Sets.intersection(wrappersInSpec, customConversionsInSpec));
-
     CodeInspector nonDesugaredJar = new CodeInspector(ToolHelper.getAndroidJar(targetApi));
     Set<DexEncodedMethod> genericDependencies = new HashSet<>();
     Map<ClassReference, Set<MethodReference>> directWrappers =
@@ -261,7 +267,7 @@ public class ExtractWrapperTypesTest extends DesugaredLibraryTestBase {
             desugaredApiJar,
             preDesugarTypes,
             nonDesugaredJar,
-            customConversionsInSpec,
+            customConversionsOnly,
             maintainTypeInSet,
             genericConversionsInSpec,
             genericDependencies);
@@ -270,7 +276,7 @@ public class ExtractWrapperTypesTest extends DesugaredLibraryTestBase {
             directWrappers,
             preDesugarTypes,
             nonDesugaredJar,
-            customConversionsInSpec,
+            customConversionsOnly,
             maintainTypeInSet,
             specification.getWrappers(),
             genericConversionsInSpec,
@@ -301,7 +307,10 @@ public class ExtractWrapperTypesTest extends DesugaredLibraryTestBase {
     // java.util.stream.Collector$Characteristics is required for api generic type conversion
     // on JDK8, but that is not supported on legacy specification used for JDK8 and on old
     // R8 compiler versions.
-    int expectedMissingWrappers = libraryDesugaringSpecification == JDK8 ? 1 : 0;
+    int expectedMissingWrappers =
+        libraryDesugaringSpecification == JDK8
+            ? 1
+            : (libraryDesugaringSpecification == JDK11_PATH ? 4 : 0);
 
     {
       Set<String> missingWrappers = getMissingWrappers(indirectWrappers, wrappersInSpec);

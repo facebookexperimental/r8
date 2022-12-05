@@ -41,6 +41,7 @@ import com.android.tools.r8.graph.DexAnnotationSet;
 import com.android.tools.r8.graph.DexApplication;
 import com.android.tools.r8.graph.DexCallSite;
 import com.android.tools.r8.graph.DexClass;
+import com.android.tools.r8.graph.DexClassAndField;
 import com.android.tools.r8.graph.DexClassAndMethod;
 import com.android.tools.r8.graph.DexClasspathClass;
 import com.android.tools.r8.graph.DexDefinition;
@@ -104,7 +105,9 @@ import com.android.tools.r8.ir.code.IRCode;
 import com.android.tools.r8.ir.code.Instruction;
 import com.android.tools.r8.ir.code.InstructionIterator;
 import com.android.tools.r8.ir.code.InvokeMethod;
+import com.android.tools.r8.ir.code.InvokeNewArray;
 import com.android.tools.r8.ir.code.InvokeVirtual;
+import com.android.tools.r8.ir.code.NewArrayEmpty;
 import com.android.tools.r8.ir.code.Value;
 import com.android.tools.r8.ir.desugar.CfInstructionDesugaringCollection;
 import com.android.tools.r8.ir.desugar.CfInstructionDesugaringEventConsumer;
@@ -146,6 +149,7 @@ import com.android.tools.r8.shaking.RootSetUtils.RootSetBuilder;
 import com.android.tools.r8.shaking.ScopedDexMethodSet.AddMethodIfMoreVisibleResult;
 import com.android.tools.r8.synthesis.SyntheticItems.SynthesizingContextOracle;
 import com.android.tools.r8.utils.Action;
+import com.android.tools.r8.utils.Box;
 import com.android.tools.r8.utils.InternalOptions;
 import com.android.tools.r8.utils.IteratorUtils;
 import com.android.tools.r8.utils.OptionalBool;
@@ -1092,15 +1096,24 @@ public class Enqueuer {
       DexField field, ProgramMethod context, boolean isRead, boolean isReflective) {
     FieldAccessInfoImpl info = fieldAccessInfoCollection.get(field);
     if (info == null) {
-      DexEncodedField encodedField = resolveField(field, context).getResolvedField();
+      Box<DexClassAndField> seenResult = new Box<>();
+      resolveField(field, context)
+          .forEachSuccessfulFieldResolutionResult(
+              singleResolutionResult -> {
+                DexClassAndField resolutionPair = singleResolutionResult.getResolutionPair();
+                if (!seenResult.isSet() || resolutionPair.isProgramField()) {
+                  seenResult.set(resolutionPair);
+                }
+              });
 
       // If the field does not exist, then record this in the mapping, such that we don't have to
       // resolve the field the next time.
-      if (encodedField == null) {
+      if (!seenResult.isSet()) {
         fieldAccessInfoCollection.extend(field, MISSING_FIELD_ACCESS_INFO);
         return true;
       }
 
+      DexEncodedField encodedField = seenResult.get().getDefinition();
       info = getOrCreateFieldAccessInfo(encodedField);
 
       // If `field` is an indirect reference, then create a mapping for it, such that we don't have
@@ -5079,25 +5092,43 @@ public class Enqueuer {
       return;
     }
     Value parametersValue = constructorDefinition.inValues().get(1);
-    if (parametersValue.isPhi() || !parametersValue.definition.isNewArrayEmpty()) {
+    if (parametersValue.isPhi()) {
       // Give up, we can't tell which constructor is being invoked.
       return;
     }
-
-    Value parametersSizeValue = parametersValue.definition.asNewArrayEmpty().size();
-    if (parametersSizeValue.isPhi() || !parametersSizeValue.definition.isConstNumber()) {
-      // Give up, we can't tell which constructor is being invoked.
+    NewArrayEmpty newArrayEmpty = parametersValue.definition.asNewArrayEmpty();
+    InvokeNewArray invokeNewArray = parametersValue.definition.asInvokeNewArray();
+    int parametersSize =
+        newArrayEmpty != null
+            ? newArrayEmpty.sizeIfConst()
+            : invokeNewArray != null ? invokeNewArray.size() : -1;
+    if (parametersSize < 0) {
       return;
     }
 
     ProgramMethod initializer = null;
 
-    int parametersSize = parametersSizeValue.definition.asConstNumber().getIntValue();
     if (parametersSize == 0) {
       initializer = clazz.getProgramDefaultInitializer();
     } else {
       DexType[] parameterTypes = new DexType[parametersSize];
       int missingIndices = parametersSize;
+
+      if (newArrayEmpty != null) {
+        missingIndices = parametersSize;
+      } else {
+        missingIndices = 0;
+        List<Value> values = invokeNewArray.inValues();
+        for (int i = 0; i < parametersSize; ++i) {
+          DexType type =
+              ConstantValueUtils.getDexTypeRepresentedByValueForTracing(values.get(i), appView);
+          if (type == null) {
+            return;
+          }
+          parameterTypes[i] = type;
+        }
+      }
+
       for (Instruction user : parametersValue.uniqueUsers()) {
         if (user.isArrayPut()) {
           ArrayPut arrayPutInstruction = user.asArrayPut();
@@ -5159,20 +5190,31 @@ public class Enqueuer {
     }
 
     Value interfacesValue = invoke.arguments().get(1);
-    if (interfacesValue.isPhi() || !interfacesValue.definition.isNewArrayEmpty()) {
+    if (interfacesValue.isPhi()) {
       // Give up, we can't tell which interfaces the proxy implements.
       return;
     }
 
-    WorkList<DexProgramClass> worklist = WorkList.newIdentityWorkList();
-    for (Instruction user : interfacesValue.uniqueUsers()) {
-      if (!user.isArrayPut()) {
-        continue;
+    InvokeNewArray invokeNewArray = interfacesValue.definition.asInvokeNewArray();
+    NewArrayEmpty newArrayEmpty = interfacesValue.definition.asNewArrayEmpty();
+    List<Value> values;
+    if (invokeNewArray != null) {
+      values = invokeNewArray.inValues();
+    } else if (newArrayEmpty != null) {
+      values = new ArrayList<>(interfacesValue.uniqueUsers().size());
+      for (Instruction user : interfacesValue.uniqueUsers()) {
+        ArrayPut arrayPut = user.asArrayPut();
+        if (arrayPut != null) {
+          values.add(arrayPut.value());
+        }
       }
+    } else {
+      return;
+    }
 
-      ArrayPut arrayPut = user.asArrayPut();
-      DexType type =
-          ConstantValueUtils.getDexTypeRepresentedByValueForTracing(arrayPut.value(), appView);
+    WorkList<DexProgramClass> worklist = WorkList.newIdentityWorkList();
+    for (Value value : values) {
+      DexType type = ConstantValueUtils.getDexTypeRepresentedByValueForTracing(value, appView);
       if (type == null || !type.isClassType()) {
         continue;
       }

@@ -15,7 +15,7 @@ import zipfile
 
 import utils
 
-R8_DEV_BRANCH = '8.0'
+R8_DEV_BRANCH = '8.1'
 R8_VERSION_FILE = os.path.join(
     'src', 'main', 'java', 'com', 'android', 'tools', 'r8', 'Version.java')
 THIS_FILE_RELATIVE = os.path.join('tools', 'r8_release.py')
@@ -193,7 +193,8 @@ def release_studio_or_aosp(r8_checkout, path, options, git_message):
       # Don't upload if requested not to, or if changes are not committed due
       # to --use-existing-work-branch
       if not options.no_upload and not options.use_existing_work_branch:
-        process = subprocess.Popen(['repo', 'upload', '.', '--verify'],
+        # TODO(b/260680525): Consider removing "-o banned-words~skip" if b/260680525 is resolved.
+        process = subprocess.Popen(['repo', 'upload', '.', '--verify', '-o' 'banned-words~skip'],
                                    stdin=subprocess.PIPE)
         return process.communicate(input=b'y\n')[0]
 

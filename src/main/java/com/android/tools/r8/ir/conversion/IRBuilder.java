@@ -148,8 +148,8 @@ import java.util.function.BiConsumer;
 /**
  * Builder object for constructing high-level IR from dex bytecode.
  *
- * <p>The generated IR is in SSA form. The SSA construction is based on the paper
- * "Simple and Efficient Construction of Static Single Assignment Form" available at
+ * <p>The generated IR is in SSA form. The SSA construction is based on the paper "Simple and
+ * Efficient Construction of Static Single Assignment Form" available at
  * http://compilers.cs.uni-saarland.de/papers/bbhlmz13cc.pdf
  */
 public class IRBuilder {

@@ -3,17 +3,25 @@
 // BSD-style license that can be found in the LICENSE file.
 package com.android.tools.r8.rewrite.arrays;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assume.assumeTrue;
 
 import com.android.tools.r8.TestBase;
 import com.android.tools.r8.TestParameters;
 import com.android.tools.r8.TestParametersCollection;
+import com.android.tools.r8.dex.code.DexFilledNewArray;
 import com.android.tools.r8.utils.StringUtils;
+import com.android.tools.r8.utils.codeinspector.CodeInspector;
+import com.android.tools.r8.utils.codeinspector.InstructionOffsetSubject;
+import com.android.tools.r8.utils.codeinspector.InstructionSubject;
+import com.android.tools.r8.utils.codeinspector.MethodSubject;
+import java.util.List;
+import java.util.stream.Collectors;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-// Regression test for issue found in b/259986613
 @RunWith(Parameterized.class)
 public class NewArrayInCatchRangeTest extends TestBase {
 
@@ -46,19 +54,32 @@ public class NewArrayInCatchRangeTest extends TestBase {
         .setMinApi(parameters.getApiLevel())
         .addInnerClasses(NewArrayInCatchRangeTest.class)
         .run(parameters.getRuntime(), TestClass.class)
-        .assertSuccessWithOutput(EXPECTED);
+        .assertSuccessWithOutput(EXPECTED)
+        .inspect(this::checkInstructions);
+  }
+
+  private void checkInstructions(CodeInspector inspector) {
+    MethodSubject foo = inspector.clazz(TestClass.class).uniqueMethodWithFinalName("foo");
+    List<InstructionSubject> filledArrayInstructions =
+        foo.streamInstructions()
+            .filter(i -> i.asDexInstruction().getInstruction() instanceof DexFilledNewArray)
+            .collect(Collectors.toList());
+    assertEquals(1, filledArrayInstructions.size());
+    InstructionOffsetSubject offset = filledArrayInstructions.get(0).getOffset(foo);
+    assertTrue(foo.streamTryCatches().allMatch(r -> r.getRange().includes(offset)));
   }
 
   static class TestClass {
 
     public static int foo() {
       int value = 1;
-      int[] array = new int[1];
+      int[] array = null;
       try {
-        array[0] = value;
-      } catch (RuntimeException e) {
-        return array[0];
+        array = new int[1];
+      } catch (Exception e) {
+        return array == null ? -1 : array.length;
       }
+      array[0] = value;
       return array[0];
     }
 

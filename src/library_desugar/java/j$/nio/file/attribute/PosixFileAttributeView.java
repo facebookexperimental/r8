@@ -5,13 +5,4 @@
 package j$.nio.file.attribute;
 
 public class PosixFileAttributeView extends FileAttributeView {
-  public static java.nio.file.attribute.PosixFileAttributeView wrap_convert(
-      j$.nio.file.attribute.PosixFileAttributeView fileAttributeView) {
-    return null;
-  }
-
-  public static j$.nio.file.attribute.PosixFileAttributeView wrap_convert(
-      java.nio.file.attribute.PosixFileAttributeView fileAttributeView) {
-    return null;
-  }
 }

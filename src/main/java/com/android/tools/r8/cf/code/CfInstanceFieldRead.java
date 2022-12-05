@@ -48,6 +48,11 @@ public class CfInstanceFieldRead extends CfFieldInstruction implements CfOrDexIn
   }
 
   @Override
+  public CfInstanceFieldRead asInstanceFieldGet() {
+    return this;
+  }
+
+  @Override
   public CfFieldInstruction createWithField(DexField otherField) {
     return new CfInstanceFieldRead(otherField);
   }

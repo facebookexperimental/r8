@@ -15,7 +15,7 @@ import com.android.tools.r8.ir.code.ValueType;
 import java.util.ArrayList;
 import java.util.List;
 
-// Source code representing a simple call to CheckCast.
+// Source code representing a simple call to instance-of.
 public final class InstanceOfSourceCode extends SyntheticCfCodeProvider {
 
   private final DexType instanceOfType;
