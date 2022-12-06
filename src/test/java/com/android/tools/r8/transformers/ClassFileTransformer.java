@@ -25,6 +25,7 @@ import com.android.tools.r8.references.Reference;
 import com.android.tools.r8.transformers.MethodTransformer.MethodContext;
 import com.android.tools.r8.utils.DescriptorUtils;
 import com.android.tools.r8.utils.ThrowingConsumer;
+import com.google.common.collect.ImmutableMap;
 import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -1002,15 +1003,17 @@ public class ClassFileTransformer {
 
   public ClassFileTransformer replaceClassDescriptorInMethodInstructions(
       String oldDescriptor, String newDescriptor) {
+    return replaceClassDescriptorInMethodInstructions(
+        ImmutableMap.of(oldDescriptor, newDescriptor));
+  }
+
+  public ClassFileTransformer replaceClassDescriptorInMethodInstructions(Map<String, String> map) {
     return addMethodTransformer(
         new MethodTransformer() {
           @Override
           public void visitFieldInsn(int opcode, String owner, String name, String descriptor) {
             super.visitFieldInsn(
-                opcode,
-                rewriteASMInternalTypeName(owner),
-                name,
-                replaceAll(descriptor, oldDescriptor, newDescriptor));
+                opcode, rewriteASMInternalTypeName(owner), name, replaceAll(descriptor, map));
           }
 
           @Override
@@ -1037,8 +1040,7 @@ public class ClassFileTransformer {
           public void visitLdcInsn(Object value) {
             if (value instanceof Type) {
               Type type = (Type) value;
-              super.visitLdcInsn(
-                  Type.getType(replaceAll(type.getDescriptor(), oldDescriptor, newDescriptor)));
+              super.visitLdcInsn(Type.getType(replaceAll(type.getDescriptor(), map)));
             } else {
               super.visitLdcInsn(value);
             }
@@ -1051,7 +1053,7 @@ public class ClassFileTransformer {
                 opcode,
                 rewriteASMInternalTypeName(owner),
                 name,
-                replaceAll(descriptor, oldDescriptor, newDescriptor),
+                replaceAll(descriptor, map),
                 isInterface);
           }
 
@@ -1069,8 +1071,7 @@ public class ClassFileTransformer {
               Object arg = bootstrapMethodArguments[i];
               if (arg instanceof Handle) {
                 Handle oldHandle = (Handle) arg;
-                String repl =
-                    replaceAll("L" + oldHandle.getOwner() + ";", oldDescriptor, newDescriptor);
+                String repl = replaceAll("L" + oldHandle.getOwner() + ";", map);
                 String newOwner = repl.substring(1, repl.length() - 1);
                 Handle newHandle =
                     new Handle(
@@ -1093,9 +1094,7 @@ public class ClassFileTransformer {
           }
 
           private String rewriteASMInternalTypeName(String type) {
-            return Type.getType(
-                    replaceAll(
-                        Type.getObjectType(type).getDescriptor(), oldDescriptor, newDescriptor))
+            return Type.getType(replaceAll(Type.getObjectType(type).getDescriptor(), map))
                 .getInternalName();
           }
         });
@@ -1460,6 +1459,44 @@ public class ClassFileTransformer {
             } else {
               super.visitMaxs(maxStack, maxLocals);
             }
+          }
+        });
+  }
+
+  public ClassFileTransformer removeClassAnnotations() {
+    return addClassTransformer(
+        new ClassTransformer() {
+          @Override
+          public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
+            // Ignore all input annotations.
+            return null;
+          }
+        });
+  }
+
+  public ClassFileTransformer removeMethodAnnotations() {
+    return addMethodTransformer(
+        new MethodTransformer() {
+          @Override
+          public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
+            return null;
+          }
+        });
+  }
+
+  public ClassFileTransformer removeFieldAnnotations() {
+    return addClassTransformer(
+        new ClassTransformer() {
+          @Override
+          public FieldVisitor visitField(
+              int access, String name, String descriptor, String signature, Object value) {
+            FieldVisitor fv = visitField(access, name, descriptor, signature, value);
+            return new FieldVisitor(ASM_VERSION, fv) {
+              @Override
+              public AnnotationVisitor visitAnnotation(String descriptor, boolean visible) {
+                return null;
+              }
+            };
           }
         });
   }
