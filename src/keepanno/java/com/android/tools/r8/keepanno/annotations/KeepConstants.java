@@ -26,6 +26,14 @@ public final class KeepConstants {
     public static final String consequences = "consequences";
   }
 
+  public static final class UsesReflection {
+    public static final Class<com.android.tools.r8.keepanno.annotations.UsesReflection> CLASS =
+        com.android.tools.r8.keepanno.annotations.UsesReflection.class;
+    public static final String DESCRIPTOR = getDescriptor(CLASS);
+    public static final String value = "value";
+    public static final String additionalPreconditions = "additionalPreconditions";
+  }
+
   // Implicit hidden item which is "super type" of Condition and Target.
   public static final class Item {
     public static final String classConstant = "classConstant";
