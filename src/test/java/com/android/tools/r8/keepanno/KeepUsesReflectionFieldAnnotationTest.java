@@ -23,7 +23,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 @RunWith(Parameterized.class)
-public class KeepUsesReflectionAnnotationTest extends TestBase {
+public class KeepUsesReflectionFieldAnnotationTest extends TestBase {
 
   static final String EXPECTED = StringUtils.lines("Hello, world");
 
@@ -34,7 +34,7 @@ public class KeepUsesReflectionAnnotationTest extends TestBase {
     return getTestParameters().withDefaultRuntimes().withApiLevel(AndroidApiLevel.B).build();
   }
 
-  public KeepUsesReflectionAnnotationTest(TestParameters parameters) {
+  public KeepUsesReflectionFieldAnnotationTest(TestParameters parameters) {
     this.parameters = parameters;
   }
 
@@ -54,14 +54,13 @@ public class KeepUsesReflectionAnnotationTest extends TestBase {
         .addKeepRules(rules)
         .addKeepMainRule(TestClass.class)
         .setMinApi(parameters.getApiLevel())
-        .allowUnusedProguardConfigurationRules()
         .run(parameters.getRuntime(), TestClass.class)
         .assertSuccessWithOutput(EXPECTED)
         .inspect(this::checkOutput);
   }
 
   public List<Class<?>> getInputClasses() {
-    return ImmutableList.of(TestClass.class, A.class, B.class, C.class);
+    return ImmutableList.of(TestClass.class, A.class, B.class);
   }
 
   public List<byte[]> getInputClassesWithoutAnnotations() throws Exception {
@@ -84,56 +83,49 @@ public class KeepUsesReflectionAnnotationTest extends TestBase {
 
   private void checkOutput(CodeInspector inspector) {
     assertThat(inspector.clazz(A.class), isPresent());
+    assertThat(inspector.clazz(A.class).uniqueFieldWithOriginalName("classNameForB"), isPresent());
     assertThat(inspector.clazz(B.class), isPresent());
-    assertThat(inspector.clazz(C.class), isAbsent());
-    assertThat(inspector.clazz(B.class).method("void", "bar"), isPresent());
-    assertThat(inspector.clazz(B.class).method("void", "bar", "int"), isAbsent());
+    assertThat(inspector.clazz(B.class).init(), isPresent());
+    assertThat(inspector.clazz(B.class).init("int"), isAbsent());
   }
 
   static class A {
 
     @UsesReflection({
-      // Ensure that the class A remains as we are assuming the contents of its name.
-      @KeepTarget(classConstant = A.class),
-      // Ensure that the class B remains as we are looking it up by reflected name.
       @KeepTarget(classConstant = B.class),
-      // Ensure the method 'bar' remains as we are invoking it by reflected name.
       @KeepTarget(
           classConstant = B.class,
-          methodName = "bar",
-          methodParameters = {},
-          methodReturnType = "void")
+          methodName = "<init>",
+          methodParameters = {}),
     })
-    public void foo() throws Exception {
-      Class<?> clazz = Class.forName(A.class.getTypeName().replace("$A", "$B"));
-      clazz.getDeclaredMethod("bar").invoke(clazz);
-    }
+    public final String classNameForB =
+        System.nanoTime() == 0
+            ? null
+            : "com.android.tools.r8.keepanno.KeepUsesReflectionFieldAnnotationTest$B";
 
-    // This annotation is not active as its implicit precondition "void A.foo(int)" is not used.
-    @UsesReflection({@KeepTarget(classConstant = C.class)})
-    public void foo(int unused) {
-      // Unused.
+    public B foo() throws Exception {
+      return (B) Class.forName(classNameForB).getDeclaredConstructor().newInstance();
     }
   }
 
   static class B {
-    public static void bar() {
+    B() {
+      // Used.
+    }
+
+    B(int unused) {
+      // Unused.
+    }
+
+    public void bar() {
       System.out.println("Hello, world");
     }
-
-    public static void bar(int ignore) {
-      throw new RuntimeException("UNUSED");
-    }
-  }
-
-  static class C {
-    // Unused.
   }
 
   static class TestClass {
 
     public static void main(String[] args) throws Exception {
-      new A().foo();
+      new A().foo().bar();
     }
   }
 }

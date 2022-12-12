@@ -6,6 +6,8 @@ package com.android.tools.r8.cf.varhandle;
 
 import com.android.tools.r8.examples.jdk9.VarHandle;
 import com.android.tools.r8.utils.StringUtils;
+import com.google.common.collect.ImmutableList;
+import java.util.List;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
@@ -28,12 +30,12 @@ public class VarHandleDesugaringInstanceStringFieldTest extends VarHandleDesugar
   }
 
   @Override
-  protected String getJarEntry() {
-    return JAR_ENTRY;
+  protected List<String> getJarEntries() {
+    return ImmutableList.of(JAR_ENTRY);
   }
 
   @Override
-  protected String getExpectedOutput() {
+  protected String getExpectedOutputForReferenceImplementation() {
     return EXPECTED_OUTPUT;
   }
 }

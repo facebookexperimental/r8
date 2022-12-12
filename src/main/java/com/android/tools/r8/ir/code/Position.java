@@ -46,10 +46,6 @@ public abstract class Position implements StructuralItem<Position> {
     return false;
   }
 
-  public boolean isAdditionalMappingInfoPosition() {
-    return false;
-  }
-
   public boolean isRemoveInnerFramesIfThrowingNpe() {
     return removeInnerFramesIfThrowingNpe;
   }
@@ -201,7 +197,8 @@ public abstract class Position implements StructuralItem<Position> {
     return HashCodeVisitor.run(this);
   }
 
-  private String toString(boolean forceMethod) {
+  @Override
+  public String toString() {
     if (isNone()) {
       return "--";
     }
@@ -210,7 +207,7 @@ public abstract class Position implements StructuralItem<Position> {
       builder.append(getFile()).append(":");
     }
     builder.append("#").append(line);
-    if (method != null && (forceMethod || callerPosition != null)) {
+    if (method != null && callerPosition != null) {
       builder.append(":").append(method.name);
     }
     if (callerPosition != null) {
@@ -220,12 +217,16 @@ public abstract class Position implements StructuralItem<Position> {
         caller = caller.callerPosition;
       }
     }
+    if (isOutline()) {
+      builder.append(", isOutline = true");
+    }
+    if (getOutlineCallee() != null) {
+      builder.append(", outlineCallee = ").append(getOutlineCallee());
+    }
+    if (getOutlinePositions() != null) {
+      builder.append(", outlineCallerPositions = ").append(getOutlinePositions());
+    }
     return builder.toString();
-  }
-
-  @Override
-  public String toString() {
-    return toString(false);
   }
 
   public abstract PositionBuilder<?, ?> builderWithCopy();

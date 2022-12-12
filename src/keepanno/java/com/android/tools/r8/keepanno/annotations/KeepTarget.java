@@ -8,6 +8,20 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
+/**
+ * A target for a keep edge.
+ *
+ * <p>The target denotes a keep item along with options for what to keep:
+ *
+ * <ul>
+ *   <li>a class, or pattern on classes;
+ *   <li>a method, or pattern on methods; or
+ *   <li>a field, or pattern on fields.
+ * </ul>
+ *
+ * <p>The structure of a target item is the same as for a condition item but has the additional keep
+ * options.
+ */
 @Target(ElementType.ANNOTATION_TYPE)
 @Retention(RetentionPolicy.CLASS)
 public @interface KeepTarget {
@@ -17,5 +31,11 @@ public @interface KeepTarget {
 
   String methodName() default "";
 
+  String methodReturnType() default "";
+
+  String[] methodParameters() default {""};
+
   String fieldName() default "";
+
+  String fieldType() default "";
 }
