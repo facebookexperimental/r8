@@ -25,9 +25,22 @@ import java.lang.annotation.Target;
 @Target(ElementType.ANNOTATION_TYPE)
 @Retention(RetentionPolicy.CLASS)
 public @interface KeepTarget {
+
+  // KeepTarget only content (keep options) =========
+
+  KeepOption[] allow() default {};
+
+  KeepOption[] disallow() default {};
+
+  // Shared KeepItem content ========================
+
+  String className() default "";
+
   Class<?> classConstant() default Object.class;
 
-  String classTypeName() default "";
+  String extendsClassName() default "";
+
+  Class<?> extendsClassConstant() default Object.class;
 
   String methodName() default "";
 

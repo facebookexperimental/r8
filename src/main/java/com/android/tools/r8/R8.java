@@ -7,8 +7,6 @@ import static com.android.tools.r8.utils.AssertionUtils.forTesting;
 import static com.android.tools.r8.utils.ExceptionUtils.unwrapExecutionException;
 
 import com.android.tools.r8.androidapi.ApiReferenceStubber;
-import com.android.tools.r8.cf.code.CfInstruction;
-import com.android.tools.r8.cf.code.CfPosition;
 import com.android.tools.r8.desugar.desugaredlibrary.DesugaredLibraryKeepRuleGenerator;
 import com.android.tools.r8.dex.ApplicationReader;
 import com.android.tools.r8.dex.ApplicationWriter;
@@ -20,12 +18,9 @@ import com.android.tools.r8.graph.AppInfoWithClassHierarchy;
 import com.android.tools.r8.graph.AppServices;
 import com.android.tools.r8.graph.AppView;
 import com.android.tools.r8.graph.AppliedGraphLens;
-import com.android.tools.r8.graph.CfCode;
 import com.android.tools.r8.graph.Code;
 import com.android.tools.r8.graph.DexApplication;
 import com.android.tools.r8.graph.DexClass;
-import com.android.tools.r8.graph.DexCode;
-import com.android.tools.r8.graph.DexDebugEvent;
 import com.android.tools.r8.graph.DexEncodedMethod;
 import com.android.tools.r8.graph.DexMethod;
 import com.android.tools.r8.graph.DexProgramClass;
@@ -36,6 +31,7 @@ import com.android.tools.r8.graph.GenericSignatureContextBuilder;
 import com.android.tools.r8.graph.GenericSignatureCorrectnessHelper;
 import com.android.tools.r8.graph.GraphLens;
 import com.android.tools.r8.graph.ProgramDefinition;
+import com.android.tools.r8.graph.ProgramMethod;
 import com.android.tools.r8.graph.PrunedItems;
 import com.android.tools.r8.graph.SubtypingInfo;
 import com.android.tools.r8.graph.analysis.ClassInitializerAssertionEnablingAnalysis;
@@ -947,10 +943,8 @@ public class R8 {
                         if (code == null) {
                           return;
                         }
-                        if (code.isCfCode()) {
-                          assert verifyOriginalMethodInPosition(code.asCfCode(), originalMethod);
-                        } else if (code.isDexCode()) {
-                          assert verifyOriginalMethodInDebugInfo(code.asDexCode(), originalMethod);
+                        if (code.isCfCode() || code.isDexCode()) {
+                          assert verifyOriginalMethodInPosition(code, originalMethod, method);
                         } else {
                           assert code.isDefaultInstanceInitializerCode() || code.isThrowNullCode();
                         }
@@ -959,26 +953,25 @@ public class R8 {
     return true;
   }
 
-  private static boolean verifyOriginalMethodInPosition(CfCode code, DexMethod originalMethod) {
-    for (CfInstruction instruction : code.getInstructions()) {
-      if (!instruction.isPosition()) {
-        continue;
-      }
-      CfPosition position = instruction.asPosition();
-      assert position.getPosition().getOutermostCaller().getMethod() == originalMethod;
-    }
-    return true;
-  }
-
-  private static boolean verifyOriginalMethodInDebugInfo(DexCode code, DexMethod originalMethod) {
-    if (code.getDebugInfo() == null || code.getDebugInfo().isPcBasedInfo()) {
-      return true;
-    }
-    for (DexDebugEvent event : code.getDebugInfo().asEventBasedInfo().events) {
-      assert !event.isPositionFrame()
-          || event.asSetPositionFrame().getPosition().getOutermostCaller().getMethod()
-              == originalMethod;
-    }
+  private static boolean verifyOriginalMethodInPosition(
+      Code code, DexMethod originalMethod, ProgramMethod context) {
+    code.forEachPosition(
+        position -> {
+          if (position.isOutlineCaller()) {
+            // Check the outlined positions for the original method
+            position
+                .getOutlinePositions()
+                .forEach(
+                    (ignored, outlinePosition) -> {
+                      assert outlinePosition.hasMethodInChain(originalMethod);
+                    });
+          } else if (context.getDefinition().isD8R8Synthesized()) {
+            // TODO(b/261971803): Enable assert.
+            assert true || position.hasMethodInChain(originalMethod);
+          } else {
+            assert position.getOutermostCaller().getMethod() == originalMethod;
+          }
+        });
     return true;
   }
 

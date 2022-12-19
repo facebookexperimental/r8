@@ -17,6 +17,7 @@ import com.android.tools.r8.ir.conversion.MethodConversionOptions.MutableMethodC
 import com.android.tools.r8.origin.Origin;
 import com.android.tools.r8.utils.RetracerForCodePrinting;
 import it.unimi.dsi.fastutil.ints.Int2ReferenceMap;
+import java.util.function.Consumer;
 
 public abstract class Code extends CachedHashValueDexItem {
 
@@ -190,7 +191,7 @@ public abstract class Code extends CachedHashValueDexItem {
       Position callerPosition, Position oldPosition, boolean isCalleeD8R8Synthesized) {
     Position outermostCaller = oldPosition.getOutermostCaller();
     if (!isCalleeD8R8Synthesized) {
-      return oldPosition.withOutermostCallerPosition(callerPosition);
+      return removeSameMethodAndLineZero(oldPosition, callerPosition);
     }
     // We can replace the position since the callee was synthesized by the compiler, however, if
     // the position carries special information we need to copy it.
@@ -207,5 +208,24 @@ public abstract class Code extends CachedHashValueDexItem {
       positionBuilder.setRemoveInnerFramesIfThrowingNpe(true);
     }
     return oldPosition.replacePosition(outermostCaller, positionBuilder.build());
+  }
+
+  @Deprecated()
+  // TODO(b/261971803): When having complete control over the positions we should not need this.
+  private static Position removeSameMethodAndLineZero(
+      Position calleePosition, Position callerPosition) {
+    Position outermostCaller = calleePosition.getOutermostCaller();
+    if (outermostCaller.getLine() == 0) {
+      while (callerPosition != null
+          && outermostCaller.getMethod() == callerPosition.getMethod()
+          && callerPosition.getLine() == 0) {
+        callerPosition = callerPosition.getCallerPosition();
+      }
+    }
+    return calleePosition.withOutermostCallerPosition(callerPosition);
+  }
+
+  public void forEachPosition(Consumer<Position> positionConsumer) {
+    // Intentionally empty. Override where we have fully build CF or DEX code.
   }
 }

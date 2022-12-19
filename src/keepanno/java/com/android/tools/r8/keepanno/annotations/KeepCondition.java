@@ -25,9 +25,13 @@ import java.lang.annotation.Target;
 @Target(ElementType.ANNOTATION_TYPE)
 @Retention(RetentionPolicy.CLASS)
 public @interface KeepCondition {
+  String className() default "";
+
   Class<?> classConstant() default Object.class;
 
-  String classTypeName() default "";
+  String extendsClassName() default "";
+
+  Class<?> extendsClassConstant() default Object.class;
 
   String methodName() default "";
 

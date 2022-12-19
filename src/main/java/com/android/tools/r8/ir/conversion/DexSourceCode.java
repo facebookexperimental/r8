@@ -258,10 +258,11 @@ public class DexSourceCode implements SourceCode {
   }
 
   private Position getCanonicalPositionAppendCaller(DexDebugEntry entry) {
-    // If this instruction has already been inlined then this.method must be the outermost caller.
+    // If this instruction has already been inlined then the original method must be in the caller
+    // chain.
     Position position = entry.getPosition();
-    assert !position.hasCallerPosition()
-        || position.getOutermostCaller().getMethod() == originalMethod;
+    // TODO(b/261971803): The original method should probably always be in the chain.
+    assert !position.hasCallerPosition() || position.hasMethodInChain(originalMethod);
     return canonicalPositions.getCanonical(
         position
             .builderWithCopy()

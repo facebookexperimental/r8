@@ -86,16 +86,12 @@ public abstract class Invoke extends Instruction {
           return Type.STATIC;
         case Opcodes.INVOKEVIRTUAL:
           return appView.dexItemFactory().polymorphicMethods.isPolymorphicInvoke(invokedMethod)
+                  && !appView.options().shouldDesugarVarHandle()
               ? Type.POLYMORPHIC
               : Type.VIRTUAL;
         default:
           throw new Unreachable("unknown CfInvoke opcode " + opcode);
       }
-    }
-
-    public static Type fromInvokeSpecial(
-        DexMethod invokedMethod, DexClassAndMethod context, AppView<?> appView) {
-      return fromInvokeSpecial(invokedMethod, context, appView, appView.codeLens());
     }
 
     public static Type fromInvokeSpecial(
