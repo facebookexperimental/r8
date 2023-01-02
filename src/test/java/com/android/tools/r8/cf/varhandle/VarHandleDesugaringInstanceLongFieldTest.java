@@ -16,6 +16,12 @@ public class VarHandleDesugaringInstanceLongFieldTest extends VarHandleDesugarin
 
   private static final String EXPECTED_OUTPUT =
       StringUtils.lines(
+          "testGet",
+          "1",
+          "1",
+          "1",
+          "1.0",
+          "1.0",
           "testSet",
           "0",
           "1",
@@ -84,10 +90,5 @@ public class VarHandleDesugaringInstanceLongFieldTest extends VarHandleDesugarin
   @Override
   protected String getExpectedOutputForReferenceImplementation() {
     return EXPECTED_OUTPUT;
-  }
-
-  @Override
-  protected boolean getTestWithDesugaring() {
-    return true;
   }
 }

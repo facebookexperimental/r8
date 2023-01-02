@@ -17,6 +17,13 @@ public class VarHandleDesugaringInstanceIntFieldTest extends VarHandleDesugaring
   private static final String EXPECTED_OUTPUT =
       StringUtils.lines(
           "testGet",
+          "1",
+          "1",
+          "1",
+          "1",
+          "1.0",
+          "1.0",
+          "testSet",
           "0",
           "1",
           "2",
@@ -85,10 +92,5 @@ public class VarHandleDesugaringInstanceIntFieldTest extends VarHandleDesugaring
   @Override
   protected String getExpectedOutputForReferenceImplementation() {
     return EXPECTED_OUTPUT;
-  }
-
-  @Override
-  protected boolean getTestWithDesugaring() {
-    return true;
   }
 }
