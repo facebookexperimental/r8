@@ -14,108 +14,36 @@ import org.junit.runners.Parameterized;
 @RunWith(Parameterized.class)
 public class VarHandleDesugaringInstanceObjectFieldTest extends VarHandleDesugaringTestBase {
 
+  private static final String TEST_GET_SET_EXPECTED_OUTPUT =
+      StringUtils.lines(
+              "null", "A(1)", "true", "A(2)", "true", "1", "1", "true", "true", "2", "2", "true",
+              "true", "3", "3", "true", "true", "4", "4", "true", "true", "5", "5", "true", "true",
+              "6", "6", "true", "true", "7", "7", "true", "true", "8", "8", "true", "true", "9.0",
+              "9.0", "true", "true", "10.0", "10.0", "true", "true", "11.0", "11.0", "true", "true",
+              "12.0", "12.0", "true", "true", "A", "A", "true", "true", "B", "B", "true", "true")
+          .trim();
+
+  private static final String TEST_COMPAREANDSET_EXPECTED_OUTPUT =
+      StringUtils.lines(
+              "null", "A(1)", "true", "A(2)", "true", "1", "2", "3", "4", "4", "4", "4", "5", "6",
+              "7", "8", "8", "8", "8", "false", "8", "false", "8", "8", "8", "8", "8", "8", "8",
+              "8", "8", "8", "8", "8", "8", "8")
+          .trim();
+
   private static final String EXPECTED_OUTPUT =
       StringUtils.lines(
-          "testSet",
-          "null",
-          "A(1)",
-          "true",
-          "A(2)",
-          "true",
-          "1",
-          "1",
-          "true",
-          "true",
-          "2",
-          "2",
-          "true",
-          "true",
-          "3",
-          "3",
-          "true",
-          "true",
-          "4",
-          "4",
-          "true",
-          "true",
-          "5",
-          "5",
-          "true",
-          "true",
-          "6",
-          "6",
-          "true",
-          "true",
-          "7",
-          "7",
-          "true",
-          "true",
-          "8",
-          "8",
-          "true",
-          "true",
-          "9.0",
-          "9.0",
-          "true",
-          "true",
-          "10.0",
-          "10.0",
-          "true",
-          "true",
-          "11.0",
-          "11.0",
-          "true",
-          "true",
-          "12.0",
-          "12.0",
-          "true",
-          "true",
-          "A",
-          "A",
-          "true",
-          "true",
-          "B",
-          "B",
-          "true",
-          "true",
+          "testSetGet",
+          TEST_GET_SET_EXPECTED_OUTPUT,
+          "testSetVolatileGetVolatile",
+          TEST_GET_SET_EXPECTED_OUTPUT,
+          "testSetReleaseGet",
+          TEST_GET_SET_EXPECTED_OUTPUT,
           "testCompareAndSet",
-          "null",
-          "A(1)",
-          "true",
-          "A(2)",
-          "true",
-          "1",
-          "2",
-          "3",
-          "4",
-          "4",
-          "4",
-          "4",
-          "5",
-          "6",
-          "7",
-          "8",
-          "8",
-          "8",
-          "8",
-          "false",
-          "8",
-          "false",
-          "8",
-          "8",
-          "8",
-          "8",
-          "8",
-          "8",
-          "8",
-          "8",
-          "8",
-          "8",
-          "8",
-          "8",
-          "8",
-          "8",
+          TEST_COMPAREANDSET_EXPECTED_OUTPUT,
+          "testWeakCompareAndSet",
+          TEST_COMPAREANDSET_EXPECTED_OUTPUT,
           "testReturnValueClassCastException");
+
   private static final String MAIN_CLASS = VarHandle.InstanceObjectField.typeName();
   private static final List<String> JAR_ENTRIES =
       ImmutableList.of(
@@ -127,8 +55,8 @@ public class VarHandleDesugaringInstanceObjectFieldTest extends VarHandleDesugar
   }
 
   @Override
-  protected String getKeepRules() {
-    return "-keep class " + getMainClass() + "{ <fields>; }";
+  protected List<String> getKeepRules() {
+    return ImmutableList.of("-keep class " + getMainClass() + "{ <fields>; }");
   }
 
   @Override

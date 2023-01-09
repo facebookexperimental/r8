@@ -113,11 +113,6 @@ public final class VarHandleDesugaringMethods {
                 .setAccessFlags(FieldAccessFlags.createPublicFinalSynthetic())
                 .disableAndroidApiLevelCheck()
                 .build()));
-    DexMethod toIntIfPossible =
-        factory.createMethod(
-            builder.getType(),
-            factory.createProto(factory.intType, factory.objectType, factory.booleanType),
-            factory.createString("toIntIfPossible"));
     DexMethod compareAndSet =
         factory.createMethod(
             builder.getType(),
@@ -133,20 +128,6 @@ public final class VarHandleDesugaringMethods {
                 factory.intType,
                 factory.createType(factory.createString("Ljava/lang/Class;"))),
             factory.createString("get"));
-    DexMethod setArrayInt =
-        factory.createMethod(
-            builder.getType(),
-            factory.createProto(
-                factory.voidType,
-                factory.createType(factory.createString("[I")),
-                factory.intType,
-                factory.intType),
-            factory.createString("set"));
-    DexMethod setLong =
-        factory.createMethod(
-            builder.getType(),
-            factory.createProto(factory.voidType, factory.objectType, factory.longType),
-            factory.createString("set"));
     DexMethod boxIntIfPossible =
         factory.createMethod(
             builder.getType(),
@@ -170,22 +151,193 @@ public final class VarHandleDesugaringMethods {
                 factory.intType,
                 factory.longType),
             factory.createString("set"));
+    DexMethod setVolatileArray =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(
+                factory.voidType, factory.objectType, factory.intType, factory.objectType),
+            factory.createString("setVolatile"));
     DexMethod getInt =
         factory.createMethod(
             builder.getType(),
             factory.createProto(factory.intType, factory.objectType),
             factory.createString("get"));
+    DexMethod setVolatileLong =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(factory.voidType, factory.objectType, factory.longType),
+            factory.createString("setVolatile"));
+    DexMethod getLong =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(factory.longType, factory.objectType),
+            factory.createString("get"));
+    DexMethod setVolatileInt =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(factory.voidType, factory.objectType, factory.intType),
+            factory.createString("setVolatile"));
+    DexMethod getVolatileLong =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(factory.longType, factory.objectType),
+            factory.createString("getVolatile"));
+    DexMethod get =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(factory.objectType, factory.objectType),
+            factory.createString("get"));
+    DexMethod getVolatileInBox =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(
+                factory.objectType,
+                factory.objectType,
+                factory.createType(factory.createString("Ljava/lang/Class;"))),
+            factory.createString("getVolatile"));
+    DexMethod compareAndSetArrayInt =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(
+                factory.booleanType,
+                factory.createType(factory.createString("[I")),
+                factory.intType,
+                factory.intType,
+                factory.intType),
+            factory.createString("compareAndSet"));
+    DexMethod setInt =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(factory.voidType, factory.objectType, factory.intType),
+            factory.createString("set"));
+    DexMethod weakCompareAndSet =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(
+                factory.booleanType, factory.objectType, factory.objectType, factory.objectType),
+            factory.createString("weakCompareAndSet"));
+    DexMethod arrayRequiringNativeSupport =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(factory.createType(factory.createString("Ljava/lang/String;"))),
+            factory.createString("arrayRequiringNativeSupport"));
+    DexMethod boxLongIfPossible =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(
+                factory.objectType,
+                factory.longType,
+                factory.createType(factory.createString("Ljava/lang/Class;"))),
+            factory.createString("boxLongIfPossible"));
+    DexMethod toLongIfPossible =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(factory.longType, factory.objectType, factory.booleanType),
+            factory.createString("toLongIfPossible"));
+    DexMethod set =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(factory.voidType, factory.objectType, factory.objectType),
+            factory.createString("set"));
+    DexMethod getArrayInt =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(
+                factory.intType, factory.createType(factory.createString("[I")), factory.intType),
+            factory.createString("get"));
+    DexMethod weakCompareAndSetArray =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(
+                factory.booleanType,
+                factory.objectType,
+                factory.intType,
+                factory.objectType,
+                factory.objectType),
+            factory.createString("weakCompareAndSet"));
+    DexMethod setArray =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(
+                factory.voidType, factory.objectType, factory.intType, factory.objectType),
+            factory.createString("set"));
+    DexMethod compareAndSetInt =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(
+                factory.booleanType, factory.objectType, factory.intType, factory.intType),
+            factory.createString("compareAndSet"));
+    DexMethod weakCompareAndSetLong =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(
+                factory.booleanType, factory.objectType, factory.longType, factory.longType),
+            factory.createString("weakCompareAndSet"));
+    DexMethod getVolatileArrayInBox =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(
+                factory.objectType,
+                factory.objectType,
+                factory.intType,
+                factory.createType(factory.createString("Ljava/lang/Class;"))),
+            factory.createString("getVolatile"));
+    DexMethod getVolatileArrayLong =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(
+                factory.longType, factory.createType(factory.createString("[J")), factory.intType),
+            factory.createString("getVolatile"));
+    DexMethod getVolatileArrayInt =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(
+                factory.intType, factory.createType(factory.createString("[I")), factory.intType),
+            factory.createString("getVolatile"));
+    DexMethod toIntIfPossible =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(factory.intType, factory.objectType, factory.booleanType),
+            factory.createString("toIntIfPossible"));
+    DexMethod setReleaseLong =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(factory.voidType, factory.objectType, factory.longType),
+            factory.createString("setRelease"));
+    DexMethod setVolatileArrayInt =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(
+                factory.voidType,
+                factory.createType(factory.createString("[I")),
+                factory.intType,
+                factory.intType),
+            factory.createString("setVolatile"));
+    DexMethod setArrayInt =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(
+                factory.voidType,
+                factory.createType(factory.createString("[I")),
+                factory.intType,
+                factory.intType),
+            factory.createString("set"));
+    DexMethod setLong =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(factory.voidType, factory.objectType, factory.longType),
+            factory.createString("set"));
     DexMethod getArrayLong =
         factory.createMethod(
             builder.getType(),
             factory.createProto(
                 factory.longType, factory.createType(factory.createString("[J")), factory.intType),
             factory.createString("get"));
-    DexMethod getLong =
+    DexMethod getVolatileInt =
         factory.createMethod(
             builder.getType(),
-            factory.createProto(factory.longType, factory.objectType),
-            factory.createString("get"));
+            factory.createProto(factory.intType, factory.objectType),
+            factory.createString("getVolatile"));
     DexMethod compareAndSetArrayLong =
         factory.createMethod(
             builder.getType(),
@@ -204,32 +356,60 @@ public final class VarHandleDesugaringMethods {
                 factory.objectType,
                 factory.createType(factory.createString("Ljava/lang/Class;"))),
             factory.createString("get"));
-    DexMethod get =
+    DexMethod setReleaseInt =
         factory.createMethod(
             builder.getType(),
-            factory.createProto(factory.objectType, factory.objectType),
-            factory.createString("get"));
-    DexMethod compareAndSetArrayInt =
+            factory.createProto(factory.voidType, factory.objectType, factory.intType),
+            factory.createString("setRelease"));
+    DexMethod getVolatileArray =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(factory.objectType, factory.objectType, factory.intType),
+            factory.createString("getVolatile"));
+    DexMethod setReleaseArray =
         factory.createMethod(
             builder.getType(),
             factory.createProto(
-                factory.booleanType,
+                factory.voidType, factory.objectType, factory.intType, factory.objectType),
+            factory.createString("setRelease"));
+    DexMethod setRelease =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(factory.voidType, factory.objectType, factory.objectType),
+            factory.createString("setRelease"));
+    DexMethod setReleaseArrayLong =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(
+                factory.voidType,
+                factory.createType(factory.createString("[J")),
+                factory.intType,
+                factory.longType),
+            factory.createString("setRelease"));
+    DexMethod setVolatileArrayLong =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(
+                factory.voidType,
+                factory.createType(factory.createString("[J")),
+                factory.intType,
+                factory.longType),
+            factory.createString("setVolatile"));
+    DexMethod setReleaseArrayInt =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(
+                factory.voidType,
                 factory.createType(factory.createString("[I")),
                 factory.intType,
-                factory.intType,
                 factory.intType),
-            factory.createString("compareAndSet"));
+            factory.createString("setRelease"));
     DexMethod constructor_1 =
         factory.createMethod(
             builder.getType(),
             factory.createProto(
                 factory.voidType, factory.createType(factory.createString("Ljava/lang/Class;"))),
             factory.createString("<init>"));
-    DexMethod setInt =
-        factory.createMethod(
-            builder.getType(),
-            factory.createProto(factory.voidType, factory.objectType, factory.intType),
-            factory.createString("set"));
     DexMethod constructor_3 =
         factory.createMethod(
             builder.getType(),
@@ -239,53 +419,48 @@ public final class VarHandleDesugaringMethods {
                 factory.createType(factory.createString("Ljava/lang/String;")),
                 factory.createType(factory.createString("Ljava/lang/Class;"))),
             factory.createString("<init>"));
-    DexMethod arrayRequiringNativeSupport =
+    DexMethod getVolatile =
         factory.createMethod(
             builder.getType(),
-            factory.createProto(factory.createType(factory.createString("Ljava/lang/String;"))),
-            factory.createString("arrayRequiringNativeSupport"));
-    DexMethod boxLongIfPossible =
+            factory.createProto(factory.objectType, factory.objectType),
+            factory.createString("getVolatile"));
+    DexMethod weakCompareAndSetArrayLong =
         factory.createMethod(
             builder.getType(),
             factory.createProto(
-                factory.objectType,
+                factory.booleanType,
+                factory.createType(factory.createString("[J")),
+                factory.intType,
                 factory.longType,
-                factory.createType(factory.createString("Ljava/lang/Class;"))),
-            factory.createString("boxLongIfPossible"));
+                factory.longType),
+            factory.createString("weakCompareAndSet"));
+    DexMethod setVolatile =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(factory.voidType, factory.objectType, factory.objectType),
+            factory.createString("setVolatile"));
+    DexMethod weakCompareAndSetArrayInt =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(
+                factory.booleanType,
+                factory.createType(factory.createString("[I")),
+                factory.intType,
+                factory.intType,
+                factory.intType),
+            factory.createString("weakCompareAndSet"));
     DexMethod compareAndSetLong =
         factory.createMethod(
             builder.getType(),
             factory.createProto(
                 factory.booleanType, factory.objectType, factory.longType, factory.longType),
             factory.createString("compareAndSet"));
-    DexMethod toLongIfPossible =
-        factory.createMethod(
-            builder.getType(),
-            factory.createProto(factory.longType, factory.objectType, factory.booleanType),
-            factory.createString("toLongIfPossible"));
-    DexMethod set =
-        factory.createMethod(
-            builder.getType(),
-            factory.createProto(factory.voidType, factory.objectType, factory.objectType),
-            factory.createString("set"));
-    DexMethod getArrayInt =
-        factory.createMethod(
-            builder.getType(),
-            factory.createProto(
-                factory.intType, factory.createType(factory.createString("[I")), factory.intType),
-            factory.createString("get"));
-    DexMethod setArray =
-        factory.createMethod(
-            builder.getType(),
-            factory.createProto(
-                factory.voidType, factory.objectType, factory.intType, factory.objectType),
-            factory.createString("set"));
-    DexMethod compareAndSetInt =
+    DexMethod weakCompareAndSetInt =
         factory.createMethod(
             builder.getType(),
             factory.createProto(
                 factory.booleanType, factory.objectType, factory.intType, factory.intType),
-            factory.createString("compareAndSet"));
+            factory.createString("weakCompareAndSet"));
     DexMethod compareAndSetArray =
         factory.createMethod(
             builder.getType(),
@@ -322,14 +497,6 @@ public final class VarHandleDesugaringMethods {
     builder.setVirtualMethods(
         ImmutableList.of(
             DexEncodedMethod.syntheticBuilder()
-                .setMethod(toIntIfPossible)
-                .setAccessFlags(
-                    MethodAccessFlags.fromSharedAccessFlags(
-                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
-                .setCode(DesugarVarHandle_toIntIfPossible(factory, toIntIfPossible))
-                .disableAndroidApiLevelCheck()
-                .build(),
-            DexEncodedMethod.syntheticBuilder()
                 .setMethod(compareAndSet)
                 .setAccessFlags(
                     MethodAccessFlags.fromSharedAccessFlags(
@@ -343,22 +510,6 @@ public final class VarHandleDesugaringMethods {
                     MethodAccessFlags.fromSharedAccessFlags(
                         Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
                 .setCode(DesugarVarHandle_getArrayInBox(factory, getArrayInBox))
-                .disableAndroidApiLevelCheck()
-                .build(),
-            DexEncodedMethod.syntheticBuilder()
-                .setMethod(setArrayInt)
-                .setAccessFlags(
-                    MethodAccessFlags.fromSharedAccessFlags(
-                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
-                .setCode(DesugarVarHandle_setArrayInt(factory, setArrayInt))
-                .disableAndroidApiLevelCheck()
-                .build(),
-            DexEncodedMethod.syntheticBuilder()
-                .setMethod(setLong)
-                .setAccessFlags(
-                    MethodAccessFlags.fromSharedAccessFlags(
-                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
-                .setCode(DesugarVarHandle_setLong(factory, setLong))
                 .disableAndroidApiLevelCheck()
                 .build(),
             DexEncodedMethod.syntheticBuilder()
@@ -388,6 +539,14 @@ public final class VarHandleDesugaringMethods {
                 .disableAndroidApiLevelCheck()
                 .build(),
             DexEncodedMethod.syntheticBuilder()
+                .setMethod(setVolatileArray)
+                .setAccessFlags(
+                    MethodAccessFlags.fromSharedAccessFlags(
+                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
+                .setCode(DesugarVarHandle_setVolatileArray(factory, setVolatileArray))
+                .disableAndroidApiLevelCheck()
+                .build(),
+            DexEncodedMethod.syntheticBuilder()
                 .setMethod(getInt)
                 .setAccessFlags(
                     MethodAccessFlags.fromSharedAccessFlags(
@@ -396,11 +555,11 @@ public final class VarHandleDesugaringMethods {
                 .disableAndroidApiLevelCheck()
                 .build(),
             DexEncodedMethod.syntheticBuilder()
-                .setMethod(getArrayLong)
+                .setMethod(setVolatileLong)
                 .setAccessFlags(
                     MethodAccessFlags.fromSharedAccessFlags(
                         Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
-                .setCode(DesugarVarHandle_getArrayLong(factory, getArrayLong))
+                .setCode(DesugarVarHandle_setVolatileLong(factory, setVolatileLong))
                 .disableAndroidApiLevelCheck()
                 .build(),
             DexEncodedMethod.syntheticBuilder()
@@ -412,19 +571,19 @@ public final class VarHandleDesugaringMethods {
                 .disableAndroidApiLevelCheck()
                 .build(),
             DexEncodedMethod.syntheticBuilder()
-                .setMethod(compareAndSetArrayLong)
+                .setMethod(setVolatileInt)
                 .setAccessFlags(
                     MethodAccessFlags.fromSharedAccessFlags(
                         Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
-                .setCode(DesugarVarHandle_compareAndSetArrayLong(factory, compareAndSetArrayLong))
+                .setCode(DesugarVarHandle_setVolatileInt(factory, setVolatileInt))
                 .disableAndroidApiLevelCheck()
                 .build(),
             DexEncodedMethod.syntheticBuilder()
-                .setMethod(getInBox)
+                .setMethod(getVolatileLong)
                 .setAccessFlags(
                     MethodAccessFlags.fromSharedAccessFlags(
                         Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
-                .setCode(DesugarVarHandle_getInBox(factory, getInBox))
+                .setCode(DesugarVarHandle_getVolatileLong(factory, getVolatileLong))
                 .disableAndroidApiLevelCheck()
                 .build(),
             DexEncodedMethod.syntheticBuilder()
@@ -433,6 +592,14 @@ public final class VarHandleDesugaringMethods {
                     MethodAccessFlags.fromSharedAccessFlags(
                         Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
                 .setCode(DesugarVarHandle_get(factory, get))
+                .disableAndroidApiLevelCheck()
+                .build(),
+            DexEncodedMethod.syntheticBuilder()
+                .setMethod(getVolatileInBox)
+                .setAccessFlags(
+                    MethodAccessFlags.fromSharedAccessFlags(
+                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
+                .setCode(DesugarVarHandle_getVolatileInBox(factory, getVolatileInBox))
                 .disableAndroidApiLevelCheck()
                 .build(),
             DexEncodedMethod.syntheticBuilder()
@@ -452,6 +619,14 @@ public final class VarHandleDesugaringMethods {
                 .disableAndroidApiLevelCheck()
                 .build(),
             DexEncodedMethod.syntheticBuilder()
+                .setMethod(weakCompareAndSet)
+                .setAccessFlags(
+                    MethodAccessFlags.fromSharedAccessFlags(
+                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
+                .setCode(DesugarVarHandle_weakCompareAndSet(factory, weakCompareAndSet))
+                .disableAndroidApiLevelCheck()
+                .build(),
+            DexEncodedMethod.syntheticBuilder()
                 .setMethod(arrayRequiringNativeSupport)
                 .setAccessFlags(
                     MethodAccessFlags.fromSharedAccessFlags(
@@ -467,14 +642,6 @@ public final class VarHandleDesugaringMethods {
                     MethodAccessFlags.fromSharedAccessFlags(
                         Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
                 .setCode(DesugarVarHandle_boxLongIfPossible(factory, boxLongIfPossible))
-                .disableAndroidApiLevelCheck()
-                .build(),
-            DexEncodedMethod.syntheticBuilder()
-                .setMethod(compareAndSetLong)
-                .setAccessFlags(
-                    MethodAccessFlags.fromSharedAccessFlags(
-                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
-                .setCode(DesugarVarHandle_compareAndSetLong(factory, compareAndSetLong))
                 .disableAndroidApiLevelCheck()
                 .build(),
             DexEncodedMethod.syntheticBuilder()
@@ -502,6 +669,14 @@ public final class VarHandleDesugaringMethods {
                 .disableAndroidApiLevelCheck()
                 .build(),
             DexEncodedMethod.syntheticBuilder()
+                .setMethod(weakCompareAndSetArray)
+                .setAccessFlags(
+                    MethodAccessFlags.fromSharedAccessFlags(
+                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
+                .setCode(DesugarVarHandle_weakCompareAndSetArray(factory, weakCompareAndSetArray))
+                .disableAndroidApiLevelCheck()
+                .build(),
+            DexEncodedMethod.syntheticBuilder()
                 .setMethod(setArray)
                 .setAccessFlags(
                     MethodAccessFlags.fromSharedAccessFlags(
@@ -515,6 +690,217 @@ public final class VarHandleDesugaringMethods {
                     MethodAccessFlags.fromSharedAccessFlags(
                         Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
                 .setCode(DesugarVarHandle_compareAndSetInt(factory, compareAndSetInt))
+                .disableAndroidApiLevelCheck()
+                .build(),
+            DexEncodedMethod.syntheticBuilder()
+                .setMethod(weakCompareAndSetLong)
+                .setAccessFlags(
+                    MethodAccessFlags.fromSharedAccessFlags(
+                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
+                .setCode(DesugarVarHandle_weakCompareAndSetLong(factory, weakCompareAndSetLong))
+                .disableAndroidApiLevelCheck()
+                .build(),
+            DexEncodedMethod.syntheticBuilder()
+                .setMethod(getVolatileArrayInBox)
+                .setAccessFlags(
+                    MethodAccessFlags.fromSharedAccessFlags(
+                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
+                .setCode(DesugarVarHandle_getVolatileArrayInBox(factory, getVolatileArrayInBox))
+                .disableAndroidApiLevelCheck()
+                .build(),
+            DexEncodedMethod.syntheticBuilder()
+                .setMethod(getVolatileArrayLong)
+                .setAccessFlags(
+                    MethodAccessFlags.fromSharedAccessFlags(
+                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
+                .setCode(DesugarVarHandle_getVolatileArrayLong(factory, getVolatileArrayLong))
+                .disableAndroidApiLevelCheck()
+                .build(),
+            DexEncodedMethod.syntheticBuilder()
+                .setMethod(getVolatileArrayInt)
+                .setAccessFlags(
+                    MethodAccessFlags.fromSharedAccessFlags(
+                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
+                .setCode(DesugarVarHandle_getVolatileArrayInt(factory, getVolatileArrayInt))
+                .disableAndroidApiLevelCheck()
+                .build(),
+            DexEncodedMethod.syntheticBuilder()
+                .setMethod(toIntIfPossible)
+                .setAccessFlags(
+                    MethodAccessFlags.fromSharedAccessFlags(
+                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
+                .setCode(DesugarVarHandle_toIntIfPossible(factory, toIntIfPossible))
+                .disableAndroidApiLevelCheck()
+                .build(),
+            DexEncodedMethod.syntheticBuilder()
+                .setMethod(setReleaseLong)
+                .setAccessFlags(
+                    MethodAccessFlags.fromSharedAccessFlags(
+                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
+                .setCode(DesugarVarHandle_setReleaseLong(factory, setReleaseLong))
+                .disableAndroidApiLevelCheck()
+                .build(),
+            DexEncodedMethod.syntheticBuilder()
+                .setMethod(setVolatileArrayInt)
+                .setAccessFlags(
+                    MethodAccessFlags.fromSharedAccessFlags(
+                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
+                .setCode(DesugarVarHandle_setVolatileArrayInt(factory, setVolatileArrayInt))
+                .disableAndroidApiLevelCheck()
+                .build(),
+            DexEncodedMethod.syntheticBuilder()
+                .setMethod(setArrayInt)
+                .setAccessFlags(
+                    MethodAccessFlags.fromSharedAccessFlags(
+                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
+                .setCode(DesugarVarHandle_setArrayInt(factory, setArrayInt))
+                .disableAndroidApiLevelCheck()
+                .build(),
+            DexEncodedMethod.syntheticBuilder()
+                .setMethod(setLong)
+                .setAccessFlags(
+                    MethodAccessFlags.fromSharedAccessFlags(
+                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
+                .setCode(DesugarVarHandle_setLong(factory, setLong))
+                .disableAndroidApiLevelCheck()
+                .build(),
+            DexEncodedMethod.syntheticBuilder()
+                .setMethod(getArrayLong)
+                .setAccessFlags(
+                    MethodAccessFlags.fromSharedAccessFlags(
+                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
+                .setCode(DesugarVarHandle_getArrayLong(factory, getArrayLong))
+                .disableAndroidApiLevelCheck()
+                .build(),
+            DexEncodedMethod.syntheticBuilder()
+                .setMethod(getVolatileInt)
+                .setAccessFlags(
+                    MethodAccessFlags.fromSharedAccessFlags(
+                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
+                .setCode(DesugarVarHandle_getVolatileInt(factory, getVolatileInt))
+                .disableAndroidApiLevelCheck()
+                .build(),
+            DexEncodedMethod.syntheticBuilder()
+                .setMethod(compareAndSetArrayLong)
+                .setAccessFlags(
+                    MethodAccessFlags.fromSharedAccessFlags(
+                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
+                .setCode(DesugarVarHandle_compareAndSetArrayLong(factory, compareAndSetArrayLong))
+                .disableAndroidApiLevelCheck()
+                .build(),
+            DexEncodedMethod.syntheticBuilder()
+                .setMethod(getInBox)
+                .setAccessFlags(
+                    MethodAccessFlags.fromSharedAccessFlags(
+                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
+                .setCode(DesugarVarHandle_getInBox(factory, getInBox))
+                .disableAndroidApiLevelCheck()
+                .build(),
+            DexEncodedMethod.syntheticBuilder()
+                .setMethod(setReleaseInt)
+                .setAccessFlags(
+                    MethodAccessFlags.fromSharedAccessFlags(
+                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
+                .setCode(DesugarVarHandle_setReleaseInt(factory, setReleaseInt))
+                .disableAndroidApiLevelCheck()
+                .build(),
+            DexEncodedMethod.syntheticBuilder()
+                .setMethod(getVolatileArray)
+                .setAccessFlags(
+                    MethodAccessFlags.fromSharedAccessFlags(
+                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
+                .setCode(DesugarVarHandle_getVolatileArray(factory, getVolatileArray))
+                .disableAndroidApiLevelCheck()
+                .build(),
+            DexEncodedMethod.syntheticBuilder()
+                .setMethod(setReleaseArray)
+                .setAccessFlags(
+                    MethodAccessFlags.fromSharedAccessFlags(
+                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
+                .setCode(DesugarVarHandle_setReleaseArray(factory, setReleaseArray))
+                .disableAndroidApiLevelCheck()
+                .build(),
+            DexEncodedMethod.syntheticBuilder()
+                .setMethod(setRelease)
+                .setAccessFlags(
+                    MethodAccessFlags.fromSharedAccessFlags(
+                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
+                .setCode(DesugarVarHandle_setRelease(factory, setRelease))
+                .disableAndroidApiLevelCheck()
+                .build(),
+            DexEncodedMethod.syntheticBuilder()
+                .setMethod(setReleaseArrayLong)
+                .setAccessFlags(
+                    MethodAccessFlags.fromSharedAccessFlags(
+                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
+                .setCode(DesugarVarHandle_setReleaseArrayLong(factory, setReleaseArrayLong))
+                .disableAndroidApiLevelCheck()
+                .build(),
+            DexEncodedMethod.syntheticBuilder()
+                .setMethod(setVolatileArrayLong)
+                .setAccessFlags(
+                    MethodAccessFlags.fromSharedAccessFlags(
+                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
+                .setCode(DesugarVarHandle_setVolatileArrayLong(factory, setVolatileArrayLong))
+                .disableAndroidApiLevelCheck()
+                .build(),
+            DexEncodedMethod.syntheticBuilder()
+                .setMethod(setReleaseArrayInt)
+                .setAccessFlags(
+                    MethodAccessFlags.fromSharedAccessFlags(
+                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
+                .setCode(DesugarVarHandle_setReleaseArrayInt(factory, setReleaseArrayInt))
+                .disableAndroidApiLevelCheck()
+                .build(),
+            DexEncodedMethod.syntheticBuilder()
+                .setMethod(getVolatile)
+                .setAccessFlags(
+                    MethodAccessFlags.fromSharedAccessFlags(
+                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
+                .setCode(DesugarVarHandle_getVolatile(factory, getVolatile))
+                .disableAndroidApiLevelCheck()
+                .build(),
+            DexEncodedMethod.syntheticBuilder()
+                .setMethod(weakCompareAndSetArrayLong)
+                .setAccessFlags(
+                    MethodAccessFlags.fromSharedAccessFlags(
+                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
+                .setCode(
+                    DesugarVarHandle_weakCompareAndSetArrayLong(
+                        factory, weakCompareAndSetArrayLong))
+                .disableAndroidApiLevelCheck()
+                .build(),
+            DexEncodedMethod.syntheticBuilder()
+                .setMethod(setVolatile)
+                .setAccessFlags(
+                    MethodAccessFlags.fromSharedAccessFlags(
+                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
+                .setCode(DesugarVarHandle_setVolatile(factory, setVolatile))
+                .disableAndroidApiLevelCheck()
+                .build(),
+            DexEncodedMethod.syntheticBuilder()
+                .setMethod(weakCompareAndSetArrayInt)
+                .setAccessFlags(
+                    MethodAccessFlags.fromSharedAccessFlags(
+                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
+                .setCode(
+                    DesugarVarHandle_weakCompareAndSetArrayInt(factory, weakCompareAndSetArrayInt))
+                .disableAndroidApiLevelCheck()
+                .build(),
+            DexEncodedMethod.syntheticBuilder()
+                .setMethod(compareAndSetLong)
+                .setAccessFlags(
+                    MethodAccessFlags.fromSharedAccessFlags(
+                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
+                .setCode(DesugarVarHandle_compareAndSetLong(factory, compareAndSetLong))
+                .disableAndroidApiLevelCheck()
+                .build(),
+            DexEncodedMethod.syntheticBuilder()
+                .setMethod(weakCompareAndSetInt)
+                .setAccessFlags(
+                    MethodAccessFlags.fromSharedAccessFlags(
+                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
+                .setCode(DesugarVarHandle_weakCompareAndSetInt(factory, weakCompareAndSetInt))
                 .disableAndroidApiLevelCheck()
                 .build(),
             DexEncodedMethod.syntheticBuilder()
@@ -547,6 +933,13 @@ public final class VarHandleDesugaringMethods {
                 factory.createType(factory.createString("Ljava/lang/String;")),
                 factory.createType(factory.createString("Ljava/lang/Class;"))),
             factory.createString("findVarHandle"));
+    DexMethod toPrivateLookupIn =
+        factory.createMethod(
+            builder.getType(),
+            factory.createProto(
+                factory.createType(factory.createString("Ljava/lang/invoke/MethodHandles$Lookup;")),
+                factory.createType(factory.createString("Ljava/lang/Class;"))),
+            factory.createString("toPrivateLookupIn"));
     DexMethod constructor_0 =
         factory.createMethod(
             builder.getType(),
@@ -570,6 +963,14 @@ public final class VarHandleDesugaringMethods {
                     MethodAccessFlags.fromSharedAccessFlags(
                         Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
                 .setCode(DesugarMethodHandlesLookup_findVarHandle(factory, findVarHandle))
+                .disableAndroidApiLevelCheck()
+                .build(),
+            DexEncodedMethod.syntheticBuilder()
+                .setMethod(toPrivateLookupIn)
+                .setAccessFlags(
+                    MethodAccessFlags.fromSharedAccessFlags(
+                        Constants.ACC_PUBLIC | Constants.ACC_SYNTHETIC, false))
+                .setCode(DesugarMethodHandlesLookup_toPrivateLookupIn(factory, toPrivateLookupIn))
                 .disableAndroidApiLevelCheck()
                 .build()));
   }
@@ -623,6 +1024,20 @@ public final class VarHandleDesugaringMethods {
                 false),
             new CfReturn(ValueType.OBJECT),
             label1),
+        ImmutableList.of(),
+        ImmutableList.of());
+  }
+
+  public static CfCode DesugarMethodHandlesLookup_toPrivateLookupIn(
+      DexItemFactory factory, DexMethod method) {
+    CfLabel label0 = new CfLabel();
+    CfLabel label1 = new CfLabel();
+    return new CfCode(
+        method.holder,
+        1,
+        2,
+        ImmutableList.of(
+            label0, new CfLoad(ValueType.OBJECT, 0), new CfReturn(ValueType.OBJECT), label1),
         ImmutableList.of(),
         ImmutableList.of());
   }
@@ -3641,6 +4056,1227 @@ public final class VarHandleDesugaringMethods {
         ImmutableList.of());
   }
 
+  public static CfCode DesugarVarHandle_getVolatile(DexItemFactory factory, DexMethod method) {
+    CfLabel label0 = new CfLabel();
+    CfLabel label1 = new CfLabel();
+    CfLabel label2 = new CfLabel();
+    CfLabel label3 = new CfLabel();
+    CfLabel label4 = new CfLabel();
+    CfLabel label5 = new CfLabel();
+    return new CfCode(
+        method.holder,
+        4,
+        2,
+        ImmutableList.of(
+            label0,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("type"))),
+            new CfStaticFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/Integer;"),
+                    factory.classType,
+                    factory.createString("TYPE"))),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label2),
+            label1,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(factory.intType, factory.objectType, factory.longType),
+                    factory.createString("getIntVolatile")),
+                false),
+            new CfInvoke(
+                184,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/Integer;"),
+                    factory.createProto(factory.createType("Ljava/lang/Integer;"), factory.intType),
+                    factory.createString("valueOf")),
+                false),
+            new CfReturn(ValueType.OBJECT),
+            label2,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType)
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("type"))),
+            new CfStaticFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/Long;"),
+                    factory.classType,
+                    factory.createString("TYPE"))),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label4),
+            label3,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(factory.longType, factory.objectType, factory.longType),
+                    factory.createString("getLongVolatile")),
+                false),
+            new CfInvoke(
+                184,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/Long;"),
+                    factory.createProto(factory.createType("Ljava/lang/Long;"), factory.longType),
+                    factory.createString("valueOf")),
+                false),
+            new CfReturn(ValueType.OBJECT),
+            label4,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType)
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(factory.objectType, factory.objectType, factory.longType),
+                    factory.createString("getObjectVolatile")),
+                false),
+            new CfReturn(ValueType.OBJECT),
+            label5),
+        ImmutableList.of(),
+        ImmutableList.of());
+  }
+
+  public static CfCode DesugarVarHandle_getVolatileArray(DexItemFactory factory, DexMethod method) {
+    CfLabel label0 = new CfLabel();
+    CfLabel label1 = new CfLabel();
+    CfLabel label2 = new CfLabel();
+    CfLabel label3 = new CfLabel();
+    CfLabel label4 = new CfLabel();
+    CfLabel label5 = new CfLabel();
+    CfLabel label6 = new CfLabel();
+    CfLabel label7 = new CfLabel();
+    CfLabel label8 = new CfLabel();
+    return new CfCode(
+        method.holder,
+        6,
+        5,
+        ImmutableList.of(
+            label0,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("recv"))),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.classType,
+                    factory.createProto(factory.booleanType),
+                    factory.createString("isArray")),
+                false),
+            new CfIf(If.Type.EQ, ValueType.INT, label1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("recv"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.objectType,
+                    factory.createProto(factory.classType),
+                    factory.createString("getClass")),
+                false),
+            new CfIfCmp(If.Type.EQ, ValueType.OBJECT, label2),
+            label1,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType()
+                    })),
+            new CfNew(factory.createType("Ljava/lang/UnsupportedOperationException;")),
+            new CfStackInstruction(CfStackInstruction.Opcode.Dup),
+            new CfInvoke(
+                183,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/UnsupportedOperationException;"),
+                    factory.createProto(factory.voidType),
+                    factory.createString("<init>")),
+                false),
+            new CfThrow(),
+            label2,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType()
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfLoad(ValueType.INT, 2),
+            new CfNumberConversion(NumericType.INT, NumericType.LONG),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("arrayIndexScale"))),
+            new CfArithmeticBinop(CfArithmeticBinop.Opcode.Mul, NumericType.LONG),
+            new CfArithmeticBinop(CfArithmeticBinop.Opcode.Add, NumericType.LONG),
+            new CfStore(ValueType.LONG, 3),
+            label3,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("type"))),
+            new CfStaticFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/Integer;"),
+                    factory.classType,
+                    factory.createString("TYPE"))),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label5),
+            label4,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.LONG, 3),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(factory.intType, factory.objectType, factory.longType),
+                    factory.createString("getIntVolatile")),
+                false),
+            new CfInvoke(
+                184,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/Integer;"),
+                    factory.createProto(factory.createType("Ljava/lang/Integer;"), factory.intType),
+                    factory.createString("valueOf")),
+                false),
+            new CfReturn(ValueType.OBJECT),
+            label5,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3, 4},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType(),
+                      FrameType.longType(),
+                      FrameType.longHighType()
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("type"))),
+            new CfStaticFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/Long;"),
+                    factory.classType,
+                    factory.createString("TYPE"))),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label7),
+            label6,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.LONG, 3),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(factory.longType, factory.objectType, factory.longType),
+                    factory.createString("getLongVolatile")),
+                false),
+            new CfNumberConversion(NumericType.LONG, NumericType.INT),
+            new CfInvoke(
+                184,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/Integer;"),
+                    factory.createProto(factory.createType("Ljava/lang/Integer;"), factory.intType),
+                    factory.createString("valueOf")),
+                false),
+            new CfReturn(ValueType.OBJECT),
+            label7,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3, 4},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType(),
+                      FrameType.longType(),
+                      FrameType.longHighType()
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.LONG, 3),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(factory.objectType, factory.objectType, factory.longType),
+                    factory.createString("getObjectVolatile")),
+                false),
+            new CfReturn(ValueType.OBJECT),
+            label8),
+        ImmutableList.of(),
+        ImmutableList.of());
+  }
+
+  public static CfCode DesugarVarHandle_getVolatileArrayInBox(
+      DexItemFactory factory, DexMethod method) {
+    CfLabel label0 = new CfLabel();
+    CfLabel label1 = new CfLabel();
+    CfLabel label2 = new CfLabel();
+    CfLabel label3 = new CfLabel();
+    CfLabel label4 = new CfLabel();
+    CfLabel label5 = new CfLabel();
+    CfLabel label6 = new CfLabel();
+    CfLabel label7 = new CfLabel();
+    CfLabel label8 = new CfLabel();
+    CfLabel label9 = new CfLabel();
+    CfLabel label10 = new CfLabel();
+    CfLabel label11 = new CfLabel();
+    CfLabel label12 = new CfLabel();
+    CfLabel label13 = new CfLabel();
+    return new CfCode(
+        method.holder,
+        6,
+        7,
+        ImmutableList.of(
+            label0,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("recv"))),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.classType,
+                    factory.createProto(factory.booleanType),
+                    factory.createString("isArray")),
+                false),
+            new CfIf(If.Type.EQ, ValueType.INT, label1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("recv"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.objectType,
+                    factory.createProto(factory.classType),
+                    factory.createString("getClass")),
+                false),
+            new CfIfCmp(If.Type.EQ, ValueType.OBJECT, label2),
+            label1,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType(),
+                      FrameType.initializedNonNullReference(factory.classType)
+                    })),
+            new CfNew(factory.createType("Ljava/lang/UnsupportedOperationException;")),
+            new CfStackInstruction(CfStackInstruction.Opcode.Dup),
+            new CfInvoke(
+                183,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/UnsupportedOperationException;"),
+                    factory.createProto(factory.voidType),
+                    factory.createString("<init>")),
+                false),
+            new CfThrow(),
+            label2,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType(),
+                      FrameType.initializedNonNullReference(factory.classType)
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfLoad(ValueType.INT, 2),
+            new CfNumberConversion(NumericType.INT, NumericType.LONG),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("arrayIndexScale"))),
+            new CfArithmeticBinop(CfArithmeticBinop.Opcode.Mul, NumericType.LONG),
+            new CfArithmeticBinop(CfArithmeticBinop.Opcode.Add, NumericType.LONG),
+            new CfStore(ValueType.LONG, 4),
+            label3,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("type"))),
+            new CfStaticFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/Integer;"),
+                    factory.classType,
+                    factory.createString("TYPE"))),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label5),
+            label4,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.LONG, 4),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(factory.intType, factory.objectType, factory.longType),
+                    factory.createString("getIntVolatile")),
+                false),
+            new CfLoad(ValueType.OBJECT, 3),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.objectType, factory.intType, factory.classType),
+                    factory.createString("boxIntIfPossible")),
+                false),
+            new CfReturn(ValueType.OBJECT),
+            label5,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3, 4, 5},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType(),
+                      FrameType.initializedNonNullReference(factory.classType),
+                      FrameType.longType(),
+                      FrameType.longHighType()
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("type"))),
+            new CfStaticFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/Long;"),
+                    factory.classType,
+                    factory.createString("TYPE"))),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label7),
+            label6,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.LONG, 4),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(factory.longType, factory.objectType, factory.longType),
+                    factory.createString("getLongVolatile")),
+                false),
+            new CfLoad(ValueType.OBJECT, 3),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.objectType, factory.longType, factory.classType),
+                    factory.createString("boxLongIfPossible")),
+                false),
+            new CfReturn(ValueType.OBJECT),
+            label7,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3, 4, 5},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType(),
+                      FrameType.initializedNonNullReference(factory.classType),
+                      FrameType.longType(),
+                      FrameType.longHighType()
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.LONG, 4),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(factory.objectType, factory.objectType, factory.longType),
+                    factory.createString("getObjectVolatile")),
+                false),
+            new CfStore(ValueType.OBJECT, 6),
+            label8,
+            new CfLoad(ValueType.OBJECT, 6),
+            new CfInstanceOf(factory.createType("Ljava/lang/Integer;")),
+            new CfIf(If.Type.EQ, ValueType.INT, label10),
+            new CfLoad(ValueType.OBJECT, 3),
+            new CfConstClass(factory.createType("Ljava/lang/Integer;")),
+            new CfIfCmp(If.Type.EQ, ValueType.OBJECT, label10),
+            label9,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 6),
+            new CfCheckCast(factory.createType("Ljava/lang/Integer;")),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/Integer;"),
+                    factory.createProto(factory.intType),
+                    factory.createString("intValue")),
+                false),
+            new CfLoad(ValueType.OBJECT, 3),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.objectType, factory.intType, factory.classType),
+                    factory.createString("boxIntIfPossible")),
+                false),
+            new CfReturn(ValueType.OBJECT),
+            label10,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3, 4, 5, 6},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType(),
+                      FrameType.initializedNonNullReference(factory.classType),
+                      FrameType.longType(),
+                      FrameType.longHighType(),
+                      FrameType.initializedNonNullReference(factory.objectType)
+                    })),
+            new CfLoad(ValueType.OBJECT, 6),
+            new CfInstanceOf(factory.createType("Ljava/lang/Long;")),
+            new CfIf(If.Type.EQ, ValueType.INT, label12),
+            new CfLoad(ValueType.OBJECT, 3),
+            new CfConstClass(factory.createType("Ljava/lang/Long;")),
+            new CfIfCmp(If.Type.EQ, ValueType.OBJECT, label12),
+            label11,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 6),
+            new CfCheckCast(factory.createType("Ljava/lang/Long;")),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/Long;"),
+                    factory.createProto(factory.longType),
+                    factory.createString("longValue")),
+                false),
+            new CfLoad(ValueType.OBJECT, 3),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.objectType, factory.longType, factory.classType),
+                    factory.createString("boxLongIfPossible")),
+                false),
+            new CfReturn(ValueType.OBJECT),
+            label12,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3, 4, 5, 6},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType(),
+                      FrameType.initializedNonNullReference(factory.classType),
+                      FrameType.longType(),
+                      FrameType.longHighType(),
+                      FrameType.initializedNonNullReference(factory.objectType)
+                    })),
+            new CfLoad(ValueType.OBJECT, 6),
+            new CfReturn(ValueType.OBJECT),
+            label13),
+        ImmutableList.of(),
+        ImmutableList.of());
+  }
+
+  public static CfCode DesugarVarHandle_getVolatileArrayInt(
+      DexItemFactory factory, DexMethod method) {
+    CfLabel label0 = new CfLabel();
+    CfLabel label1 = new CfLabel();
+    CfLabel label2 = new CfLabel();
+    CfLabel label3 = new CfLabel();
+    CfLabel label4 = new CfLabel();
+    return new CfCode(
+        method.holder,
+        6,
+        5,
+        ImmutableList.of(
+            label0,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("recv"))),
+            new CfConstClass(factory.intArrayType),
+            new CfIfCmp(If.Type.EQ, ValueType.OBJECT, label2),
+            label1,
+            new CfNew(factory.createType("Ljava/lang/UnsupportedOperationException;")),
+            new CfStackInstruction(CfStackInstruction.Opcode.Dup),
+            new CfInvoke(
+                183,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/UnsupportedOperationException;"),
+                    factory.createProto(factory.voidType),
+                    factory.createString("<init>")),
+                false),
+            new CfThrow(),
+            label2,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.intArrayType),
+                      FrameType.intType()
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfLoad(ValueType.INT, 2),
+            new CfNumberConversion(NumericType.INT, NumericType.LONG),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("arrayIndexScale"))),
+            new CfArithmeticBinop(CfArithmeticBinop.Opcode.Mul, NumericType.LONG),
+            new CfArithmeticBinop(CfArithmeticBinop.Opcode.Add, NumericType.LONG),
+            new CfStore(ValueType.LONG, 3),
+            label3,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.LONG, 3),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(factory.intType, factory.objectType, factory.longType),
+                    factory.createString("getIntVolatile")),
+                false),
+            new CfReturn(ValueType.INT),
+            label4),
+        ImmutableList.of(),
+        ImmutableList.of());
+  }
+
+  public static CfCode DesugarVarHandle_getVolatileArrayLong(
+      DexItemFactory factory, DexMethod method) {
+    CfLabel label0 = new CfLabel();
+    CfLabel label1 = new CfLabel();
+    CfLabel label2 = new CfLabel();
+    CfLabel label3 = new CfLabel();
+    CfLabel label4 = new CfLabel();
+    return new CfCode(
+        method.holder,
+        6,
+        5,
+        ImmutableList.of(
+            label0,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("recv"))),
+            new CfConstClass(factory.longArrayType),
+            new CfIfCmp(If.Type.EQ, ValueType.OBJECT, label2),
+            label1,
+            new CfNew(factory.createType("Ljava/lang/UnsupportedOperationException;")),
+            new CfStackInstruction(CfStackInstruction.Opcode.Dup),
+            new CfInvoke(
+                183,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/UnsupportedOperationException;"),
+                    factory.createProto(factory.voidType),
+                    factory.createString("<init>")),
+                false),
+            new CfThrow(),
+            label2,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.longArrayType),
+                      FrameType.intType()
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfLoad(ValueType.INT, 2),
+            new CfNumberConversion(NumericType.INT, NumericType.LONG),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("arrayIndexScale"))),
+            new CfArithmeticBinop(CfArithmeticBinop.Opcode.Mul, NumericType.LONG),
+            new CfArithmeticBinop(CfArithmeticBinop.Opcode.Add, NumericType.LONG),
+            new CfStore(ValueType.LONG, 3),
+            label3,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.LONG, 3),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(factory.longType, factory.objectType, factory.longType),
+                    factory.createString("getLongVolatile")),
+                false),
+            new CfReturn(ValueType.LONG),
+            label4),
+        ImmutableList.of(),
+        ImmutableList.of());
+  }
+
+  public static CfCode DesugarVarHandle_getVolatileInBox(DexItemFactory factory, DexMethod method) {
+    CfLabel label0 = new CfLabel();
+    CfLabel label1 = new CfLabel();
+    CfLabel label2 = new CfLabel();
+    CfLabel label3 = new CfLabel();
+    CfLabel label4 = new CfLabel();
+    CfLabel label5 = new CfLabel();
+    return new CfCode(
+        method.holder,
+        5,
+        3,
+        ImmutableList.of(
+            label0,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("type"))),
+            new CfStaticFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/Integer;"),
+                    factory.classType,
+                    factory.createString("TYPE"))),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label2),
+            label1,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(factory.intType, factory.objectType, factory.longType),
+                    factory.createString("getIntVolatile")),
+                false),
+            new CfLoad(ValueType.OBJECT, 2),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.objectType, factory.intType, factory.classType),
+                    factory.createString("boxIntIfPossible")),
+                false),
+            new CfReturn(ValueType.OBJECT),
+            label2,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.initializedNonNullReference(factory.classType)
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("type"))),
+            new CfStaticFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/Long;"),
+                    factory.classType,
+                    factory.createString("TYPE"))),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label4),
+            label3,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(factory.longType, factory.objectType, factory.longType),
+                    factory.createString("getLongVolatile")),
+                false),
+            new CfLoad(ValueType.OBJECT, 2),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.objectType, factory.longType, factory.classType),
+                    factory.createString("boxLongIfPossible")),
+                false),
+            new CfReturn(ValueType.OBJECT),
+            label4,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.initializedNonNullReference(factory.classType)
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(factory.objectType, factory.objectType, factory.longType),
+                    factory.createString("getObjectVolatile")),
+                false),
+            new CfReturn(ValueType.OBJECT),
+            label5),
+        ImmutableList.of(),
+        ImmutableList.of());
+  }
+
+  public static CfCode DesugarVarHandle_getVolatileInt(DexItemFactory factory, DexMethod method) {
+    CfLabel label0 = new CfLabel();
+    CfLabel label1 = new CfLabel();
+    CfLabel label2 = new CfLabel();
+    CfLabel label3 = new CfLabel();
+    CfLabel label4 = new CfLabel();
+    CfLabel label5 = new CfLabel();
+    return new CfCode(
+        method.holder,
+        5,
+        2,
+        ImmutableList.of(
+            label0,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("type"))),
+            new CfStaticFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/Integer;"),
+                    factory.classType,
+                    factory.createString("TYPE"))),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label2),
+            label1,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(factory.intType, factory.objectType, factory.longType),
+                    factory.createString("getIntVolatile")),
+                false),
+            new CfReturn(ValueType.INT),
+            label2,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType)
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("type"))),
+            new CfStaticFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/Long;"),
+                    factory.classType,
+                    factory.createString("TYPE"))),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label4),
+            label3,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.createType("Ljava/lang/RuntimeException;")),
+                    factory.createString("desugarWrongMethodTypeException")),
+                false),
+            new CfThrow(),
+            label4,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType)
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(factory.objectType, factory.objectType, factory.longType),
+                    factory.createString("getObjectVolatile")),
+                false),
+            new CfConstNumber(1, ValueType.INT),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.intType, factory.objectType, factory.booleanType),
+                    factory.createString("toIntIfPossible")),
+                false),
+            new CfReturn(ValueType.INT),
+            label5),
+        ImmutableList.of(),
+        ImmutableList.of());
+  }
+
+  public static CfCode DesugarVarHandle_getVolatileLong(DexItemFactory factory, DexMethod method) {
+    CfLabel label0 = new CfLabel();
+    CfLabel label1 = new CfLabel();
+    CfLabel label2 = new CfLabel();
+    CfLabel label3 = new CfLabel();
+    CfLabel label4 = new CfLabel();
+    CfLabel label5 = new CfLabel();
+    return new CfCode(
+        method.holder,
+        5,
+        2,
+        ImmutableList.of(
+            label0,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("type"))),
+            new CfStaticFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/Long;"),
+                    factory.classType,
+                    factory.createString("TYPE"))),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label2),
+            label1,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(factory.longType, factory.objectType, factory.longType),
+                    factory.createString("getLongVolatile")),
+                false),
+            new CfReturn(ValueType.LONG),
+            label2,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType)
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("type"))),
+            new CfStaticFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/Integer;"),
+                    factory.classType,
+                    factory.createString("TYPE"))),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label4),
+            label3,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(factory.intType, factory.objectType, factory.longType),
+                    factory.createString("getIntVolatile")),
+                false),
+            new CfNumberConversion(NumericType.INT, NumericType.LONG),
+            new CfReturn(ValueType.LONG),
+            label4,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType)
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(factory.objectType, factory.objectType, factory.longType),
+                    factory.createString("getObjectVolatile")),
+                false),
+            new CfConstNumber(1, ValueType.INT),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.longType, factory.objectType, factory.booleanType),
+                    factory.createString("toLongIfPossible")),
+                false),
+            new CfReturn(ValueType.LONG),
+            label5),
+        ImmutableList.of(),
+        ImmutableList.of());
+  }
+
   public static CfCode DesugarVarHandle_set(DexItemFactory factory, DexMethod method) {
     CfLabel label0 = new CfLabel();
     CfLabel label1 = new CfLabel();
@@ -4460,6 +6096,1648 @@ public final class VarHandleDesugaringMethods {
         ImmutableList.of());
   }
 
+  public static CfCode DesugarVarHandle_setRelease(DexItemFactory factory, DexMethod method) {
+    CfLabel label0 = new CfLabel();
+    CfLabel label1 = new CfLabel();
+    CfLabel label2 = new CfLabel();
+    CfLabel label3 = new CfLabel();
+    CfLabel label4 = new CfLabel();
+    CfLabel label5 = new CfLabel();
+    CfLabel label6 = new CfLabel();
+    return new CfCode(
+        method.holder,
+        5,
+        3,
+        ImmutableList.of(
+            label0,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("type"))),
+            new CfStaticFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/Integer;"),
+                    factory.classType,
+                    factory.createString("TYPE"))),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label2),
+            label1,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 2),
+            new CfConstNumber(0, ValueType.INT),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.intType, factory.objectType, factory.booleanType),
+                    factory.createString("toIntIfPossible")),
+                false),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.voidType, factory.objectType, factory.intType),
+                    factory.createString("setRelease")),
+                false),
+            new CfGoto(label5),
+            label2,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.initializedNonNullReference(factory.objectType)
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("type"))),
+            new CfStaticFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/Long;"),
+                    factory.classType,
+                    factory.createString("TYPE"))),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label4),
+            label3,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 2),
+            new CfConstNumber(0, ValueType.INT),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.longType, factory.objectType, factory.booleanType),
+                    factory.createString("toLongIfPossible")),
+                false),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.voidType, factory.objectType, factory.longType),
+                    factory.createString("setRelease")),
+                false),
+            new CfGoto(label5),
+            label4,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.initializedNonNullReference(factory.objectType)
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfLoad(ValueType.OBJECT, 2),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(
+                        factory.voidType, factory.objectType, factory.longType, factory.objectType),
+                    factory.createString("putOrderedObject")),
+                false),
+            label5,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.initializedNonNullReference(factory.objectType)
+                    })),
+            new CfReturnVoid(),
+            label6),
+        ImmutableList.of(),
+        ImmutableList.of());
+  }
+
+  public static CfCode DesugarVarHandle_setReleaseArray(DexItemFactory factory, DexMethod method) {
+    CfLabel label0 = new CfLabel();
+    CfLabel label1 = new CfLabel();
+    CfLabel label2 = new CfLabel();
+    CfLabel label3 = new CfLabel();
+    CfLabel label4 = new CfLabel();
+    CfLabel label5 = new CfLabel();
+    CfLabel label6 = new CfLabel();
+    CfLabel label7 = new CfLabel();
+    CfLabel label8 = new CfLabel();
+    CfLabel label9 = new CfLabel();
+    return new CfCode(
+        method.holder,
+        7,
+        6,
+        ImmutableList.of(
+            label0,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("recv"))),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.classType,
+                    factory.createProto(factory.booleanType),
+                    factory.createString("isArray")),
+                false),
+            new CfIf(If.Type.EQ, ValueType.INT, label1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("recv"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.objectType,
+                    factory.createProto(factory.classType),
+                    factory.createString("getClass")),
+                false),
+            new CfIfCmp(If.Type.EQ, ValueType.OBJECT, label2),
+            label1,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType(),
+                      FrameType.initializedNonNullReference(factory.objectType)
+                    })),
+            new CfNew(factory.createType("Ljava/lang/UnsupportedOperationException;")),
+            new CfStackInstruction(CfStackInstruction.Opcode.Dup),
+            new CfInvoke(
+                183,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/UnsupportedOperationException;"),
+                    factory.createProto(factory.voidType),
+                    factory.createString("<init>")),
+                false),
+            new CfThrow(),
+            label2,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType(),
+                      FrameType.initializedNonNullReference(factory.objectType)
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfLoad(ValueType.INT, 2),
+            new CfNumberConversion(NumericType.INT, NumericType.LONG),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("arrayIndexScale"))),
+            new CfArithmeticBinop(CfArithmeticBinop.Opcode.Mul, NumericType.LONG),
+            new CfArithmeticBinop(CfArithmeticBinop.Opcode.Add, NumericType.LONG),
+            new CfStore(ValueType.LONG, 4),
+            label3,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("recv"))),
+            new CfConstClass(factory.intArrayType),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label5),
+            label4,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.LONG, 4),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 3),
+            new CfConstNumber(0, ValueType.INT),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.intType, factory.objectType, factory.booleanType),
+                    factory.createString("toIntIfPossible")),
+                false),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(
+                        factory.voidType, factory.objectType, factory.longType, factory.intType),
+                    factory.createString("putOrderedInt")),
+                false),
+            new CfGoto(label8),
+            label5,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3, 4, 5},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType(),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.longType(),
+                      FrameType.longHighType()
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("recv"))),
+            new CfConstClass(factory.longArrayType),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label7),
+            label6,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.LONG, 4),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 3),
+            new CfConstNumber(0, ValueType.INT),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.longType, factory.objectType, factory.booleanType),
+                    factory.createString("toLongIfPossible")),
+                false),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(
+                        factory.voidType, factory.objectType, factory.longType, factory.longType),
+                    factory.createString("putOrderedLong")),
+                false),
+            new CfGoto(label8),
+            label7,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3, 4, 5},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType(),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.longType(),
+                      FrameType.longHighType()
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.LONG, 4),
+            new CfLoad(ValueType.OBJECT, 3),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(
+                        factory.voidType, factory.objectType, factory.longType, factory.objectType),
+                    factory.createString("putOrderedObject")),
+                false),
+            label8,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3, 4, 5},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType(),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.longType(),
+                      FrameType.longHighType()
+                    })),
+            new CfReturnVoid(),
+            label9),
+        ImmutableList.of(),
+        ImmutableList.of());
+  }
+
+  public static CfCode DesugarVarHandle_setReleaseArrayInt(
+      DexItemFactory factory, DexMethod method) {
+    CfLabel label0 = new CfLabel();
+    CfLabel label1 = new CfLabel();
+    CfLabel label2 = new CfLabel();
+    CfLabel label3 = new CfLabel();
+    CfLabel label4 = new CfLabel();
+    CfLabel label5 = new CfLabel();
+    return new CfCode(
+        method.holder,
+        6,
+        6,
+        ImmutableList.of(
+            label0,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("recv"))),
+            new CfConstClass(factory.intArrayType),
+            new CfIfCmp(If.Type.EQ, ValueType.OBJECT, label2),
+            label1,
+            new CfNew(factory.createType("Ljava/lang/UnsupportedOperationException;")),
+            new CfStackInstruction(CfStackInstruction.Opcode.Dup),
+            new CfInvoke(
+                183,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/UnsupportedOperationException;"),
+                    factory.createProto(factory.voidType),
+                    factory.createString("<init>")),
+                false),
+            new CfThrow(),
+            label2,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.intArrayType),
+                      FrameType.intType(),
+                      FrameType.intType()
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfLoad(ValueType.INT, 2),
+            new CfNumberConversion(NumericType.INT, NumericType.LONG),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("arrayIndexScale"))),
+            new CfArithmeticBinop(CfArithmeticBinop.Opcode.Mul, NumericType.LONG),
+            new CfArithmeticBinop(CfArithmeticBinop.Opcode.Add, NumericType.LONG),
+            new CfStore(ValueType.LONG, 4),
+            label3,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.LONG, 4),
+            new CfLoad(ValueType.INT, 3),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(
+                        factory.voidType, factory.objectType, factory.longType, factory.intType),
+                    factory.createString("putOrderedInt")),
+                false),
+            label4,
+            new CfReturnVoid(),
+            label5),
+        ImmutableList.of(),
+        ImmutableList.of());
+  }
+
+  public static CfCode DesugarVarHandle_setReleaseArrayLong(
+      DexItemFactory factory, DexMethod method) {
+    CfLabel label0 = new CfLabel();
+    CfLabel label1 = new CfLabel();
+    CfLabel label2 = new CfLabel();
+    CfLabel label3 = new CfLabel();
+    CfLabel label4 = new CfLabel();
+    CfLabel label5 = new CfLabel();
+    return new CfCode(
+        method.holder,
+        6,
+        7,
+        ImmutableList.of(
+            label0,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("recv"))),
+            new CfConstClass(factory.longArrayType),
+            new CfIfCmp(If.Type.EQ, ValueType.OBJECT, label2),
+            label1,
+            new CfNew(factory.createType("Ljava/lang/UnsupportedOperationException;")),
+            new CfStackInstruction(CfStackInstruction.Opcode.Dup),
+            new CfInvoke(
+                183,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/UnsupportedOperationException;"),
+                    factory.createProto(factory.voidType),
+                    factory.createString("<init>")),
+                false),
+            new CfThrow(),
+            label2,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3, 4},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.longArrayType),
+                      FrameType.intType(),
+                      FrameType.longType(),
+                      FrameType.longHighType()
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfLoad(ValueType.INT, 2),
+            new CfNumberConversion(NumericType.INT, NumericType.LONG),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("arrayIndexScale"))),
+            new CfArithmeticBinop(CfArithmeticBinop.Opcode.Mul, NumericType.LONG),
+            new CfArithmeticBinop(CfArithmeticBinop.Opcode.Add, NumericType.LONG),
+            new CfStore(ValueType.LONG, 5),
+            label3,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.LONG, 5),
+            new CfLoad(ValueType.LONG, 3),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(
+                        factory.voidType, factory.objectType, factory.longType, factory.longType),
+                    factory.createString("putOrderedLong")),
+                false),
+            label4,
+            new CfReturnVoid(),
+            label5),
+        ImmutableList.of(),
+        ImmutableList.of());
+  }
+
+  public static CfCode DesugarVarHandle_setReleaseInt(DexItemFactory factory, DexMethod method) {
+    CfLabel label0 = new CfLabel();
+    CfLabel label1 = new CfLabel();
+    CfLabel label2 = new CfLabel();
+    CfLabel label3 = new CfLabel();
+    CfLabel label4 = new CfLabel();
+    CfLabel label5 = new CfLabel();
+    CfLabel label6 = new CfLabel();
+    return new CfCode(
+        method.holder,
+        6,
+        3,
+        ImmutableList.of(
+            label0,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("type"))),
+            new CfStaticFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/Integer;"),
+                    factory.classType,
+                    factory.createString("TYPE"))),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label2),
+            label1,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfLoad(ValueType.INT, 2),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(
+                        factory.voidType, factory.objectType, factory.longType, factory.intType),
+                    factory.createString("putOrderedInt")),
+                false),
+            new CfGoto(label5),
+            label2,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType()
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("type"))),
+            new CfStaticFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/Long;"),
+                    factory.classType,
+                    factory.createString("TYPE"))),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label4),
+            label3,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfLoad(ValueType.INT, 2),
+            new CfNumberConversion(NumericType.INT, NumericType.LONG),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(
+                        factory.voidType, factory.objectType, factory.longType, factory.longType),
+                    factory.createString("putOrderedLong")),
+                false),
+            new CfGoto(label5),
+            label4,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType()
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.INT, 2),
+            new CfInvoke(
+                184,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/Integer;"),
+                    factory.createProto(factory.createType("Ljava/lang/Integer;"), factory.intType),
+                    factory.createString("valueOf")),
+                false),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.voidType, factory.objectType, factory.objectType),
+                    factory.createString("setRelease")),
+                false),
+            label5,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType()
+                    })),
+            new CfReturnVoid(),
+            label6),
+        ImmutableList.of(),
+        ImmutableList.of());
+  }
+
+  public static CfCode DesugarVarHandle_setReleaseLong(DexItemFactory factory, DexMethod method) {
+    CfLabel label0 = new CfLabel();
+    CfLabel label1 = new CfLabel();
+    CfLabel label2 = new CfLabel();
+    CfLabel label3 = new CfLabel();
+    CfLabel label4 = new CfLabel();
+    CfLabel label5 = new CfLabel();
+    CfLabel label6 = new CfLabel();
+    return new CfCode(
+        method.holder,
+        6,
+        4,
+        ImmutableList.of(
+            label0,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("type"))),
+            new CfStaticFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/Long;"),
+                    factory.classType,
+                    factory.createString("TYPE"))),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label2),
+            label1,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfLoad(ValueType.LONG, 2),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(
+                        factory.voidType, factory.objectType, factory.longType, factory.longType),
+                    factory.createString("putOrderedLong")),
+                false),
+            new CfGoto(label5),
+            label2,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.longType(),
+                      FrameType.longHighType()
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("type"))),
+            new CfStaticFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/Integer;"),
+                    factory.classType,
+                    factory.createString("TYPE"))),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label4),
+            label3,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.createType("Ljava/lang/RuntimeException;")),
+                    factory.createString("desugarWrongMethodTypeException")),
+                false),
+            new CfThrow(),
+            label4,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.longType(),
+                      FrameType.longHighType()
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfLoad(ValueType.LONG, 2),
+            new CfInvoke(
+                184,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/Long;"),
+                    factory.createProto(factory.createType("Ljava/lang/Long;"), factory.longType),
+                    factory.createString("valueOf")),
+                false),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(
+                        factory.voidType, factory.objectType, factory.longType, factory.objectType),
+                    factory.createString("putOrderedObject")),
+                false),
+            label5,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.longType(),
+                      FrameType.longHighType()
+                    })),
+            new CfReturnVoid(),
+            label6),
+        ImmutableList.of(),
+        ImmutableList.of());
+  }
+
+  public static CfCode DesugarVarHandle_setVolatile(DexItemFactory factory, DexMethod method) {
+    CfLabel label0 = new CfLabel();
+    CfLabel label1 = new CfLabel();
+    CfLabel label2 = new CfLabel();
+    CfLabel label3 = new CfLabel();
+    CfLabel label4 = new CfLabel();
+    CfLabel label5 = new CfLabel();
+    CfLabel label6 = new CfLabel();
+    return new CfCode(
+        method.holder,
+        5,
+        3,
+        ImmutableList.of(
+            label0,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("type"))),
+            new CfStaticFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/Integer;"),
+                    factory.classType,
+                    factory.createString("TYPE"))),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label2),
+            label1,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 2),
+            new CfConstNumber(0, ValueType.INT),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.intType, factory.objectType, factory.booleanType),
+                    factory.createString("toIntIfPossible")),
+                false),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.voidType, factory.objectType, factory.intType),
+                    factory.createString("setVolatile")),
+                false),
+            new CfGoto(label5),
+            label2,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.initializedNonNullReference(factory.objectType)
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("type"))),
+            new CfStaticFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/Long;"),
+                    factory.classType,
+                    factory.createString("TYPE"))),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label4),
+            label3,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 2),
+            new CfConstNumber(0, ValueType.INT),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.longType, factory.objectType, factory.booleanType),
+                    factory.createString("toLongIfPossible")),
+                false),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.voidType, factory.objectType, factory.longType),
+                    factory.createString("setVolatile")),
+                false),
+            new CfGoto(label5),
+            label4,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.initializedNonNullReference(factory.objectType)
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfLoad(ValueType.OBJECT, 2),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(
+                        factory.voidType, factory.objectType, factory.longType, factory.objectType),
+                    factory.createString("putObjectVolatile")),
+                false),
+            label5,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.initializedNonNullReference(factory.objectType)
+                    })),
+            new CfReturnVoid(),
+            label6),
+        ImmutableList.of(),
+        ImmutableList.of());
+  }
+
+  public static CfCode DesugarVarHandle_setVolatileArray(DexItemFactory factory, DexMethod method) {
+    CfLabel label0 = new CfLabel();
+    CfLabel label1 = new CfLabel();
+    CfLabel label2 = new CfLabel();
+    CfLabel label3 = new CfLabel();
+    CfLabel label4 = new CfLabel();
+    CfLabel label5 = new CfLabel();
+    CfLabel label6 = new CfLabel();
+    CfLabel label7 = new CfLabel();
+    CfLabel label8 = new CfLabel();
+    CfLabel label9 = new CfLabel();
+    return new CfCode(
+        method.holder,
+        7,
+        6,
+        ImmutableList.of(
+            label0,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("recv"))),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.classType,
+                    factory.createProto(factory.booleanType),
+                    factory.createString("isArray")),
+                false),
+            new CfIf(If.Type.EQ, ValueType.INT, label1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("recv"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.objectType,
+                    factory.createProto(factory.classType),
+                    factory.createString("getClass")),
+                false),
+            new CfIfCmp(If.Type.EQ, ValueType.OBJECT, label2),
+            label1,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType(),
+                      FrameType.initializedNonNullReference(factory.objectType)
+                    })),
+            new CfNew(factory.createType("Ljava/lang/UnsupportedOperationException;")),
+            new CfStackInstruction(CfStackInstruction.Opcode.Dup),
+            new CfInvoke(
+                183,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/UnsupportedOperationException;"),
+                    factory.createProto(factory.voidType),
+                    factory.createString("<init>")),
+                false),
+            new CfThrow(),
+            label2,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType(),
+                      FrameType.initializedNonNullReference(factory.objectType)
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfLoad(ValueType.INT, 2),
+            new CfNumberConversion(NumericType.INT, NumericType.LONG),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("arrayIndexScale"))),
+            new CfArithmeticBinop(CfArithmeticBinop.Opcode.Mul, NumericType.LONG),
+            new CfArithmeticBinop(CfArithmeticBinop.Opcode.Add, NumericType.LONG),
+            new CfStore(ValueType.LONG, 4),
+            label3,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("recv"))),
+            new CfConstClass(factory.intArrayType),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label5),
+            label4,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.LONG, 4),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 3),
+            new CfConstNumber(0, ValueType.INT),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.intType, factory.objectType, factory.booleanType),
+                    factory.createString("toIntIfPossible")),
+                false),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(
+                        factory.voidType, factory.objectType, factory.longType, factory.intType),
+                    factory.createString("putIntVolatile")),
+                false),
+            new CfGoto(label8),
+            label5,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3, 4, 5},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType(),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.longType(),
+                      FrameType.longHighType()
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("recv"))),
+            new CfConstClass(factory.longArrayType),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label7),
+            label6,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.LONG, 4),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 3),
+            new CfConstNumber(0, ValueType.INT),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.longType, factory.objectType, factory.booleanType),
+                    factory.createString("toLongIfPossible")),
+                false),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(
+                        factory.voidType, factory.objectType, factory.longType, factory.longType),
+                    factory.createString("putLongVolatile")),
+                false),
+            new CfGoto(label8),
+            label7,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3, 4, 5},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType(),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.longType(),
+                      FrameType.longHighType()
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.LONG, 4),
+            new CfLoad(ValueType.OBJECT, 3),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(
+                        factory.voidType, factory.objectType, factory.longType, factory.objectType),
+                    factory.createString("putObjectVolatile")),
+                false),
+            label8,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3, 4, 5},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType(),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.longType(),
+                      FrameType.longHighType()
+                    })),
+            new CfReturnVoid(),
+            label9),
+        ImmutableList.of(),
+        ImmutableList.of());
+  }
+
+  public static CfCode DesugarVarHandle_setVolatileArrayInt(
+      DexItemFactory factory, DexMethod method) {
+    CfLabel label0 = new CfLabel();
+    CfLabel label1 = new CfLabel();
+    CfLabel label2 = new CfLabel();
+    CfLabel label3 = new CfLabel();
+    CfLabel label4 = new CfLabel();
+    CfLabel label5 = new CfLabel();
+    return new CfCode(
+        method.holder,
+        6,
+        6,
+        ImmutableList.of(
+            label0,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("recv"))),
+            new CfConstClass(factory.intArrayType),
+            new CfIfCmp(If.Type.EQ, ValueType.OBJECT, label2),
+            label1,
+            new CfNew(factory.createType("Ljava/lang/UnsupportedOperationException;")),
+            new CfStackInstruction(CfStackInstruction.Opcode.Dup),
+            new CfInvoke(
+                183,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/UnsupportedOperationException;"),
+                    factory.createProto(factory.voidType),
+                    factory.createString("<init>")),
+                false),
+            new CfThrow(),
+            label2,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.intArrayType),
+                      FrameType.intType(),
+                      FrameType.intType()
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfLoad(ValueType.INT, 2),
+            new CfNumberConversion(NumericType.INT, NumericType.LONG),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("arrayIndexScale"))),
+            new CfArithmeticBinop(CfArithmeticBinop.Opcode.Mul, NumericType.LONG),
+            new CfArithmeticBinop(CfArithmeticBinop.Opcode.Add, NumericType.LONG),
+            new CfStore(ValueType.LONG, 4),
+            label3,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.LONG, 4),
+            new CfLoad(ValueType.INT, 3),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(
+                        factory.voidType, factory.objectType, factory.longType, factory.intType),
+                    factory.createString("putIntVolatile")),
+                false),
+            label4,
+            new CfReturnVoid(),
+            label5),
+        ImmutableList.of(),
+        ImmutableList.of());
+  }
+
+  public static CfCode DesugarVarHandle_setVolatileArrayLong(
+      DexItemFactory factory, DexMethod method) {
+    CfLabel label0 = new CfLabel();
+    CfLabel label1 = new CfLabel();
+    CfLabel label2 = new CfLabel();
+    CfLabel label3 = new CfLabel();
+    CfLabel label4 = new CfLabel();
+    CfLabel label5 = new CfLabel();
+    return new CfCode(
+        method.holder,
+        6,
+        7,
+        ImmutableList.of(
+            label0,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("recv"))),
+            new CfConstClass(factory.longArrayType),
+            new CfIfCmp(If.Type.EQ, ValueType.OBJECT, label2),
+            label1,
+            new CfNew(factory.createType("Ljava/lang/UnsupportedOperationException;")),
+            new CfStackInstruction(CfStackInstruction.Opcode.Dup),
+            new CfInvoke(
+                183,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/UnsupportedOperationException;"),
+                    factory.createProto(factory.voidType),
+                    factory.createString("<init>")),
+                false),
+            new CfThrow(),
+            label2,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3, 4},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.longArrayType),
+                      FrameType.intType(),
+                      FrameType.longType(),
+                      FrameType.longHighType()
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfLoad(ValueType.INT, 2),
+            new CfNumberConversion(NumericType.INT, NumericType.LONG),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("arrayIndexScale"))),
+            new CfArithmeticBinop(CfArithmeticBinop.Opcode.Mul, NumericType.LONG),
+            new CfArithmeticBinop(CfArithmeticBinop.Opcode.Add, NumericType.LONG),
+            new CfStore(ValueType.LONG, 5),
+            label3,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.LONG, 5),
+            new CfLoad(ValueType.LONG, 3),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(
+                        factory.voidType, factory.objectType, factory.longType, factory.longType),
+                    factory.createString("putLongVolatile")),
+                false),
+            label4,
+            new CfReturnVoid(),
+            label5),
+        ImmutableList.of(),
+        ImmutableList.of());
+  }
+
+  public static CfCode DesugarVarHandle_setVolatileInt(DexItemFactory factory, DexMethod method) {
+    CfLabel label0 = new CfLabel();
+    CfLabel label1 = new CfLabel();
+    CfLabel label2 = new CfLabel();
+    CfLabel label3 = new CfLabel();
+    CfLabel label4 = new CfLabel();
+    CfLabel label5 = new CfLabel();
+    CfLabel label6 = new CfLabel();
+    return new CfCode(
+        method.holder,
+        6,
+        3,
+        ImmutableList.of(
+            label0,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("type"))),
+            new CfStaticFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/Integer;"),
+                    factory.classType,
+                    factory.createString("TYPE"))),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label2),
+            label1,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfLoad(ValueType.INT, 2),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(
+                        factory.voidType, factory.objectType, factory.longType, factory.intType),
+                    factory.createString("putIntVolatile")),
+                false),
+            new CfGoto(label5),
+            label2,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType()
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("type"))),
+            new CfStaticFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/Long;"),
+                    factory.classType,
+                    factory.createString("TYPE"))),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label4),
+            label3,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfLoad(ValueType.INT, 2),
+            new CfNumberConversion(NumericType.INT, NumericType.LONG),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(
+                        factory.voidType, factory.objectType, factory.longType, factory.longType),
+                    factory.createString("putLongVolatile")),
+                false),
+            new CfGoto(label5),
+            label4,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType()
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.INT, 2),
+            new CfInvoke(
+                184,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/Integer;"),
+                    factory.createProto(factory.createType("Ljava/lang/Integer;"), factory.intType),
+                    factory.createString("valueOf")),
+                false),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.voidType, factory.objectType, factory.objectType),
+                    factory.createString("setVolatile")),
+                false),
+            label5,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType()
+                    })),
+            new CfReturnVoid(),
+            label6),
+        ImmutableList.of(),
+        ImmutableList.of());
+  }
+
+  public static CfCode DesugarVarHandle_setVolatileLong(DexItemFactory factory, DexMethod method) {
+    CfLabel label0 = new CfLabel();
+    CfLabel label1 = new CfLabel();
+    CfLabel label2 = new CfLabel();
+    CfLabel label3 = new CfLabel();
+    CfLabel label4 = new CfLabel();
+    CfLabel label5 = new CfLabel();
+    CfLabel label6 = new CfLabel();
+    return new CfCode(
+        method.holder,
+        6,
+        4,
+        ImmutableList.of(
+            label0,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("type"))),
+            new CfStaticFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/Long;"),
+                    factory.classType,
+                    factory.createString("TYPE"))),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label2),
+            label1,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfLoad(ValueType.LONG, 2),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(
+                        factory.voidType, factory.objectType, factory.longType, factory.longType),
+                    factory.createString("putLongVolatile")),
+                false),
+            new CfGoto(label5),
+            label2,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.longType(),
+                      FrameType.longHighType()
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("type"))),
+            new CfStaticFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/Integer;"),
+                    factory.classType,
+                    factory.createString("TYPE"))),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label4),
+            label3,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.createType("Ljava/lang/RuntimeException;")),
+                    factory.createString("desugarWrongMethodTypeException")),
+                false),
+            new CfThrow(),
+            label4,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.longType(),
+                      FrameType.longHighType()
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfLoad(ValueType.LONG, 2),
+            new CfInvoke(
+                184,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/Long;"),
+                    factory.createProto(factory.createType("Ljava/lang/Long;"), factory.longType),
+                    factory.createString("valueOf")),
+                false),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(
+                        factory.voidType, factory.objectType, factory.longType, factory.objectType),
+                    factory.createString("putObjectVolatile")),
+                false),
+            label5,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.longType(),
+                      FrameType.longHighType()
+                    })),
+            new CfReturnVoid(),
+            label6),
+        ImmutableList.of(),
+        ImmutableList.of());
+  }
+
   public static CfCode DesugarVarHandle_toIntIfPossible(DexItemFactory factory, DexMethod method) {
     CfLabel label0 = new CfLabel();
     CfLabel label1 = new CfLabel();
@@ -4659,6 +7937,905 @@ public final class VarHandleDesugaringMethods {
                 false),
             new CfNumberConversion(NumericType.INT, NumericType.LONG),
             new CfReturn(ValueType.LONG),
+            label3),
+        ImmutableList.of(),
+        ImmutableList.of());
+  }
+
+  public static CfCode DesugarVarHandle_weakCompareAndSet(
+      DexItemFactory factory, DexMethod method) {
+    CfLabel label0 = new CfLabel();
+    CfLabel label1 = new CfLabel();
+    CfLabel label2 = new CfLabel();
+    CfLabel label3 = new CfLabel();
+    CfLabel label4 = new CfLabel();
+    CfLabel label5 = new CfLabel();
+    CfLabel label6 = new CfLabel();
+    CfLabel label7 = new CfLabel();
+    CfLabel label8 = new CfLabel();
+    CfLabel label9 = new CfLabel();
+    return new CfCode(
+        method.holder,
+        9,
+        4,
+        ImmutableList.of(
+            label0,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("type"))),
+            new CfStaticFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/Integer;"),
+                    factory.classType,
+                    factory.createString("TYPE"))),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label4),
+            label1,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 2),
+            new CfConstNumber(0, ValueType.INT),
+            label2,
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.intType, factory.objectType, factory.booleanType),
+                    factory.createString("toIntIfPossible")),
+                false),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 3),
+            new CfConstNumber(0, ValueType.INT),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.intType, factory.objectType, factory.booleanType),
+                    factory.createString("toIntIfPossible")),
+                false),
+            label3,
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(
+                        factory.booleanType,
+                        factory.objectType,
+                        factory.longType,
+                        factory.intType,
+                        factory.intType),
+                    factory.createString("compareAndSwapInt")),
+                false),
+            new CfReturn(ValueType.INT),
+            label4,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.initializedNonNullReference(factory.objectType)
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("type"))),
+            new CfStaticFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/Long;"),
+                    factory.classType,
+                    factory.createString("TYPE"))),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label8),
+            label5,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 2),
+            new CfConstNumber(0, ValueType.INT),
+            label6,
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.longType, factory.objectType, factory.booleanType),
+                    factory.createString("toLongIfPossible")),
+                false),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 3),
+            new CfConstNumber(0, ValueType.INT),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.longType, factory.objectType, factory.booleanType),
+                    factory.createString("toLongIfPossible")),
+                false),
+            label7,
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(
+                        factory.booleanType,
+                        factory.objectType,
+                        factory.longType,
+                        factory.longType,
+                        factory.longType),
+                    factory.createString("compareAndSwapLong")),
+                false),
+            new CfReturn(ValueType.INT),
+            label8,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.initializedNonNullReference(factory.objectType)
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfLoad(ValueType.OBJECT, 2),
+            new CfLoad(ValueType.OBJECT, 3),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(
+                        factory.booleanType,
+                        factory.objectType,
+                        factory.longType,
+                        factory.objectType,
+                        factory.objectType),
+                    factory.createString("compareAndSwapObject")),
+                false),
+            new CfReturn(ValueType.INT),
+            label9),
+        ImmutableList.of(),
+        ImmutableList.of());
+  }
+
+  public static CfCode DesugarVarHandle_weakCompareAndSetArray(
+      DexItemFactory factory, DexMethod method) {
+    CfLabel label0 = new CfLabel();
+    CfLabel label1 = new CfLabel();
+    CfLabel label2 = new CfLabel();
+    CfLabel label3 = new CfLabel();
+    CfLabel label4 = new CfLabel();
+    CfLabel label5 = new CfLabel();
+    CfLabel label6 = new CfLabel();
+    CfLabel label7 = new CfLabel();
+    CfLabel label8 = new CfLabel();
+    CfLabel label9 = new CfLabel();
+    CfLabel label10 = new CfLabel();
+    CfLabel label11 = new CfLabel();
+    CfLabel label12 = new CfLabel();
+    CfLabel label13 = new CfLabel();
+    CfLabel label14 = new CfLabel();
+    return new CfCode(
+        method.holder,
+        9,
+        7,
+        ImmutableList.of(
+            label0,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("recv"))),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.classType,
+                    factory.createProto(factory.booleanType),
+                    factory.createString("isArray")),
+                false),
+            new CfIf(If.Type.EQ, ValueType.INT, label1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("recv"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.objectType,
+                    factory.createProto(factory.classType),
+                    factory.createString("getClass")),
+                false),
+            new CfIfCmp(If.Type.EQ, ValueType.OBJECT, label2),
+            label1,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3, 4},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType(),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.initializedNonNullReference(factory.objectType)
+                    })),
+            new CfNew(factory.createType("Ljava/lang/UnsupportedOperationException;")),
+            new CfStackInstruction(CfStackInstruction.Opcode.Dup),
+            new CfInvoke(
+                183,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/UnsupportedOperationException;"),
+                    factory.createProto(factory.voidType),
+                    factory.createString("<init>")),
+                false),
+            new CfThrow(),
+            label2,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3, 4},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType(),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.initializedNonNullReference(factory.objectType)
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfLoad(ValueType.INT, 2),
+            new CfNumberConversion(NumericType.INT, NumericType.LONG),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("arrayIndexScale"))),
+            new CfArithmeticBinop(CfArithmeticBinop.Opcode.Mul, NumericType.LONG),
+            new CfArithmeticBinop(CfArithmeticBinop.Opcode.Add, NumericType.LONG),
+            new CfStore(ValueType.LONG, 5),
+            label3,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("recv"))),
+            new CfConstClass(factory.intArrayType),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label8),
+            label4,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.LONG, 5),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 3),
+            new CfConstNumber(0, ValueType.INT),
+            label5,
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.intType, factory.objectType, factory.booleanType),
+                    factory.createString("toIntIfPossible")),
+                false),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 4),
+            new CfConstNumber(0, ValueType.INT),
+            label6,
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.intType, factory.objectType, factory.booleanType),
+                    factory.createString("toIntIfPossible")),
+                false),
+            label7,
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(
+                        factory.booleanType,
+                        factory.objectType,
+                        factory.longType,
+                        factory.intType,
+                        factory.intType),
+                    factory.createString("compareAndSwapInt")),
+                false),
+            new CfReturn(ValueType.INT),
+            label8,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3, 4, 5, 6},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType(),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.longType(),
+                      FrameType.longHighType()
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("recv"))),
+            new CfConstClass(factory.longArrayType),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label13),
+            label9,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.LONG, 5),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 3),
+            new CfConstNumber(0, ValueType.INT),
+            label10,
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.longType, factory.objectType, factory.booleanType),
+                    factory.createString("toLongIfPossible")),
+                false),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 4),
+            new CfConstNumber(0, ValueType.INT),
+            label11,
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(factory.longType, factory.objectType, factory.booleanType),
+                    factory.createString("toLongIfPossible")),
+                false),
+            label12,
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(
+                        factory.booleanType,
+                        factory.objectType,
+                        factory.longType,
+                        factory.longType,
+                        factory.longType),
+                    factory.createString("compareAndSwapLong")),
+                false),
+            new CfReturn(ValueType.INT),
+            label13,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3, 4, 5, 6},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType(),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.longType(),
+                      FrameType.longHighType()
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.LONG, 5),
+            new CfLoad(ValueType.OBJECT, 3),
+            new CfLoad(ValueType.OBJECT, 4),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(
+                        factory.booleanType,
+                        factory.objectType,
+                        factory.longType,
+                        factory.objectType,
+                        factory.objectType),
+                    factory.createString("compareAndSwapObject")),
+                false),
+            new CfReturn(ValueType.INT),
+            label14),
+        ImmutableList.of(),
+        ImmutableList.of());
+  }
+
+  public static CfCode DesugarVarHandle_weakCompareAndSetArrayInt(
+      DexItemFactory factory, DexMethod method) {
+    CfLabel label0 = new CfLabel();
+    CfLabel label1 = new CfLabel();
+    CfLabel label2 = new CfLabel();
+    CfLabel label3 = new CfLabel();
+    CfLabel label4 = new CfLabel();
+    return new CfCode(
+        method.holder,
+        6,
+        7,
+        ImmutableList.of(
+            label0,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("recv"))),
+            new CfConstClass(factory.intArrayType),
+            new CfIfCmp(If.Type.EQ, ValueType.OBJECT, label2),
+            label1,
+            new CfNew(factory.createType("Ljava/lang/UnsupportedOperationException;")),
+            new CfStackInstruction(CfStackInstruction.Opcode.Dup),
+            new CfInvoke(
+                183,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/UnsupportedOperationException;"),
+                    factory.createProto(factory.voidType),
+                    factory.createString("<init>")),
+                false),
+            new CfThrow(),
+            label2,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3, 4},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.intArrayType),
+                      FrameType.intType(),
+                      FrameType.intType(),
+                      FrameType.intType()
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfLoad(ValueType.INT, 2),
+            new CfNumberConversion(NumericType.INT, NumericType.LONG),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("arrayIndexScale"))),
+            new CfArithmeticBinop(CfArithmeticBinop.Opcode.Mul, NumericType.LONG),
+            new CfArithmeticBinop(CfArithmeticBinop.Opcode.Add, NumericType.LONG),
+            new CfStore(ValueType.LONG, 5),
+            label3,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.LONG, 5),
+            new CfLoad(ValueType.INT, 3),
+            new CfLoad(ValueType.INT, 4),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(
+                        factory.booleanType,
+                        factory.objectType,
+                        factory.longType,
+                        factory.intType,
+                        factory.intType),
+                    factory.createString("compareAndSwapInt")),
+                false),
+            new CfReturn(ValueType.INT),
+            label4),
+        ImmutableList.of(),
+        ImmutableList.of());
+  }
+
+  public static CfCode DesugarVarHandle_weakCompareAndSetArrayLong(
+      DexItemFactory factory, DexMethod method) {
+    CfLabel label0 = new CfLabel();
+    CfLabel label1 = new CfLabel();
+    CfLabel label2 = new CfLabel();
+    CfLabel label3 = new CfLabel();
+    CfLabel label4 = new CfLabel();
+    return new CfCode(
+        method.holder,
+        8,
+        9,
+        ImmutableList.of(
+            label0,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("recv"))),
+            new CfConstClass(factory.longArrayType),
+            new CfIfCmp(If.Type.EQ, ValueType.OBJECT, label2),
+            label1,
+            new CfNew(factory.createType("Ljava/lang/UnsupportedOperationException;")),
+            new CfStackInstruction(CfStackInstruction.Opcode.Dup),
+            new CfInvoke(
+                183,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/UnsupportedOperationException;"),
+                    factory.createProto(factory.voidType),
+                    factory.createString("<init>")),
+                false),
+            new CfThrow(),
+            label2,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3, 4, 5, 6},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.longArrayType),
+                      FrameType.intType(),
+                      FrameType.longType(),
+                      FrameType.longHighType(),
+                      FrameType.longType(),
+                      FrameType.longHighType()
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfLoad(ValueType.INT, 2),
+            new CfNumberConversion(NumericType.INT, NumericType.LONG),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("arrayIndexScale"))),
+            new CfArithmeticBinop(CfArithmeticBinop.Opcode.Mul, NumericType.LONG),
+            new CfArithmeticBinop(CfArithmeticBinop.Opcode.Add, NumericType.LONG),
+            new CfStore(ValueType.LONG, 7),
+            label3,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.LONG, 7),
+            new CfLoad(ValueType.LONG, 3),
+            new CfLoad(ValueType.LONG, 5),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(
+                        factory.booleanType,
+                        factory.objectType,
+                        factory.longType,
+                        factory.longType,
+                        factory.longType),
+                    factory.createString("compareAndSwapLong")),
+                false),
+            new CfReturn(ValueType.INT),
+            label4),
+        ImmutableList.of(),
+        ImmutableList.of());
+  }
+
+  public static CfCode DesugarVarHandle_weakCompareAndSetInt(
+      DexItemFactory factory, DexMethod method) {
+    CfLabel label0 = new CfLabel();
+    CfLabel label1 = new CfLabel();
+    CfLabel label2 = new CfLabel();
+    CfLabel label3 = new CfLabel();
+    CfLabel label4 = new CfLabel();
+    CfLabel label5 = new CfLabel();
+    return new CfCode(
+        method.holder,
+        8,
+        4,
+        ImmutableList.of(
+            label0,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("type"))),
+            new CfStaticFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/Integer;"),
+                    factory.classType,
+                    factory.createString("TYPE"))),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label2),
+            label1,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfLoad(ValueType.INT, 2),
+            new CfLoad(ValueType.INT, 3),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(
+                        factory.booleanType,
+                        factory.objectType,
+                        factory.longType,
+                        factory.intType,
+                        factory.intType),
+                    factory.createString("compareAndSwapInt")),
+                false),
+            new CfReturn(ValueType.INT),
+            label2,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType(),
+                      FrameType.intType()
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("type"))),
+            new CfStaticFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/Long;"),
+                    factory.classType,
+                    factory.createString("TYPE"))),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label4),
+            label3,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfLoad(ValueType.INT, 2),
+            new CfNumberConversion(NumericType.INT, NumericType.LONG),
+            new CfLoad(ValueType.INT, 3),
+            new CfNumberConversion(NumericType.INT, NumericType.LONG),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(
+                        factory.booleanType,
+                        factory.objectType,
+                        factory.longType,
+                        factory.longType,
+                        factory.longType),
+                    factory.createString("compareAndSwapLong")),
+                false),
+            new CfReturn(ValueType.INT),
+            label4,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.intType(),
+                      FrameType.intType()
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.INT, 2),
+            new CfInvoke(
+                184,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/Integer;"),
+                    factory.createProto(factory.createType("Ljava/lang/Integer;"), factory.intType),
+                    factory.createString("valueOf")),
+                false),
+            new CfLoad(ValueType.INT, 3),
+            new CfInvoke(
+                184,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/Integer;"),
+                    factory.createProto(factory.createType("Ljava/lang/Integer;"), factory.intType),
+                    factory.createString("valueOf")),
+                false),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(
+                        factory.booleanType,
+                        factory.objectType,
+                        factory.objectType,
+                        factory.objectType),
+                    factory.createString("compareAndSet")),
+                false),
+            new CfReturn(ValueType.INT),
+            label5),
+        ImmutableList.of(),
+        ImmutableList.of());
+  }
+
+  public static CfCode DesugarVarHandle_weakCompareAndSetLong(
+      DexItemFactory factory, DexMethod method) {
+    CfLabel label0 = new CfLabel();
+    CfLabel label1 = new CfLabel();
+    CfLabel label2 = new CfLabel();
+    CfLabel label3 = new CfLabel();
+    return new CfCode(
+        method.holder,
+        8,
+        6,
+        ImmutableList.of(
+            label0,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.classType,
+                    factory.createString("type"))),
+            new CfStaticFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/Long;"),
+                    factory.classType,
+                    factory.createString("TYPE"))),
+            new CfIfCmp(If.Type.NE, ValueType.OBJECT, label2),
+            label1,
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createString("U"))),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfInstanceFieldRead(
+                factory.createField(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.longType,
+                    factory.createString("offset"))),
+            new CfLoad(ValueType.LONG, 2),
+            new CfLoad(ValueType.LONG, 4),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Lsun/misc/Unsafe;"),
+                    factory.createProto(
+                        factory.booleanType,
+                        factory.objectType,
+                        factory.longType,
+                        factory.longType,
+                        factory.longType),
+                    factory.createString("compareAndSwapLong")),
+                false),
+            new CfReturn(ValueType.INT),
+            label2,
+            new CfFrame(
+                new Int2ObjectAVLTreeMap<>(
+                    new int[] {0, 1, 2, 3, 4, 5},
+                    new FrameType[] {
+                      FrameType.initializedNonNullReference(
+                          factory.createType("Ljava/lang/invoke/VarHandle;")),
+                      FrameType.initializedNonNullReference(factory.objectType),
+                      FrameType.longType(),
+                      FrameType.longHighType(),
+                      FrameType.longType(),
+                      FrameType.longHighType()
+                    })),
+            new CfLoad(ValueType.OBJECT, 0),
+            new CfLoad(ValueType.OBJECT, 1),
+            new CfLoad(ValueType.LONG, 2),
+            new CfInvoke(
+                184,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/Long;"),
+                    factory.createProto(factory.createType("Ljava/lang/Long;"), factory.longType),
+                    factory.createString("valueOf")),
+                false),
+            new CfLoad(ValueType.LONG, 4),
+            new CfInvoke(
+                184,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/Long;"),
+                    factory.createProto(factory.createType("Ljava/lang/Long;"), factory.longType),
+                    factory.createString("valueOf")),
+                false),
+            new CfInvoke(
+                182,
+                factory.createMethod(
+                    factory.createType("Ljava/lang/invoke/VarHandle;"),
+                    factory.createProto(
+                        factory.booleanType,
+                        factory.objectType,
+                        factory.objectType,
+                        factory.objectType),
+                    factory.createString("compareAndSet")),
+                false),
+            new CfReturn(ValueType.INT),
             label3),
         ImmutableList.of(),
         ImmutableList.of());

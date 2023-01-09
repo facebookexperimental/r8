@@ -10,7 +10,7 @@ import java.lang.reflect.Field;
 public final class DesugarVarHandle {
 
   // This only have methods found in libcore/libart/src/main/java/sun/misc/Unsafe.java for Lollipop.
-  private static class UnsafeStub {
+  public static class UnsafeStub {
 
     public long objectFieldOffset(Field f) {
       throw new RuntimeException("Stub called.");
@@ -54,6 +54,38 @@ public final class DesugarVarHandle {
     }
 
     public int getIntVolatile(Object obj, long offset) {
+      throw new RuntimeException("Stub called.");
+    }
+
+    public void putIntVolatile(Object obj, long offset, int newValue) {
+      throw new RuntimeException("Stub called.");
+    }
+
+    public long getLongVolatile(Object obj, long offset) {
+      throw new RuntimeException("Stub called.");
+    }
+
+    public void putLongVolatile(Object obj, long offset, long newValue) {
+      throw new RuntimeException("Stub called.");
+    }
+
+    public Object getObjectVolatile(Object obj, long offset) {
+      throw new RuntimeException("Stub called.");
+    }
+
+    public void putObjectVolatile(Object obj, long offset, Object newValue) {
+      throw new RuntimeException("Stub called.");
+    }
+
+    public void putOrderedInt(Object obj, long offset, int newValue) {
+      throw new RuntimeException("Stub called.");
+    }
+
+    public void putOrderedLong(Object obj, long offset, long newValue) {
+      throw new RuntimeException("Stub called.");
+    }
+
+    public void putOrderedObject(Object obj, long offset, Object newValue) {
       throw new RuntimeException("Stub called.");
     }
 
@@ -250,6 +282,109 @@ public final class DesugarVarHandle {
     }
   }
 
+  // getVolatile variants.
+  Object getVolatile(Object ct1) {
+    if (type == int.class) {
+      return U.getIntVolatile(ct1, offset);
+    }
+    if (type == long.class) {
+      return U.getLongVolatile(ct1, offset);
+    }
+    return U.getObjectVolatile(ct1, offset);
+  }
+
+  Object getVolatileInBox(Object ct1, Class<?> expectedBox) {
+    if (type == int.class) {
+      return boxIntIfPossible(U.getIntVolatile(ct1, offset), expectedBox);
+    }
+    if (type == long.class) {
+      return boxLongIfPossible(U.getLongVolatile(ct1, offset), expectedBox);
+    }
+    return U.getObjectVolatile(ct1, offset);
+  }
+
+  int getVolatileInt(Object ct1) {
+    if (type == int.class) {
+      return U.getIntVolatile(ct1, offset);
+    } else if (type == long.class) {
+      throw desugarWrongMethodTypeException();
+    } else {
+      return toIntIfPossible(U.getObjectVolatile(ct1, offset), true);
+    }
+  }
+
+  long getVolatileLong(Object ct1) {
+    if (type == long.class) {
+      return U.getLongVolatile(ct1, offset);
+    } else if (type == int.class) {
+      return U.getIntVolatile(ct1, offset);
+    } else {
+      return toLongIfPossible(U.getObjectVolatile(ct1, offset), true);
+    }
+  }
+
+  // setVolatile variants.
+  void setVolatile(Object ct1, Object newValue) {
+    if (type == int.class) {
+      setVolatileInt(ct1, toIntIfPossible(newValue, false));
+    } else if (type == long.class) {
+      setVolatileLong(ct1, toLongIfPossible(newValue, false));
+    } else {
+      U.putObjectVolatile(ct1, offset, newValue);
+    }
+  }
+
+  void setVolatileInt(Object ct1, int newValue) {
+    if (type == int.class) {
+      U.putIntVolatile(ct1, offset, newValue);
+    } else if (type == long.class) {
+      U.putLongVolatile(ct1, offset, newValue);
+    } else {
+      setVolatile(ct1, newValue);
+    }
+  }
+
+  void setVolatileLong(Object ct1, long newValue) {
+    if (type == long.class) {
+      U.putLongVolatile(ct1, offset, newValue);
+    } else if (type == int.class) {
+      throw desugarWrongMethodTypeException();
+    } else {
+      U.putObjectVolatile(ct1, offset, Long.valueOf(newValue));
+    }
+  }
+
+  // setRelease variants.
+  void setRelease(Object ct1, Object newValue) {
+    if (type == int.class) {
+      setReleaseInt(ct1, toIntIfPossible(newValue, false));
+    } else if (type == long.class) {
+      setReleaseLong(ct1, toLongIfPossible(newValue, false));
+    } else {
+      U.putOrderedObject(ct1, offset, newValue);
+    }
+  }
+
+  void setReleaseInt(Object ct1, int newValue) {
+    if (type == int.class) {
+      U.putOrderedInt(ct1, offset, newValue);
+    } else if (type == long.class) {
+      U.putOrderedLong(ct1, offset, newValue);
+    } else {
+      setRelease(ct1, newValue);
+    }
+  }
+
+  void setReleaseLong(Object ct1, long newValue) {
+    if (type == long.class) {
+      U.putOrderedLong(ct1, offset, newValue);
+    } else if (type == int.class) {
+      throw desugarWrongMethodTypeException();
+    } else {
+      U.putOrderedObject(ct1, offset, Long.valueOf(newValue));
+    }
+  }
+
   boolean compareAndSet(Object ct1, Object expectedValue, Object newValue) {
     if (type == int.class) {
       return U.compareAndSwapInt(
@@ -273,6 +408,41 @@ public final class DesugarVarHandle {
   }
 
   boolean compareAndSetLong(Object ct1, long expectedValue, long newValue) {
+    if (type == long.class) {
+      return U.compareAndSwapLong(ct1, offset, expectedValue, newValue);
+    }
+    return compareAndSet(ct1, expectedValue, newValue);
+  }
+
+  // As there is no primitive for the weak behaviour in sun.misc.Unsafe this implementation
+  // behaves like compareAndSet.
+  boolean weakCompareAndSet(Object ct1, Object expectedValue, Object newValue) {
+    if (type == int.class) {
+      return U.compareAndSwapInt(
+          ct1, offset, toIntIfPossible(expectedValue, false), toIntIfPossible(newValue, false));
+    }
+    if (type == long.class) {
+      return U.compareAndSwapLong(
+          ct1, offset, toLongIfPossible(expectedValue, false), toLongIfPossible(newValue, false));
+    }
+    return U.compareAndSwapObject(ct1, offset, expectedValue, newValue);
+  }
+
+  // As there is no primitive for the weak behaviour in sun.misc.Unsafe this implementation
+  // behaves like compareAndSet.
+  boolean weakCompareAndSetInt(Object ct1, int expectedValue, int newValue) {
+    if (type == int.class) {
+      return U.compareAndSwapInt(ct1, offset, expectedValue, newValue);
+    } else if (type == long.class) {
+      return U.compareAndSwapLong(ct1, offset, expectedValue, newValue);
+    } else {
+      return compareAndSet(ct1, expectedValue, newValue);
+    }
+  }
+
+  // As there is no primitive for the weak behaviour in sun.misc.Unsafe this implementation
+  // behaves like compareAndSet.
+  boolean weakCompareAndSetLong(Object ct1, long expectedValue, long newValue) {
     if (type == long.class) {
       return U.compareAndSwapLong(ct1, offset, expectedValue, newValue);
     }
@@ -331,7 +501,59 @@ public final class DesugarVarHandle {
     return U.getLong(ct1, elementOffset);
   }
 
-  // get array variants.
+  // getVolatile array variants.
+  Object getVolatileArray(Object ct1, int ct2) {
+    if (!recv.isArray() || recv != ct1.getClass()) {
+      throw new UnsupportedOperationException();
+    }
+    long elementOffset = offset + ((long) ct2) * arrayIndexScale;
+    if (type == int.class) {
+      return U.getIntVolatile(ct1, elementOffset);
+    } else if (type == long.class) {
+      return (int) U.getLongVolatile(ct1, elementOffset);
+    } else {
+      return U.getObjectVolatile(ct1, elementOffset);
+    }
+  }
+
+  Object getVolatileArrayInBox(Object ct1, int ct2, Class<?> expectedBox) {
+    if (!recv.isArray() || recv != ct1.getClass()) {
+      throw new UnsupportedOperationException();
+    }
+    long elementOffset = offset + ((long) ct2) * arrayIndexScale;
+    if (type == int.class) {
+      return boxIntIfPossible(U.getIntVolatile(ct1, elementOffset), expectedBox);
+    } else if (type == long.class) {
+      return boxLongIfPossible(U.getLongVolatile(ct1, elementOffset), expectedBox);
+    } else {
+      Object value = U.getObjectVolatile(ct1, elementOffset);
+      if (value instanceof Integer && expectedBox != Integer.class) {
+        return boxIntIfPossible(((Integer) value).intValue(), expectedBox);
+      }
+      if (value instanceof Long && expectedBox != Long.class) {
+        return boxLongIfPossible(((Long) value).longValue(), expectedBox);
+      }
+      return value;
+    }
+  }
+
+  int getVolatileArrayInt(int[] ct1, int ct2) {
+    if (recv != int[].class) {
+      throw new UnsupportedOperationException();
+    }
+    long elementOffset = offset + ((long) ct2) * arrayIndexScale;
+    return U.getIntVolatile(ct1, elementOffset);
+  }
+
+  long getVolatileArrayLong(long[] ct1, int ct2) {
+    if (recv != long[].class) {
+      throw new UnsupportedOperationException();
+    }
+    long elementOffset = offset + ((long) ct2) * arrayIndexScale;
+    return U.getLongVolatile(ct1, elementOffset);
+  }
+
+  // set array variants.
   void setArray(Object ct1, int ct2, Object newValue) {
     if (!recv.isArray() || recv != ct1.getClass()) {
       throw new UnsupportedOperationException();
@@ -360,6 +582,68 @@ public final class DesugarVarHandle {
     }
     long elementOffset = offset + ((long) ct2) * arrayIndexScale;
     U.putLong(ct1, elementOffset, newValue);
+  }
+
+  // setVolatile array variants.
+  void setVolatileArray(Object ct1, int ct2, Object newValue) {
+    if (!recv.isArray() || recv != ct1.getClass()) {
+      throw new UnsupportedOperationException();
+    }
+    long elementOffset = offset + ((long) ct2) * arrayIndexScale;
+    if (recv == int[].class) {
+      U.putIntVolatile(ct1, elementOffset, toIntIfPossible(newValue, false));
+    } else if (recv == long[].class) {
+      U.putLongVolatile(ct1, elementOffset, toLongIfPossible(newValue, false));
+    } else {
+      U.putObjectVolatile(ct1, elementOffset, newValue);
+    }
+  }
+
+  void setVolatileArrayInt(int[] ct1, int ct2, int newValue) {
+    if (recv != int[].class) {
+      throw new UnsupportedOperationException();
+    }
+    long elementOffset = offset + ((long) ct2) * arrayIndexScale;
+    U.putIntVolatile(ct1, elementOffset, newValue);
+  }
+
+  void setVolatileArrayLong(long[] ct1, int ct2, long newValue) {
+    if (recv != long[].class) {
+      throw new UnsupportedOperationException();
+    }
+    long elementOffset = offset + ((long) ct2) * arrayIndexScale;
+    U.putLongVolatile(ct1, elementOffset, newValue);
+  }
+
+  // setRelease array variants.
+  void setReleaseArray(Object ct1, int ct2, Object newValue) {
+    if (!recv.isArray() || recv != ct1.getClass()) {
+      throw new UnsupportedOperationException();
+    }
+    long elementOffset = offset + ((long) ct2) * arrayIndexScale;
+    if (recv == int[].class) {
+      U.putOrderedInt(ct1, elementOffset, toIntIfPossible(newValue, false));
+    } else if (recv == long[].class) {
+      U.putOrderedLong(ct1, elementOffset, toLongIfPossible(newValue, false));
+    } else {
+      U.putOrderedObject(ct1, elementOffset, newValue);
+    }
+  }
+
+  void setReleaseArrayInt(int[] ct1, int ct2, int newValue) {
+    if (recv != int[].class) {
+      throw new UnsupportedOperationException();
+    }
+    long elementOffset = offset + ((long) ct2) * arrayIndexScale;
+    U.putOrderedInt(ct1, elementOffset, newValue);
+  }
+
+  void setReleaseArrayLong(long[] ct1, int ct2, long newValue) {
+    if (recv != long[].class) {
+      throw new UnsupportedOperationException();
+    }
+    long elementOffset = offset + ((long) ct2) * arrayIndexScale;
+    U.putOrderedLong(ct1, elementOffset, newValue);
   }
 
   // compareAndSet array variants.
@@ -394,6 +678,51 @@ public final class DesugarVarHandle {
   }
 
   boolean compareAndSetArrayLong(long[] ct1, int ct2, long expetedValue, long newValue) {
+    if (recv != long[].class) {
+      throw new UnsupportedOperationException();
+    }
+    long elementOffset = offset + ((long) ct2) * arrayIndexScale;
+    return U.compareAndSwapLong(ct1, elementOffset, expetedValue, newValue);
+  }
+
+  // weakCompareAndSet array variants.
+  // As there is no primitive for the weak behaviour in sun.misc.Unsafe this implementation
+  // behaves like compareAndSet.
+  boolean weakCompareAndSetArray(Object ct1, int ct2, Object expetedValue, Object newValue) {
+    if (!recv.isArray() || recv != ct1.getClass()) {
+      throw new UnsupportedOperationException();
+    }
+    long elementOffset = offset + ((long) ct2) * arrayIndexScale;
+    if (recv == int[].class) {
+      return U.compareAndSwapInt(
+          ct1,
+          elementOffset,
+          toIntIfPossible(expetedValue, false),
+          toIntIfPossible(newValue, false));
+    } else if (recv == long[].class) {
+      return U.compareAndSwapLong(
+          ct1,
+          elementOffset,
+          toLongIfPossible(expetedValue, false),
+          toLongIfPossible(newValue, false));
+    } else {
+      return U.compareAndSwapObject(ct1, elementOffset, expetedValue, newValue);
+    }
+  }
+
+  // As there is no primitive for the weak behaviour in sun.misc.Unsafe this implementation
+  // behaves like compareAndSet.
+  boolean weakCompareAndSetArrayInt(int[] ct1, int ct2, int expetedValue, int newValue) {
+    if (recv != int[].class) {
+      throw new UnsupportedOperationException();
+    }
+    long elementOffset = offset + ((long) ct2) * arrayIndexScale;
+    return U.compareAndSwapInt(ct1, elementOffset, expetedValue, newValue);
+  }
+
+  // As there is no primitive for the weak behaviour in sun.misc.Unsafe this implementation
+  // behaves like compareAndSet.
+  boolean weakCompareAndSetArrayLong(long[] ct1, int ct2, long expetedValue, long newValue) {
     if (recv != long[].class) {
       throw new UnsupportedOperationException();
     }

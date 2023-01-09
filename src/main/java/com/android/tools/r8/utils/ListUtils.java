@@ -4,6 +4,7 @@
 
 package com.android.tools.r8.utils;
 
+import com.android.tools.r8.naming.ClassNamingForNameMapper.MappedRange;
 import com.google.common.collect.ImmutableList;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -264,6 +265,10 @@ public class ListUtils {
     }
   }
 
+  public static MappedRange lastOrNull(List<MappedRange> existingMappedRanges) {
+    return existingMappedRanges == null ? null : last(existingMappedRanges);
+  }
+
   public interface ReferenceAndIntConsumer<T> {
     void accept(T item, int index);
   }
@@ -327,5 +332,12 @@ public class ListUtils {
       }
     }
     return true;
+  }
+
+  public static <T> List<T> joinNewArrayList(List<T> one, List<T> other) {
+    ArrayList<T> ts = new ArrayList<>(one.size() + other.size());
+    ts.addAll(one);
+    ts.addAll(other);
+    return ts;
   }
 }

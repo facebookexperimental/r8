@@ -14,63 +14,37 @@ import org.junit.runners.Parameterized;
 @RunWith(Parameterized.class)
 public class VarHandleDesugaringInstanceIntFieldTest extends VarHandleDesugaringTestBase {
 
+  private static final String TEST_GET_EXPECTED_OUTPUT =
+      StringUtils.lines("1", "1", "1", "1", "1.0", "1.0").trim();
+
+  private static final String TEST_SET_EXPECTED_OUTPUT =
+      StringUtils.lines("0", "1", "2", "3", "4", "48", "49", "5", "6", "6", "6", "6", "6", "6", "6")
+          .trim();
+
+  private static final String TEST_COMPAREANDSET_EXPECTED_OUTPUT =
+      StringUtils.lines(
+              "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "48", "49", "50", "51", "52",
+              "53", "53", "53", "53", "53", "53", "53", "53", "53", "53", "53", "53", "53", "53",
+              "53")
+          .trim();
+
   private static final String EXPECTED_OUTPUT =
       StringUtils.lines(
           "testGet",
-          "1",
-          "1",
-          "1",
-          "1",
-          "1.0",
-          "1.0",
+          TEST_GET_EXPECTED_OUTPUT,
+          "testGetVolatile",
+          TEST_GET_EXPECTED_OUTPUT,
           "testSet",
-          "0",
-          "1",
-          "2",
-          "3",
-          "4",
-          "48",
-          "49",
-          "5",
-          "6",
-          "6",
-          "6",
-          "6",
-          "6",
-          "6",
-          "6",
+          TEST_SET_EXPECTED_OUTPUT,
+          "testSetVolatile",
+          TEST_SET_EXPECTED_OUTPUT,
+          "testSetRelease",
+          TEST_SET_EXPECTED_OUTPUT,
           "testCompareAndSet",
-          "0",
-          "1",
-          "2",
-          "3",
-          "4",
-          "5",
-          "6",
-          "7",
-          "8",
-          "9",
-          "10",
-          "48",
-          "49",
-          "50",
-          "51",
-          "52",
-          "53",
-          "53",
-          "53",
-          "53",
-          "53",
-          "53",
-          "53",
-          "53",
-          "53",
-          "53",
-          "53",
-          "53",
-          "53",
-          "53",
-          "53");
+          TEST_COMPAREANDSET_EXPECTED_OUTPUT,
+          "testWeakCompareAndSet",
+          TEST_COMPAREANDSET_EXPECTED_OUTPUT);
+
   private static final String MAIN_CLASS = VarHandle.InstanceIntField.typeName();
   private static final String JAR_ENTRY = "varhandle/InstanceIntField.class";
 
@@ -80,8 +54,8 @@ public class VarHandleDesugaringInstanceIntFieldTest extends VarHandleDesugaring
   }
 
   @Override
-  protected String getKeepRules() {
-    return "-keep class " + getMainClass() + "{ <fields>; }";
+  protected List<String> getKeepRules() {
+    return ImmutableList.of("-keep class " + getMainClass() + "{ <fields>; }");
   }
 
   @Override

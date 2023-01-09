@@ -24,8 +24,8 @@ public class InstanceObjectField {
     }
   }
 
-  public static void testSet(VarHandle varHandle) {
-    System.out.println("testSet");
+  public static void testSetGet(VarHandle varHandle) {
+    System.out.println("testSetGet");
 
     InstanceObjectField instance = new InstanceObjectField();
 
@@ -161,8 +161,366 @@ public class InstanceObjectField {
     }
   }
 
+  public static void testSetVolatileGetVolatile(VarHandle varHandle) {
+    System.out.println("testSetVolatileGetVolatile");
+
+    InstanceObjectField instance = new InstanceObjectField();
+
+    System.out.println(varHandle.getVolatile(instance));
+    A a1 = new A(1);
+    varHandle.setVolatile(instance, a1);
+    System.out.println(varHandle.getVolatile(instance));
+    System.out.println(varHandle.getVolatile(instance) == a1);
+    A a2 = new A(2);
+    varHandle.setVolatile(instance, a2);
+    System.out.println(varHandle.getVolatile(instance));
+    System.out.println(varHandle.getVolatile(instance) == a2);
+
+    Object o;
+    {
+      int i;
+      varHandle.setVolatile(instance, 1);
+      System.out.println(varHandle.getVolatile(instance));
+      System.out.println((int) varHandle.getVolatile(instance));
+      o = varHandle.getVolatile(instance);
+      System.out.println(o instanceof Integer);
+      i = (int) varHandle.getVolatile(instance);
+      System.out.println(i == 1);
+      varHandle.setVolatile(instance, Integer.valueOf(2));
+      System.out.println(varHandle.getVolatile(instance));
+      System.out.println((int) varHandle.getVolatile(instance));
+      o = varHandle.getVolatile(instance);
+      System.out.println(o instanceof Integer);
+      i = (int) varHandle.getVolatile(instance);
+      System.out.println(i == 2);
+    }
+    {
+      long l;
+      varHandle.setVolatile(instance, 3L);
+      System.out.println(varHandle.getVolatile(instance));
+      System.out.println((long) varHandle.getVolatile(instance));
+      o = varHandle.getVolatile(instance);
+      System.out.println(o instanceof Long);
+      l = (long) varHandle.getVolatile(instance);
+      System.out.println(l == 3L);
+      varHandle.setVolatile(instance, Long.valueOf(4L));
+      System.out.println(varHandle.getVolatile(instance));
+      System.out.println((long) varHandle.getVolatile(instance));
+      o = varHandle.getVolatile(instance);
+      System.out.println(o instanceof Long);
+      l = (long) varHandle.getVolatile(instance);
+      System.out.println(l == 4L);
+    }
+    {
+      byte b;
+      varHandle.setVolatile(instance, (byte) 5);
+      System.out.println(varHandle.getVolatile(instance));
+      System.out.println((byte) varHandle.getVolatile(instance));
+      o = varHandle.getVolatile(instance);
+      System.out.println(o instanceof Byte);
+      b = (byte) varHandle.getVolatile(instance);
+      System.out.println(b == (byte) 5);
+      varHandle.setVolatile(instance, Byte.valueOf((byte) 6));
+      System.out.println(varHandle.getVolatile(instance));
+      System.out.println((byte) varHandle.getVolatile(instance));
+      o = varHandle.getVolatile(instance);
+      System.out.println(o instanceof Byte);
+      b = (byte) varHandle.getVolatile(instance);
+      System.out.println(b == 6);
+    }
+    {
+      short s;
+      varHandle.setVolatile(instance, (short) 7);
+      System.out.println(varHandle.getVolatile(instance));
+      System.out.println((short) varHandle.getVolatile(instance));
+      o = varHandle.getVolatile(instance);
+      System.out.println(o instanceof Short);
+      s = (short) varHandle.getVolatile(instance);
+      System.out.println(s == (short) 7);
+      varHandle.setVolatile(instance, Short.valueOf((short) 8));
+      System.out.println(varHandle.getVolatile(instance));
+      System.out.println((short) varHandle.getVolatile(instance));
+      o = varHandle.getVolatile(instance);
+      System.out.println(o instanceof Short);
+      s = (short) varHandle.getVolatile(instance);
+      System.out.println(s == 8);
+    }
+    {
+      float f;
+      varHandle.setVolatile(instance, (float) 9.0f);
+      System.out.println(varHandle.getVolatile(instance));
+      System.out.println((float) varHandle.getVolatile(instance));
+      o = varHandle.getVolatile(instance);
+      System.out.println(o instanceof Float);
+      f = (float) varHandle.getVolatile(instance);
+      System.out.println(f == (float) 9.0f);
+      varHandle.setVolatile(instance, Float.valueOf(10.0f));
+      System.out.println(varHandle.getVolatile(instance));
+      System.out.println((float) varHandle.getVolatile(instance));
+      o = varHandle.getVolatile(instance);
+      System.out.println(o instanceof Float);
+      f = (float) varHandle.getVolatile(instance);
+      System.out.println(f == 10.0f);
+    }
+    {
+      double d;
+      varHandle.setVolatile(instance, (double) 11.0);
+      System.out.println(varHandle.getVolatile(instance));
+      System.out.println((double) varHandle.getVolatile(instance));
+      o = varHandle.getVolatile(instance);
+      System.out.println(o instanceof Double);
+      d = (double) varHandle.getVolatile(instance);
+      System.out.println(d == (double) 11.0);
+      varHandle.setVolatile(instance, Double.valueOf(12.0));
+      System.out.println(varHandle.getVolatile(instance));
+      System.out.println((double) varHandle.getVolatile(instance));
+      o = varHandle.getVolatile(instance);
+      System.out.println(o instanceof Double);
+      d = (double) varHandle.getVolatile(instance);
+      System.out.println(d == 12.0);
+    }
+    {
+      char c;
+      varHandle.setVolatile(instance, 'A');
+      System.out.println(varHandle.getVolatile(instance));
+      System.out.println((char) varHandle.getVolatile(instance));
+      o = varHandle.getVolatile(instance);
+      System.out.println(o instanceof Character);
+      c = (char) varHandle.getVolatile(instance);
+      System.out.println(c == 'A');
+      varHandle.setVolatile(instance, Character.valueOf('B'));
+      System.out.println(varHandle.getVolatile(instance));
+      System.out.println((char) varHandle.getVolatile(instance));
+      o = varHandle.getVolatile(instance);
+      System.out.println(o instanceof Character);
+      c = (char) varHandle.getVolatile(instance);
+      System.out.println(c == 'B');
+    }
+  }
+
+  public static void testSetReleaseGet(VarHandle varHandle) {
+    System.out.println("testSetReleaseGet");
+
+    InstanceObjectField instance = new InstanceObjectField();
+
+    System.out.println(varHandle.get(instance));
+    A a1 = new A(1);
+    varHandle.setRelease(instance, a1);
+    System.out.println(varHandle.get(instance));
+    System.out.println(varHandle.get(instance) == a1);
+    A a2 = new A(2);
+    varHandle.setRelease(instance, a2);
+    System.out.println(varHandle.get(instance));
+    System.out.println(varHandle.get(instance) == a2);
+
+    Object o;
+    {
+      int i;
+      varHandle.setRelease(instance, 1);
+      System.out.println(varHandle.get(instance));
+      System.out.println((int) varHandle.get(instance));
+      o = varHandle.get(instance);
+      System.out.println(o instanceof Integer);
+      i = (int) varHandle.get(instance);
+      System.out.println(i == 1);
+      varHandle.setRelease(instance, Integer.valueOf(2));
+      System.out.println(varHandle.get(instance));
+      System.out.println((int) varHandle.get(instance));
+      o = varHandle.get(instance);
+      System.out.println(o instanceof Integer);
+      i = (int) varHandle.get(instance);
+      System.out.println(i == 2);
+    }
+    {
+      long l;
+      varHandle.setRelease(instance, 3L);
+      System.out.println(varHandle.get(instance));
+      System.out.println((long) varHandle.get(instance));
+      o = varHandle.get(instance);
+      System.out.println(o instanceof Long);
+      l = (long) varHandle.get(instance);
+      System.out.println(l == 3L);
+      varHandle.setRelease(instance, Long.valueOf(4L));
+      System.out.println(varHandle.get(instance));
+      System.out.println((long) varHandle.get(instance));
+      o = varHandle.get(instance);
+      System.out.println(o instanceof Long);
+      l = (long) varHandle.get(instance);
+      System.out.println(l == 4L);
+    }
+    {
+      byte b;
+      varHandle.setRelease(instance, (byte) 5);
+      System.out.println(varHandle.get(instance));
+      System.out.println((byte) varHandle.get(instance));
+      o = varHandle.get(instance);
+      System.out.println(o instanceof Byte);
+      b = (byte) varHandle.get(instance);
+      System.out.println(b == (byte) 5);
+      varHandle.setRelease(instance, Byte.valueOf((byte) 6));
+      System.out.println(varHandle.get(instance));
+      System.out.println((byte) varHandle.get(instance));
+      o = varHandle.get(instance);
+      System.out.println(o instanceof Byte);
+      b = (byte) varHandle.get(instance);
+      System.out.println(b == 6);
+    }
+    {
+      short s;
+      varHandle.setRelease(instance, (short) 7);
+      System.out.println(varHandle.get(instance));
+      System.out.println((short) varHandle.get(instance));
+      o = varHandle.get(instance);
+      System.out.println(o instanceof Short);
+      s = (short) varHandle.get(instance);
+      System.out.println(s == (short) 7);
+      varHandle.setRelease(instance, Short.valueOf((short) 8));
+      System.out.println(varHandle.get(instance));
+      System.out.println((short) varHandle.get(instance));
+      o = varHandle.get(instance);
+      System.out.println(o instanceof Short);
+      s = (short) varHandle.get(instance);
+      System.out.println(s == 8);
+    }
+    {
+      float f;
+      varHandle.setRelease(instance, (float) 9.0f);
+      System.out.println(varHandle.get(instance));
+      System.out.println((float) varHandle.get(instance));
+      o = varHandle.get(instance);
+      System.out.println(o instanceof Float);
+      f = (float) varHandle.get(instance);
+      System.out.println(f == (float) 9.0f);
+      varHandle.setRelease(instance, Float.valueOf(10.0f));
+      System.out.println(varHandle.get(instance));
+      System.out.println((float) varHandle.get(instance));
+      o = varHandle.get(instance);
+      System.out.println(o instanceof Float);
+      f = (float) varHandle.get(instance);
+      System.out.println(f == 10.0f);
+    }
+    {
+      double d;
+      varHandle.setRelease(instance, (double) 11.0);
+      System.out.println(varHandle.get(instance));
+      System.out.println((double) varHandle.get(instance));
+      o = varHandle.get(instance);
+      System.out.println(o instanceof Double);
+      d = (double) varHandle.get(instance);
+      System.out.println(d == (double) 11.0);
+      varHandle.setRelease(instance, Double.valueOf(12.0));
+      System.out.println(varHandle.get(instance));
+      System.out.println((double) varHandle.get(instance));
+      o = varHandle.get(instance);
+      System.out.println(o instanceof Double);
+      d = (double) varHandle.get(instance);
+      System.out.println(d == 12.0);
+    }
+    {
+      char c;
+      varHandle.setRelease(instance, 'A');
+      System.out.println(varHandle.get(instance));
+      System.out.println((char) varHandle.get(instance));
+      o = varHandle.get(instance);
+      System.out.println(o instanceof Character);
+      c = (char) varHandle.get(instance);
+      System.out.println(c == 'A');
+      varHandle.setRelease(instance, Character.valueOf('B'));
+      System.out.println(varHandle.get(instance));
+      System.out.println((char) varHandle.get(instance));
+      o = varHandle.get(instance);
+      System.out.println(o instanceof Character);
+      c = (char) varHandle.get(instance);
+      System.out.println(c == 'B');
+    }
+  }
+
   public static void testCompareAndSet(VarHandle varHandle) {
     System.out.println("testCompareAndSet");
+
+    InstanceObjectField instance = new InstanceObjectField();
+
+    A a1 = new A(1);
+    varHandle.compareAndSet(instance, 0, a1);
+    System.out.println(varHandle.get(instance));
+    varHandle.compareAndSet(instance, null, a1);
+    System.out.println(varHandle.get(instance));
+    System.out.println(varHandle.get(instance) == a1);
+    A a2 = new A(2);
+    varHandle.compareAndSet(instance, a1, a2);
+    System.out.println(varHandle.get(instance));
+    System.out.println(varHandle.get(instance) == a2);
+
+    varHandle.compareAndSet(instance, a2, 1);
+    System.out.println(varHandle.get(instance));
+    varHandle.compareAndSet(instance, Integer.valueOf(1), 2);
+    System.out.println(varHandle.get(instance));
+    varHandle.compareAndSet(instance, Integer.valueOf(2), Integer.valueOf(3));
+    System.out.println(varHandle.get(instance));
+    varHandle.compareAndSet(instance, Integer.valueOf(3), 4);
+    System.out.println(varHandle.get(instance));
+    varHandle.compareAndSet(instance, 4L, 5);
+    System.out.println(varHandle.get(instance));
+    varHandle.compareAndSet(instance, (byte) 4, 5);
+    System.out.println(varHandle.get(instance));
+    varHandle.compareAndSet(instance, (short) 4, 5);
+    System.out.println(varHandle.get(instance));
+
+    varHandle.compareAndSet(instance, 4, 5L);
+    System.out.println(varHandle.get(instance));
+    varHandle.compareAndSet(instance, Long.valueOf(5), 6L);
+    System.out.println(varHandle.get(instance));
+    varHandle.compareAndSet(instance, Long.valueOf(6), Long.valueOf(7));
+    System.out.println(varHandle.get(instance));
+    varHandle.compareAndSet(instance, Long.valueOf(7), 8L);
+    System.out.println(varHandle.get(instance));
+    varHandle.compareAndSet(instance, 8, 9L);
+    System.out.println(varHandle.get(instance));
+    varHandle.compareAndSet(instance, (byte) 8, 9);
+    System.out.println(varHandle.get(instance));
+    varHandle.compareAndSet(instance, (short) 8, 9);
+    System.out.println(varHandle.get(instance));
+    System.out.println(varHandle.get(instance) == a1);
+    varHandle.compareAndSet(instance, a1, a2);
+    System.out.println(varHandle.get(instance));
+    System.out.println(varHandle.get(instance) == a2);
+
+    varHandle.compareAndSet(instance, a2, 1);
+    System.out.println(varHandle.get(instance));
+    varHandle.compareAndSet(instance, Integer.valueOf(1), 2);
+    System.out.println(varHandle.get(instance));
+    varHandle.compareAndSet(instance, Integer.valueOf(2), Integer.valueOf(3));
+    System.out.println(varHandle.get(instance));
+    varHandle.compareAndSet(instance, Integer.valueOf(3), 4);
+    System.out.println(varHandle.get(instance));
+    varHandle.compareAndSet(instance, 4L, 5);
+    System.out.println(varHandle.get(instance));
+    varHandle.compareAndSet(instance, (byte) 4, 5);
+    System.out.println(varHandle.get(instance));
+    varHandle.compareAndSet(instance, (short) 4, 5);
+    System.out.println(varHandle.get(instance));
+
+    varHandle.compareAndSet(instance, 4, 5L);
+    System.out.println(varHandle.get(instance));
+    varHandle.compareAndSet(instance, Long.valueOf(5), 6L);
+    System.out.println(varHandle.get(instance));
+    varHandle.compareAndSet(instance, Long.valueOf(6), Long.valueOf(7));
+    System.out.println(varHandle.get(instance));
+    varHandle.compareAndSet(instance, Long.valueOf(7), 8L);
+    System.out.println(varHandle.get(instance));
+    varHandle.compareAndSet(instance, 8, 9L);
+    System.out.println(varHandle.get(instance));
+    varHandle.compareAndSet(instance, (byte) 8, 9);
+    System.out.println(varHandle.get(instance));
+    varHandle.compareAndSet(instance, (short) 8, 9);
+    System.out.println(varHandle.get(instance));
+  }
+
+  // This test is not testing weakCompareAndSet behaviour, but assuming it behaves like
+  // compareAndSet, that is without any spurious failures. This is the desugaring behaviour, as
+  // as there is no weakCompareAndSet primitive in sun.misc.Unsafe, only compareAndSwapXXX.
+  public static void testWeakCompareAndSet(VarHandle varHandle) {
+    System.out.println("testWeakCompareAndSet");
 
     InstanceObjectField instance = new InstanceObjectField();
 
@@ -271,8 +629,11 @@ public class InstanceObjectField {
   public static void main(String[] args) throws NoSuchFieldException, IllegalAccessException {
     VarHandle varHandle =
         MethodHandles.lookup().findVarHandle(InstanceObjectField.class, "field", Object.class);
-    testSet(varHandle);
+    testSetGet(varHandle);
+    testSetVolatileGetVolatile(varHandle);
+    testSetReleaseGet(varHandle);
     testCompareAndSet(varHandle);
+    testWeakCompareAndSet(varHandle);
     testReturnValueClassCastException(varHandle);
   }
 }

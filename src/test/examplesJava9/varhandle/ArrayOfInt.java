@@ -98,6 +98,88 @@ public class ArrayOfInt {
     }
   }
 
+  public static void testGetVolatile() {
+    System.out.println("testGetVolatile");
+    VarHandle arrayVarHandle = MethodHandles.arrayElementVarHandle(int[].class);
+    int[] array = new int[2];
+
+    arrayVarHandle.set(array, 0, 1);
+    arrayVarHandle.set(array, 1, 2);
+
+    System.out.println(arrayVarHandle.getVolatile(array, 0));
+    System.out.println(arrayVarHandle.getVolatile(array, 1));
+    System.out.println((Object) arrayVarHandle.getVolatile(array, 0));
+    System.out.println((Object) arrayVarHandle.getVolatile(array, 1));
+    System.out.println((int) arrayVarHandle.getVolatile(array, 0));
+    System.out.println((int) arrayVarHandle.getVolatile(array, 1));
+    System.out.println((long) arrayVarHandle.getVolatile(array, 0));
+    System.out.println((long) arrayVarHandle.getVolatile(array, 1));
+    System.out.println((float) arrayVarHandle.getVolatile(array, 0));
+    System.out.println((float) arrayVarHandle.getVolatile(array, 1));
+    System.out.println((double) arrayVarHandle.getVolatile(array, 0));
+    System.out.println((double) arrayVarHandle.getVolatile(array, 1));
+    try {
+      System.out.println((boolean) arrayVarHandle.getVolatile(array, 0));
+      System.out.println("Unexpected success");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+    }
+    try {
+      System.out.println((boolean) arrayVarHandle.getVolatile(array, 1));
+      System.out.println("Unexpected success");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+    }
+    try {
+      System.out.println((byte) arrayVarHandle.getVolatile(array, 0));
+      System.out.println("Unexpected success");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+    }
+    try {
+      System.out.println((byte) arrayVarHandle.getVolatile(array, 1));
+      System.out.println("Unexpected success");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+    }
+    try {
+      System.out.println((short) arrayVarHandle.getVolatile(array, 0));
+      System.out.println("Unexpected success");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+    }
+    try {
+      System.out.println((short) arrayVarHandle.getVolatile(array, 1));
+      System.out.println("Unexpected success");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+    }
+    try {
+      System.out.println((char) arrayVarHandle.getVolatile(array, 0));
+      System.out.println("Unexpected success");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+    }
+    try {
+      System.out.println((char) arrayVarHandle.getVolatile(array, 1));
+      System.out.println("Unexpected success");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+    }
+    try {
+      System.out.println((String) arrayVarHandle.getVolatile(array, 0));
+      System.out.println("Unexpected success");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+    }
+    try {
+      System.out.println((String) arrayVarHandle.getVolatile(array, 1));
+      System.out.println("Unexpected success");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+    }
+  }
+
   public static void testSet() {
     System.out.println("testSet");
 
@@ -236,7 +318,285 @@ public class ArrayOfInt {
     }
   }
 
-  public void testCompareAndSet() {
+  public static void testSetVolatile() {
+    System.out.println("testSetVolatile");
+
+    VarHandle arrayVarHandle = MethodHandles.arrayElementVarHandle(int[].class);
+    int[] array = new int[2];
+
+    // int and Integer values.
+    arrayVarHandle.setVolatile(array, 0, 1);
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+    arrayVarHandle.setVolatile(array, 1, 2);
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+    arrayVarHandle.setVolatile(array, 0, Integer.valueOf(3));
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+    arrayVarHandle.setVolatile(array, 1, Integer.valueOf(4));
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+
+    // int and Integer compatible values.
+    arrayVarHandle.setVolatile(array, 0, (byte) 5);
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+    arrayVarHandle.setVolatile(array, 1, (byte) 6);
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+    arrayVarHandle.setVolatile(array, 0, Byte.valueOf((byte) 7));
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+    arrayVarHandle.setVolatile(array, 1, Byte.valueOf((byte) 8));
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+    arrayVarHandle.setVolatile(array, 0, '0');
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+    arrayVarHandle.setVolatile(array, 1, '1');
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+    arrayVarHandle.setVolatile(array, 0, Character.valueOf('2'));
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+    arrayVarHandle.setVolatile(array, 1, Character.valueOf('3'));
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+    arrayVarHandle.setVolatile(array, 0, (short) 9);
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+    arrayVarHandle.setVolatile(array, 1, (short) 10);
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+    arrayVarHandle.setVolatile(array, 0, Short.valueOf((short) 11));
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+    arrayVarHandle.setVolatile(array, 1, Short.valueOf((short) 12));
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+
+    // int and Integer non-compatible values.
+    try {
+      arrayVarHandle.setVolatile(array, 0, true);
+      System.out.println("Unexpected success");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println((int) arrayVarHandle.get(array, 0));
+      System.out.println((int) arrayVarHandle.get(array, 1));
+    }
+    try {
+      arrayVarHandle.setVolatile(array, 0, 13L);
+      System.out.println("Unexpected success");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println((int) arrayVarHandle.get(array, 0));
+      System.out.println((int) arrayVarHandle.get(array, 1));
+    }
+    try {
+      arrayVarHandle.setVolatile(array, 0, Long.valueOf(13L));
+      System.out.println("Unexpected success");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println((int) arrayVarHandle.get(array, 0));
+      System.out.println((int) arrayVarHandle.get(array, 1));
+    }
+    try {
+      arrayVarHandle.setVolatile(array, 0, 1.3f);
+      System.out.println("Unexpected success");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println((int) arrayVarHandle.get(array, 0));
+      System.out.println((int) arrayVarHandle.get(array, 1));
+    }
+    try {
+      arrayVarHandle.setVolatile(array, 0, Float.valueOf(1.3f));
+      System.out.println("Unexpected success");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println((int) arrayVarHandle.get(array, 0));
+      System.out.println((int) arrayVarHandle.get(array, 1));
+    }
+    try {
+      arrayVarHandle.setVolatile(array, 0, 1.4);
+      System.out.println("Unexpected success");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println((int) arrayVarHandle.get(array, 0));
+      System.out.println((int) arrayVarHandle.get(array, 1));
+    }
+    try {
+      arrayVarHandle.setVolatile(array, 0, Double.valueOf(1.4));
+      System.out.println("Unexpected success");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println((int) arrayVarHandle.get(array, 0));
+      System.out.println((int) arrayVarHandle.get(array, 1));
+    }
+    try {
+      arrayVarHandle.setVolatile(array, 0, new Object());
+      System.out.println("Unexpected success");
+    } catch (ClassCastException e) {
+      // The reference implementation throws ClassCastException.
+      System.out.println((int) arrayVarHandle.get(array, 0));
+      System.out.println((int) arrayVarHandle.get(array, 1));
+    } catch (RuntimeException e) {
+      // The Art and desugaring throws WrongMethodTypeException.
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println((int) arrayVarHandle.get(array, 0));
+      System.out.println((int) arrayVarHandle.get(array, 1));
+    }
+    try {
+      arrayVarHandle.setVolatile(array, 0, "X");
+      System.out.println("Unexpected success");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println((int) arrayVarHandle.get(array, 0));
+      System.out.println((int) arrayVarHandle.get(array, 1));
+    }
+  }
+
+  public static void testSetRelease() {
+    System.out.println("testSetRelease");
+
+    VarHandle arrayVarHandle = MethodHandles.arrayElementVarHandle(int[].class);
+    int[] array = new int[2];
+
+    // int and Integer values.
+    arrayVarHandle.setRelease(array, 0, 1);
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+    arrayVarHandle.setRelease(array, 1, 2);
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+    arrayVarHandle.setRelease(array, 0, Integer.valueOf(3));
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+    arrayVarHandle.setRelease(array, 1, Integer.valueOf(4));
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+
+    // int and Integer compatible values.
+    arrayVarHandle.setRelease(array, 0, (byte) 5);
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+    arrayVarHandle.setRelease(array, 1, (byte) 6);
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+    arrayVarHandle.setRelease(array, 0, Byte.valueOf((byte) 7));
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+    arrayVarHandle.setRelease(array, 1, Byte.valueOf((byte) 8));
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+    arrayVarHandle.setRelease(array, 0, '0');
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+    arrayVarHandle.setRelease(array, 1, '1');
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+    arrayVarHandle.setRelease(array, 0, Character.valueOf('2'));
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+    arrayVarHandle.setRelease(array, 1, Character.valueOf('3'));
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+    arrayVarHandle.setRelease(array, 0, (short) 9);
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+    arrayVarHandle.setRelease(array, 1, (short) 10);
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+    arrayVarHandle.setRelease(array, 0, Short.valueOf((short) 11));
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+    arrayVarHandle.setRelease(array, 1, Short.valueOf((short) 12));
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+
+    // int and Integer non-compatible values.
+    try {
+      arrayVarHandle.setRelease(array, 0, true);
+      System.out.println("Unexpected success");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println((int) arrayVarHandle.get(array, 0));
+      System.out.println((int) arrayVarHandle.get(array, 1));
+    }
+    try {
+      arrayVarHandle.setRelease(array, 0, 13L);
+      System.out.println("Unexpected success");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println((int) arrayVarHandle.get(array, 0));
+      System.out.println((int) arrayVarHandle.get(array, 1));
+    }
+    try {
+      arrayVarHandle.setRelease(array, 0, Long.valueOf(13L));
+      System.out.println("Unexpected success");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println((int) arrayVarHandle.get(array, 0));
+      System.out.println((int) arrayVarHandle.get(array, 1));
+    }
+    try {
+      arrayVarHandle.setRelease(array, 0, 1.3f);
+      System.out.println("Unexpected success");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println((int) arrayVarHandle.get(array, 0));
+      System.out.println((int) arrayVarHandle.get(array, 1));
+    }
+    try {
+      arrayVarHandle.setRelease(array, 0, Float.valueOf(1.3f));
+      System.out.println("Unexpected success");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println((int) arrayVarHandle.get(array, 0));
+      System.out.println((int) arrayVarHandle.get(array, 1));
+    }
+    try {
+      arrayVarHandle.setRelease(array, 0, 1.4);
+      System.out.println("Unexpected success");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println((int) arrayVarHandle.get(array, 0));
+      System.out.println((int) arrayVarHandle.get(array, 1));
+    }
+    try {
+      arrayVarHandle.setRelease(array, 0, Double.valueOf(1.4));
+      System.out.println("Unexpected success");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println((int) arrayVarHandle.get(array, 0));
+      System.out.println((int) arrayVarHandle.get(array, 1));
+    }
+    try {
+      arrayVarHandle.setRelease(array, 0, new Object());
+      System.out.println("Unexpected success");
+    } catch (ClassCastException e) {
+      // The reference implementation throws ClassCastException.
+      System.out.println((int) arrayVarHandle.get(array, 0));
+      System.out.println((int) arrayVarHandle.get(array, 1));
+    } catch (RuntimeException e) {
+      // The Art and desugaring throws WrongMethodTypeException.
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println((int) arrayVarHandle.get(array, 0));
+      System.out.println((int) arrayVarHandle.get(array, 1));
+    }
+    try {
+      arrayVarHandle.setRelease(array, 0, "X");
+      System.out.println("Unexpected success");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println((int) arrayVarHandle.get(array, 0));
+      System.out.println((int) arrayVarHandle.get(array, 1));
+    }
+  }
+
+  public static void testCompareAndSet() {
+    System.out.println("testCompareAndSet");
+
     VarHandle arrayVarHandle = MethodHandles.arrayElementVarHandle(int[].class);
     int[] array = new int[2];
     arrayVarHandle.set(array, 0, 1);
@@ -251,6 +611,30 @@ public class ArrayOfInt {
     // TODO(b/247076137): Handle boxed.
     // arrayVarHandle.compareAndSet(array, 1, 2, box(3));
     arrayVarHandle.compareAndSet(array, 1, 2, 3);
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+  }
+
+  // This test is not testing weakCompareAndSet behaviour, but assuming it behaves like
+  // compareAndSet, that is without any spurious failures. This is the desugaring behaviour, as
+  // as there is no weakCompareAndSet primitive in sun.misc.Unsafe, only compareAndSwapXXX.
+  public static void testWeakCompareAndSet() {
+    System.out.println("testWeakCompareAndSet");
+
+    VarHandle arrayVarHandle = MethodHandles.arrayElementVarHandle(int[].class);
+    int[] array = new int[2];
+    arrayVarHandle.set(array, 0, 1);
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+    arrayVarHandle.weakCompareAndSet(array, 1, 1, 3);
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+    arrayVarHandle.weakCompareAndSet(array, 1, 0, 2);
+    System.out.println((int) arrayVarHandle.get(array, 0));
+    System.out.println((int) arrayVarHandle.get(array, 1));
+    // TODO(b/247076137): Handle boxed.
+    // arrayVarHandle.waekCompareAndSet(array, 1, 2, box(3));
+    arrayVarHandle.weakCompareAndSet(array, 1, 2, 3);
     System.out.println((int) arrayVarHandle.get(array, 0));
     System.out.println((int) arrayVarHandle.get(array, 1));
   }
@@ -273,7 +657,12 @@ public class ArrayOfInt {
 
   public static void main(String[] args) throws NoSuchFieldException, IllegalAccessException {
     testGet();
+    testGetVolatile();
     testSet();
+    testSetVolatile();
+    testSetRelease();
+    testCompareAndSet();
+    testWeakCompareAndSet();
     testArrayVarHandleForNonSingleDimension();
   }
 }

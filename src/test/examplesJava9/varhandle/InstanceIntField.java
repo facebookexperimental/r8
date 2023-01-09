@@ -62,6 +62,50 @@ public class InstanceIntField {
     }
   }
 
+  public static void testGetVolatile(VarHandle varHandle) {
+    System.out.println("testGetVolatile");
+
+    InstanceIntField instance = new InstanceIntField();
+    varHandle.set(instance, 1);
+
+    System.out.println(varHandle.getVolatile(instance));
+    System.out.println((Object) varHandle.getVolatile(instance));
+    System.out.println((int) varHandle.getVolatile(instance));
+    System.out.println((long) varHandle.getVolatile(instance));
+    System.out.println((float) varHandle.getVolatile(instance));
+    System.out.println((double) varHandle.getVolatile(instance));
+    try {
+      System.out.println((boolean) varHandle.getVolatile(instance));
+      System.out.println("Unexpected success");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+    }
+    try {
+      System.out.println((byte) varHandle.getVolatile(instance));
+      System.out.println("Unexpected success");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+    }
+    try {
+      System.out.println((short) varHandle.getVolatile(instance));
+      System.out.println("Unexpected success");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+    }
+    try {
+      System.out.println((char) varHandle.getVolatile(instance));
+      System.out.println("Unexpected success");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+    }
+    try {
+      System.out.println((String) varHandle.getVolatile(instance));
+      System.out.println("Unexpected success");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+    }
+  }
+
   public static void testSet(VarHandle varHandle) {
     System.out.println("testSet");
 
@@ -121,6 +165,136 @@ public class InstanceIntField {
     }
     try {
       varHandle.set(instance, 3.0);
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println(varHandle.get(instance));
+    }
+  }
+
+  public static void testSetVolatile(VarHandle varHandle) {
+    System.out.println("testSetVolatile");
+
+    InstanceIntField instance = new InstanceIntField();
+    System.out.println((int) varHandle.get(instance));
+
+    // int and Integer values.
+    varHandle.setVolatile(instance, (int) 1);
+    System.out.println((int) varHandle.get(instance));
+    varHandle.setVolatile(instance, Integer.valueOf(2));
+    System.out.println(varHandle.get(instance));
+
+    // int and Integer compatible values.
+    varHandle.setVolatile(instance, (byte) 3);
+    System.out.println((int) varHandle.get(instance));
+    varHandle.setVolatile(instance, Byte.valueOf((byte) 4));
+    System.out.println((int) varHandle.get(instance));
+    varHandle.setVolatile(instance, '0');
+    System.out.println((int) varHandle.get(instance));
+    varHandle.setVolatile(instance, Character.valueOf('1'));
+    System.out.println((int) varHandle.get(instance));
+    varHandle.setVolatile(instance, (short) 5);
+    System.out.println((int) varHandle.get(instance));
+    varHandle.setVolatile(instance, Short.valueOf((short) 6));
+    System.out.println((int) varHandle.get(instance));
+
+    // int and Integer non-compatible values.
+    try {
+      varHandle.setVolatile(instance, true);
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println(varHandle.get(instance));
+    }
+    try {
+      varHandle.setVolatile(instance, 3L);
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println(varHandle.get(instance));
+    }
+    try {
+      varHandle.setVolatile(instance, Long.valueOf(3));
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println(varHandle.get(instance));
+    }
+    try {
+      varHandle.setVolatile(instance, "3");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println(varHandle.get(instance));
+    }
+    try {
+      varHandle.setVolatile(instance, 3.0f);
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println(varHandle.get(instance));
+    }
+    try {
+      varHandle.setVolatile(instance, 3.0);
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println(varHandle.get(instance));
+    }
+  }
+
+  public static void testSetRelease(VarHandle varHandle) {
+    System.out.println("testSetRelease");
+
+    InstanceIntField instance = new InstanceIntField();
+    System.out.println((int) varHandle.get(instance));
+
+    // int and Integer values.
+    varHandle.setRelease(instance, (int) 1);
+    System.out.println((int) varHandle.get(instance));
+    varHandle.setRelease(instance, Integer.valueOf(2));
+    System.out.println(varHandle.get(instance));
+
+    // int and Integer compatible values.
+    varHandle.setRelease(instance, (byte) 3);
+    System.out.println((int) varHandle.get(instance));
+    varHandle.setRelease(instance, Byte.valueOf((byte) 4));
+    System.out.println((int) varHandle.get(instance));
+    varHandle.setRelease(instance, '0');
+    System.out.println((int) varHandle.get(instance));
+    varHandle.setRelease(instance, Character.valueOf('1'));
+    System.out.println((int) varHandle.get(instance));
+    varHandle.setRelease(instance, (short) 5);
+    System.out.println((int) varHandle.get(instance));
+    varHandle.setRelease(instance, Short.valueOf((short) 6));
+    System.out.println((int) varHandle.get(instance));
+
+    // int and Integer non-compatible values.
+    try {
+      varHandle.setRelease(instance, true);
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println(varHandle.get(instance));
+    }
+    try {
+      varHandle.setRelease(instance, 3L);
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println(varHandle.get(instance));
+    }
+    try {
+      varHandle.setRelease(instance, Long.valueOf(3));
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println(varHandle.get(instance));
+    }
+    try {
+      varHandle.setRelease(instance, "3");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println(varHandle.get(instance));
+    }
+    try {
+      varHandle.setRelease(instance, 3.0f);
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println(varHandle.get(instance));
+    }
+    try {
+      varHandle.setRelease(instance, 3.0);
     } catch (RuntimeException e) {
       checkJavaLangInvokeWrongMethodTypeException(e);
       System.out.println(varHandle.get(instance));
@@ -258,11 +432,149 @@ public class InstanceIntField {
     }
   }
 
+  // This test is not testing weakCompareAndSet behaviour, but assuming it behaves like
+  // compareAndSet, that is without any spurious failures. This is the desugaring behaviour, as
+  // as there is no weakCompareAndSet primitive in sun.misc.Unsafe, only compareAndSwapXXX.
+  public static void testWeakCompareAndSet(VarHandle varHandle) {
+    System.out.println("testWeakCompareAndSet");
+
+    InstanceIntField instance = new InstanceIntField();
+
+    // int and Integer values.
+    varHandle.weakCompareAndSet(instance, 1, 2);
+    System.out.println((int) varHandle.get(instance));
+    varHandle.weakCompareAndSet(instance, 0, 1);
+    System.out.println((int) varHandle.get(instance));
+    varHandle.weakCompareAndSet(instance, Integer.valueOf(1), 2);
+    System.out.println(varHandle.get(instance));
+    varHandle.weakCompareAndSet(instance, 2, Integer.valueOf(3));
+    System.out.println(varHandle.get(instance));
+    varHandle.weakCompareAndSet(instance, Integer.valueOf(3), Integer.valueOf(4));
+    System.out.println(varHandle.get(instance));
+
+    // int and Integer compatible values.
+    varHandle.weakCompareAndSet(instance, (byte) 4, 5);
+    System.out.println(varHandle.get(instance));
+    varHandle.weakCompareAndSet(instance, 5, (byte) 6);
+    System.out.println(varHandle.get(instance));
+    varHandle.weakCompareAndSet(instance, (byte) 6, (byte) 7);
+    System.out.println(varHandle.get(instance));
+    varHandle.weakCompareAndSet(instance, Byte.valueOf((byte) 7), (byte) 8);
+    System.out.println(varHandle.get(instance));
+    varHandle.weakCompareAndSet(instance, (byte) 8, Byte.valueOf((byte) 9));
+    System.out.println(varHandle.get(instance));
+    varHandle.weakCompareAndSet(instance, Byte.valueOf((byte) 9), Byte.valueOf((byte) 10));
+    System.out.println(varHandle.get(instance));
+    varHandle.weakCompareAndSet(instance, 10, '0');
+    System.out.println(varHandle.get(instance));
+    varHandle.weakCompareAndSet(instance, '0', 49);
+    System.out.println(varHandle.get(instance));
+    varHandle.weakCompareAndSet(instance, '1', '2');
+    System.out.println(varHandle.get(instance));
+    varHandle.weakCompareAndSet(instance, (byte) 50, '3');
+    System.out.println(varHandle.get(instance));
+    varHandle.weakCompareAndSet(instance, '3', (byte) 52);
+    System.out.println(varHandle.get(instance));
+    varHandle.weakCompareAndSet(instance, '4', '5');
+    System.out.println(varHandle.get(instance));
+
+    // int and Integer non-compatible values.
+    try {
+      varHandle.weakCompareAndSet(instance, 6L, 7L);
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println(varHandle.get(instance));
+    }
+    try {
+      varHandle.weakCompareAndSet(instance, 6L, 7);
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println(varHandle.get(instance));
+    }
+    try {
+      varHandle.weakCompareAndSet(instance, 6, Long.valueOf(7));
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println(varHandle.get(instance));
+    }
+    try {
+      varHandle.weakCompareAndSet(instance, Long.valueOf(6), 7);
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println(varHandle.get(instance));
+    }
+    try {
+      varHandle.weakCompareAndSet(instance, Long.valueOf(6), Long.valueOf(7));
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println(varHandle.get(instance));
+    }
+    try {
+      varHandle.weakCompareAndSet(instance, 6, 7.0f);
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println(varHandle.get(instance));
+    }
+    try {
+      varHandle.weakCompareAndSet(instance, 6.0f, 7);
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println(varHandle.get(instance));
+    }
+    try {
+      varHandle.weakCompareAndSet(instance, 6.0f, 7.0f);
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println(varHandle.get(instance));
+    }
+    try {
+      varHandle.weakCompareAndSet(instance, 6, 7.0);
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println(varHandle.get(instance));
+    }
+    try {
+      varHandle.weakCompareAndSet(instance, 6.0, 7);
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println(varHandle.get(instance));
+    }
+    try {
+      varHandle.weakCompareAndSet(instance, 6.0, 7.0);
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println(varHandle.get(instance));
+    }
+
+    try {
+      varHandle.weakCompareAndSet(instance, 6, "7");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println(varHandle.get(instance));
+    }
+    try {
+      varHandle.weakCompareAndSet(instance, "6", 7);
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println(varHandle.get(instance));
+    }
+    try {
+      varHandle.weakCompareAndSet(instance, "6", "7");
+    } catch (RuntimeException e) {
+      checkJavaLangInvokeWrongMethodTypeException(e);
+      System.out.println(varHandle.get(instance));
+    }
+  }
+
   public static void main(String[] args) throws NoSuchFieldException, IllegalAccessException {
     VarHandle varHandle =
         MethodHandles.lookup().findVarHandle(InstanceIntField.class, "field", int.class);
     testGet(varHandle);
+    testGetVolatile(varHandle);
     testSet(varHandle);
+    testSetVolatile(varHandle);
+    testSetRelease(varHandle);
     testCompareAndSet(varHandle);
+    testWeakCompareAndSet(varHandle);
   }
 }

@@ -17,10 +17,13 @@ import com.android.tools.r8.retrace.RetracedMethodReference;
 import com.android.tools.r8.retrace.RetracedSourceFile;
 import com.android.tools.r8.retrace.internal.RetraceClassResultImpl.RetraceClassElementImpl;
 import com.android.tools.r8.utils.ListUtils;
+import com.android.tools.r8.utils.OptionalBool;
 import com.android.tools.r8.utils.Pair;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.OptionalInt;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
@@ -31,6 +34,7 @@ public class RetraceMethodResultImpl implements RetraceMethodResult {
   private final List<Pair<RetraceClassElementImpl, List<MemberNamingWithMappedRangesOfName>>>
       mappedRanges;
   private final RetracerImpl retracer;
+  private OptionalBool isAmbiguousCache = OptionalBool.UNKNOWN;
 
   RetraceMethodResultImpl(
       RetraceClassResultImpl classResult,
@@ -47,11 +51,33 @@ public class RetraceMethodResultImpl implements RetraceMethodResult {
 
   @Override
   public boolean isAmbiguous() {
+    if (!isAmbiguousCache.isUnknown()) {
+      return isAmbiguousCache.isTrue();
+    }
     if (mappedRanges.size() > 1) {
+      isAmbiguousCache = OptionalBool.TRUE;
       return true;
     }
     List<MemberNamingWithMappedRangesOfName> mappedRangesOfNames = mappedRanges.get(0).getSecond();
-    return mappedRangesOfNames != null && mappedRangesOfNames.size() > 1;
+    if (mappedRangesOfNames == null || mappedRangesOfNames.size() < 2) {
+      isAmbiguousCache = OptionalBool.FALSE;
+      return false;
+    }
+    MethodSignature outermostSignature =
+        ListUtils.last(mappedRangesOfNames.get(0).getMappedRanges())
+            .getOriginalSignature()
+            .asMethodSignature();
+    for (int i = 1; i < mappedRangesOfNames.size(); i++) {
+      if (!outermostSignature.equals(
+          ListUtils.last(mappedRangesOfNames.get(i).getMappedRanges())
+              .getOriginalSignature()
+              .asMethodSignature())) {
+        isAmbiguousCache = OptionalBool.TRUE;
+        return true;
+      }
+    }
+    isAmbiguousCache = OptionalBool.FALSE;
+    return false;
   }
 
   @Override
@@ -181,28 +207,37 @@ public class RetraceMethodResultImpl implements RetraceMethodResult {
                                 classElement.getRetracedClass().getClassReference())),
                         null));
               }
-              return ListUtils.map(
-                  memberNamingsWithMappedRange,
+              Set<MethodSignature> seen = new HashSet<>();
+              List<ElementImpl> newElements = new ArrayList<>(memberNamingsWithMappedRange.size());
+              memberNamingsWithMappedRange.forEach(
                   memberNamingWithMappedRangesOfName -> {
-                    MemberNaming memberNaming =
-                        memberNamingWithMappedRangesOfName.getMemberNaming();
                     MethodSignature originalSignature =
-                        memberNaming != null
-                            ? memberNaming.getOriginalSignature().asMethodSignature()
-                            : ListUtils.last(memberNamingWithMappedRangesOfName.getMappedRanges())
-                                .getOriginalSignature()
-                                .asMethodSignature();
-                    MethodReference methodReference =
-                        RetraceUtils.methodReferenceFromMethodSignature(
-                            originalSignature, classElement.getRetracedClass().getClassReference());
-                    return new ElementImpl(
-                        this,
-                        classElement,
-                        RetracedMethodReferenceImpl.create(methodReference),
-                        memberNamingWithMappedRangesOfName);
-                  })
-                  .stream();
+                        getMethodSignatureFromMapping(memberNamingWithMappedRangesOfName);
+                    if (seen.add(originalSignature)) {
+                      MethodReference methodReference =
+                          RetraceUtils.methodReferenceFromMethodSignature(
+                              originalSignature,
+                              classElement.getRetracedClass().getClassReference());
+                      newElements.add(
+                          new ElementImpl(
+                              this,
+                              classElement,
+                              RetracedMethodReferenceImpl.create(methodReference),
+                              memberNamingWithMappedRangesOfName));
+                    }
+                  });
+              return newElements.stream();
             });
+  }
+
+  private MethodSignature getMethodSignatureFromMapping(
+      MemberNamingWithMappedRangesOfName memberNamingWithMappedRanges) {
+    MemberNaming memberNaming = memberNamingWithMappedRanges.getMemberNaming();
+    return (memberNaming != null && !isAmbiguous())
+        ? memberNaming.getOriginalSignature().asMethodSignature()
+        : ListUtils.last(memberNamingWithMappedRanges.getMappedRanges())
+            .getOriginalSignature()
+            .asMethodSignature();
   }
 
   public static class ElementImpl implements RetraceMethodElement {
@@ -228,7 +263,7 @@ public class RetraceMethodResultImpl implements RetraceMethodResult {
       if (mapping == null) {
         return false;
       }
-      if (mapping.getMemberNaming() != null) {
+      if (mapping.getMemberNaming() != null && !retraceMethodResult.isAmbiguous()) {
         return mapping.getMemberNaming().isCompilerSynthesized();
       } else {
         List<MappedRange> mappedRanges = mapping.getMappedRanges();

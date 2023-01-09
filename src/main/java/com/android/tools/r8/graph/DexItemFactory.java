@@ -362,6 +362,14 @@ public class DexItemFactory {
   public final DexString getString = createString("get");
   public final DexString setString = createString("set");
   public final DexString compareAndSetString = createString("compareAndSet");
+  public final DexString weakCompareAndSetString = createString("weakCompareAndSet");
+  public final DexString getVolatileString = createString("getVolatile");
+  public final DexString setVolatileString = createString("setVolatile");
+  public final DexString setReleaseString = createString("setRelease");
+
+  // Method names used on MethodHandles.
+  public final DexString lookupString = createString("lookup");
+  public final DexString privateLookupInString = createString("privateLookupIn");
 
   public final DexType booleanType = createStaticallyKnownType(booleanDescriptor);
   public final DexType byteType = createStaticallyKnownType(byteDescriptor);
@@ -2259,7 +2267,7 @@ public class DexItemFactory {
     private final DexProto setSignature = createProto(voidType, objectArrayType);
     private final DexProto compareAndSetSignature = createProto(booleanType, objectArrayType);
 
-    private final Set<DexString> varHandleMethods =
+    public final Set<DexString> varHandleMethodsWithPolymorphicReturnType =
         createStrings(
             "compareAndExchange",
             "compareAndExchangeAcquire",
@@ -2285,12 +2293,12 @@ public class DexItemFactory {
             "getVolatile");
 
     private final Set<DexString> varHandleSetMethods =
-        createStrings(setString, "setOpaque", "setRelease", "setVolatile");
+        createStrings(setString, "setOpaque", setReleaseString, setVolatileString);
 
     public final Set<DexString> varHandleCompareAndSetMethodNames =
         createStrings(
             compareAndSetString,
-            "weakCompareAndSet",
+            weakCompareAndSetString,
             "weakCompareAndSetAcquire",
             "weakCompareAndSetPlain",
             "weakCompareAndSetRelease");
@@ -2302,7 +2310,7 @@ public class DexItemFactory {
           result = createMethod(methodHandleType, signature, invokeProto.name);
         }
       } else if (invokeProto.holder == varHandleType) {
-        if (varHandleMethods.contains(invokeProto.name)) {
+        if (varHandleMethodsWithPolymorphicReturnType.contains(invokeProto.name)) {
           result = createMethod(varHandleType, signature, invokeProto.name);
         } else if (varHandleSetMethods.contains(invokeProto.name)) {
           result = createMethod(varHandleType, setSignature, invokeProto.name);
@@ -2329,7 +2337,7 @@ public class DexItemFactory {
         return invokeProto.name == invokeMethodName || invokeProto.name == invokeExactMethodName;
       }
       if (invokeProto.holder == varHandleType) {
-        return varHandleMethods.contains(invokeProto.name)
+        return varHandleMethodsWithPolymorphicReturnType.contains(invokeProto.name)
             || varHandleSetMethods.contains(invokeProto.name)
             || varHandleCompareAndSetMethodNames.contains(invokeProto.name);
       }
