@@ -34,7 +34,8 @@
         "java.net.URLDecoder": "j$.net.URLDecoder",
         "java.net.URLEncoder": "j$.net.URLEncoder",
         "java.io.DesugarInputStream": "j$.io.DesugarInputStream",
-        "java.util.concurrent.DesugarTimeUnit": "j$.util.concurrent.DesugarTimeUnit"
+        "java.util.concurrent.DesugarTimeUnit": "j$.util.concurrent.DesugarTimeUnit",
+        "java.util.concurrent.ConcurrentLinkedQueue": "j$.util.concurrent.ConcurrentLinkedQueue"
       },
       "retarget_method": {
         "java.util.concurrent.TimeUnit java.util.concurrent.TimeUnit#of(java.time.temporal.ChronoUnit)": "java.util.concurrent.DesugarTimeUnit",
@@ -225,6 +226,7 @@
         "java.nio.channels.SeekableByteChannel java.nio.file.spi.FileSystemProvider#newByteChannel(java.nio.file.Path, java.util.Set, java.nio.file.attribute.FileAttribute[])" : [1, "java.util.Set java.nio.file.FileApiFlips#flipOpenOptionSet(java.util.Set)"],
         "java.nio.channels.FileChannel java.nio.file.spi.FileSystemProvider#newFileChannel(java.nio.file.Path, java.util.Set, java.nio.file.attribute.FileAttribute[])" : [1, "java.util.Set java.nio.file.FileApiFlips#flipOpenOptionSet(java.util.Set)"],
         "java.util.List java.nio.file.WatchKey#pollEvents()": [-1, "java.util.List java.nio.file.FileApiFlips#flipWatchEventList(java.util.List)"],
+        "java.lang.Object java.nio.file.WatchEvent#context()": [-1, "java.lang.Object java.nio.file.PathApiFlips#convertPath(java.lang.Object)"],
         "boolean java.nio.file.FileStore#supportsFileAttributeView(java.lang.Class)": [0, "java.lang.Class java.nio.file.FileApiFlips#flipFileAttributeView(java.lang.Class)"],
         "java.nio.file.attribute.FileAttributeView java.nio.file.spi.FileSystemProvider#getFileAttributeView(java.nio.file.Path, java.lang.Class, java.nio.file.LinkOption[])": [1, "java.lang.Class java.nio.file.FileApiFlips#flipFileAttributeView(java.lang.Class)"],
         "java.nio.file.attribute.BasicFileAttributes java.nio.file.spi.FileSystemProvider#readAttributes(java.nio.file.Path, java.lang.Class, java.nio.file.LinkOption[])": [1, "java.lang.Class java.nio.file.FileApiFlips#flipFileAttributes(java.lang.Class)"],
@@ -476,7 +478,8 @@
       "rewrite_prefix": {
         "desugar.": "j$.desugar.",
         "libcore.": "j$.libcore.",
-        "sun.security.action.": "j$.sun.security.action."
+        "sun.security.action.": "j$.sun.security.action.",
+        "java.util.concurrent.Helpers": "j$.util.concurrent.Helpers"
       }
     },
     {
@@ -588,6 +591,9 @@
     "-keepclassmembers class j$.util.concurrent.ConcurrentHashMap$TreeBin { int lockState; }",
     "-keepclassmembers class j$.util.concurrent.ConcurrentHashMap { int sizeCtl; int transferIndex; long baseCount; int cellsBusy; }",
     "-keepclassmembers class j$.util.concurrent.ConcurrentHashMap$CounterCell { long value; }",
+    "-keepclassmembers class j$.util.concurrent.ConcurrentLinkedQueue { j$.util.concurrent.ConcurrentLinkedQueue$Node head; j$.util.concurrent.ConcurrentLinkedQueue$Node tail; }",
+    "-keep,allowshrinking class j$.util.concurrent.ConcurrentLinkedQueue$Node",
+    "-keepclassmembers class j$.util.concurrent.ConcurrentLinkedQueue$Node { j$.util.concurrent.ConcurrentLinkedQueue$Node next; java.lang.Object item; }",
     "-keepclassmembers enum * { public static **[] values(); public static ** valueOf(java.lang.String); public static final !synthetic <fields>; }",
     "-keeppackagenames java.**",
     "-keeppackagenames j$.**",

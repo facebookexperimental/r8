@@ -3,7 +3,9 @@
 // BSD-style license that can be found in the LICENSE file.
 package com.android.tools.r8.keepanno.ast;
 
+import java.util.Collection;
 import java.util.Objects;
+import java.util.function.Predicate;
 
 /**
  * A pattern for matching items in the program.
@@ -18,33 +20,50 @@ import java.util.Objects;
 public class KeepItemPattern {
 
   public static KeepItemPattern any() {
-    KeepItemPattern any = builder().any().build();
-    assert any.isAny();
-    return any;
+    return builder().any().build();
   }
 
   public static Builder builder() {
     return new Builder();
   }
 
+  public boolean isClassItemPattern() {
+    return memberPattern.isNone();
+  }
+
+  public boolean isMemberItemPattern() {
+    return !memberPattern.isNone();
+  }
+
   public static class Builder {
 
-    private KeepQualifiedClassNamePattern classNamePattern = KeepQualifiedClassNamePattern.any();
+    private KeepClassReference classReference =
+        KeepClassReference.fromClassNamePattern(KeepQualifiedClassNamePattern.any());
     private KeepExtendsPattern extendsPattern = KeepExtendsPattern.any();
     private KeepMemberPattern memberPattern = KeepMemberPattern.none();
 
     private Builder() {}
 
+    public Builder copyFrom(KeepItemPattern pattern) {
+      return setClassReference(pattern.getClassReference())
+          .setExtendsPattern(pattern.getExtendsPattern())
+          .setMemberPattern(pattern.getMemberPattern());
+    }
+
     public Builder any() {
-      classNamePattern = KeepQualifiedClassNamePattern.any();
+      classReference = KeepClassReference.fromClassNamePattern(KeepQualifiedClassNamePattern.any());
       extendsPattern = KeepExtendsPattern.any();
       memberPattern = KeepMemberPattern.all();
       return this;
     }
 
-    public Builder setClassPattern(KeepQualifiedClassNamePattern qualifiedClassNamePattern) {
-      this.classNamePattern = qualifiedClassNamePattern;
+    public Builder setClassReference(KeepClassReference classReference) {
+      this.classReference = classReference;
       return this;
+    }
+
+    public Builder setClassPattern(KeepQualifiedClassNamePattern qualifiedClassNamePattern) {
+      return setClassReference(KeepClassReference.fromClassNamePattern(qualifiedClassNamePattern));
     }
 
     public Builder setExtendsPattern(KeepExtendsPattern extendsPattern) {
@@ -58,33 +77,33 @@ public class KeepItemPattern {
     }
 
     public KeepItemPattern build() {
-      return new KeepItemPattern(classNamePattern, extendsPattern, memberPattern);
+      return new KeepItemPattern(classReference, extendsPattern, memberPattern);
     }
   }
 
-  private final KeepQualifiedClassNamePattern qualifiedClassPattern;
+  private final KeepClassReference classReference;
   private final KeepExtendsPattern extendsPattern;
   private final KeepMemberPattern memberPattern;
   // TODO: class annotations
 
   private KeepItemPattern(
-      KeepQualifiedClassNamePattern qualifiedClassPattern,
+      KeepClassReference classReference,
       KeepExtendsPattern extendsPattern,
       KeepMemberPattern memberPattern) {
-    assert qualifiedClassPattern != null;
+    assert classReference != null;
     assert extendsPattern != null;
     assert memberPattern != null;
-    this.qualifiedClassPattern = qualifiedClassPattern;
+    this.classReference = classReference;
     this.extendsPattern = extendsPattern;
     this.memberPattern = memberPattern;
   }
 
-  public boolean isAny() {
-    return qualifiedClassPattern.isAny() && extendsPattern.isAny() && memberPattern.isAll();
+  public boolean isAny(Predicate<String> onReference) {
+    return extendsPattern.isAny() && memberPattern.isAll() && classReference.isAny(onReference);
   }
 
-  public KeepQualifiedClassNamePattern getClassNamePattern() {
-    return qualifiedClassPattern;
+  public KeepClassReference getClassReference() {
+    return classReference;
   }
 
   public KeepExtendsPattern getExtendsPattern() {
@@ -93,6 +112,10 @@ public class KeepItemPattern {
 
   public KeepMemberPattern getMemberPattern() {
     return memberPattern;
+  }
+
+  public Collection<String> getBindingReferences() {
+    return classReference.getBindingReferences();
   }
 
   @Override
@@ -104,21 +127,21 @@ public class KeepItemPattern {
       return false;
     }
     KeepItemPattern that = (KeepItemPattern) obj;
-    return qualifiedClassPattern.equals(that.qualifiedClassPattern)
+    return classReference.equals(that.classReference)
         && extendsPattern.equals(that.extendsPattern)
         && memberPattern.equals(that.memberPattern);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(qualifiedClassPattern, extendsPattern, memberPattern);
+    return Objects.hash(classReference, extendsPattern, memberPattern);
   }
 
   @Override
   public String toString() {
     return "KeepClassPattern{"
-        + "qualifiedClassPattern="
-        + qualifiedClassPattern
+        + "classReference="
+        + classReference
         + ", extendsPattern="
         + extendsPattern
         + ", memberPattern="

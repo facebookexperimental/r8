@@ -13,7 +13,11 @@ import static com.android.tools.r8.desugar.desugaredlibrary.test.LibraryDesugari
 import static com.android.tools.r8.desugar.desugaredlibrary.test.LibraryDesugaringSpecification.JDK11_PATH;
 import static com.android.tools.r8.utils.FileUtils.CLASS_EXTENSION;
 import static com.android.tools.r8.utils.FileUtils.JAVA_EXTENSION;
+import static com.android.tools.r8.utils.codeinspector.Matchers.isPresent;
+import static org.hamcrest.CoreMatchers.not;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assume.assumeTrue;
 
 import com.android.tools.r8.SingleTestRunResult;
 import com.android.tools.r8.TestParameters;
@@ -24,9 +28,16 @@ import com.android.tools.r8.desugar.desugaredlibrary.DesugaredLibraryTestBase;
 import com.android.tools.r8.desugar.desugaredlibrary.test.CompilationSpecification;
 import com.android.tools.r8.desugar.desugaredlibrary.test.DesugaredLibraryTestCompileResult;
 import com.android.tools.r8.desugar.desugaredlibrary.test.LibraryDesugaringSpecification;
+import com.android.tools.r8.graph.DexItemFactory;
+import com.android.tools.r8.references.MethodReference;
+import com.android.tools.r8.references.Reference;
+import com.android.tools.r8.synthesis.SyntheticItemsTestUtils;
 import com.android.tools.r8.utils.AndroidApiLevel;
+import com.android.tools.r8.utils.DescriptorUtils;
 import com.android.tools.r8.utils.StringUtils;
+import com.android.tools.r8.utils.codeinspector.CodeInspector;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Collections;
@@ -71,7 +82,7 @@ public class Jdk11ConcurrentLinkedQueueTests extends DesugaredLibraryTestBase {
             .withApiLevel(AndroidApiLevel.N)
             .build(),
         ImmutableList.of(JDK11_MINIMAL, JDK11, JDK11_PATH),
-        ImmutableList.of(D8_L8DEBUG, D8_L8SHRINK));
+        ImmutableSet.of(D8_L8DEBUG, D8_L8SHRINK));
   }
 
   @BeforeClass
@@ -88,33 +99,81 @@ public class Jdk11ConcurrentLinkedQueueTests extends DesugaredLibraryTestBase {
         new Path[] {jdk11MathTestsDir.resolve(WHITEBOX + CLASS_EXTENSION)};
   }
 
-  private static void ranWithSuccessOrFailures(String testName, SingleTestRunResult result) {
-    // Tests use ThreadLocalRandom, so success or failure is random. Note this is only for
-    // VMs where the internal implementation is not based on JDK11.
-    assertTrue(
-        result.getStdOut().contains(StringUtils.lines(testName + ": SUCCESS"))
-            || result
-                .getStdOut()
-                .contains(StringUtils.lines("Tests result in " + testName + ": FAILURE")));
-    if (result.getStdOut().contains(StringUtils.lines(testName + ": SUCCESS"))) {
-      assertTrue(
-          result.toString(),
-          result.getStdOut().contains("Total tests run: 37, Failures: 0, Skips: 0"));
-    } else {
-      assertTrue(
-          result.toString(),
-          result.getStdOut().contains("Total tests run: 37, Failures: 1, Skips: 0")
-              || result.getStdOut().contains("Total tests run: 37, Failures: 2, Skips: 0")
-              || result.getStdOut().contains("Total tests run: 37, Failures: 3, Skips: 0")
-              || result.getStdOut().contains("Total tests run: 37, Failures: 4, Skips: 0")
-              || result.getStdOut().contains("Total tests run: 37, Failures: 5, Skips: 0")
-              || result.getStdOut().contains("Total tests run: 37, Failures: 6, Skips: 0")
-              || result.getStdOut().contains("Total tests run: 37, Failures: 7, Skips: 0")
-              || result.getStdOut().contains("Total tests run: 37, Failures: 8, Skips: 0"));
-    }
+  private void inspect(CodeInspector inspector) {
+    // Right now we only expect one backport coming out of DesugarVarHandle - the backport with
+    // forwarding of Unsafe.compareAndSwapObject.
+    MethodReference firstBackportFromDesugarVarHandle =
+        SyntheticItemsTestUtils.syntheticBackportWithForwardingMethod(
+            Reference.classFromDescriptor("Lj$/com/android/tools/r8/DesugarVarHandle;"),
+            0,
+            Reference.method(
+                Reference.classFromDescriptor("Lsun/misc/Unsafe;"),
+                "compareAndSwapObject",
+                ImmutableList.of(
+                    Reference.typeFromDescriptor("Ljava/lang/Object;"),
+                    Reference.LONG,
+                    Reference.typeFromDescriptor("Ljava/lang/Object;"),
+                    Reference.typeFromDescriptor("Ljava/lang/Object;")),
+                Reference.BOOL));
+
+    assertThat(
+        inspector.clazz(
+            DescriptorUtils.descriptorToJavaType(DexItemFactory.varHandleDescriptorString)),
+        not(isPresent()));
+    assertThat(
+        inspector.clazz(
+            DescriptorUtils.descriptorToJavaType(
+                DexItemFactory.methodHandlesLookupDescriptorString)),
+        not(isPresent()));
+    assertThat(
+        inspector.clazz(
+            "j$." + DescriptorUtils.descriptorToJavaType(DexItemFactory.varHandleDescriptorString)),
+        not(isPresent()));
+    assertThat(
+        inspector.clazz(
+            "j$."
+                + DescriptorUtils.descriptorToJavaType(
+                    DexItemFactory.methodHandlesLookupDescriptorString)),
+        not(isPresent()));
+    assertThat(
+        inspector.clazz(
+            DescriptorUtils.descriptorToJavaType(DexItemFactory.desugarVarHandleDescriptorString)),
+        not(isPresent()));
+    assertThat(
+        inspector.clazz(
+            DescriptorUtils.descriptorToJavaType(
+                DexItemFactory.desugarMethodHandlesLookupDescriptorString)),
+        not(isPresent()));
+
+    boolean usesNativeVarHandle =
+        parameters.asDexRuntime().getVersion().isNewerThanOrEqual(Version.V13_0_0)
+            && parameters.getApiLevel().isGreaterThanOrEqualTo(AndroidApiLevel.T);
+    assertThat(
+        inspector.clazz(
+            "j$."
+                + DescriptorUtils.descriptorToJavaType(
+                    DexItemFactory.desugarVarHandleDescriptorString)),
+        usesNativeVarHandle ? not(isPresent()) : isPresent());
+    assertThat(
+        inspector.clazz(firstBackportFromDesugarVarHandle.getHolderClass()),
+        usesNativeVarHandle ? not(isPresent()) : isPresent());
+    // Currently DesugarMethodHandlesLookup this is fully inlined by R8.
+    assertThat(
+        inspector.clazz(
+            "j$."
+                + DescriptorUtils.descriptorToJavaType(
+                    DexItemFactory.desugarMethodHandlesLookupDescriptorString)),
+        usesNativeVarHandle || compilationSpecification.isL8Shrink()
+            ? not(isPresent())
+            : isPresent());
   }
 
   void runTest(List<String> toRun) throws Exception {
+    // Skip test with minimal configuration before API level 24, as the test use stream.
+    assumeTrue(
+        libraryDesugaringSpecification != JDK11_MINIMAL
+            || parameters.getApiLevel().isGreaterThanOrEqualTo(AndroidApiLevel.N));
+
     String verbosity = "2";
     DesugaredLibraryTestCompileResult<?> compileResult =
         testForDesugaredLibrary(
@@ -125,30 +184,14 @@ public class Jdk11ConcurrentLinkedQueueTests extends DesugaredLibraryTestBase {
             // internal state of the implementation, so desugaring is needed for the program here.
             .addOptionsModification(options -> options.enableVarHandleDesugaring = true)
             .compile()
+            .inspectL8(this::inspect)
             .withArt6Plus64BitsLib();
     for (String success : toRun) {
       SingleTestRunResult<?> result =
           compileResult.run(parameters.getRuntime(), "TestNGMainRunner", verbosity, success);
-      if ((parameters.asDexRuntime().getVersion().equals(Version.V5_1_1)
-              || parameters.asDexRuntime().getVersion().equals(Version.V6_0_1))
-          && libraryDesugaringSpecification == JDK11_MINIMAL) {
-        // Some tests use streams, so which is not desugared with JDK11_MINIMAL. These tests are
-        // somehow skipped by the test runner used in the JDK11 tests.
-        assertTrue(result.getStdOut().contains("Total tests run: 9, Failures: 0, Skips: 7"));
-        assertTrue(result.getStdOut().contains(StringUtils.lines(success + ": SUCCESS")));
-      } else if (parameters.asDexRuntime().getVersion().isOlderThanOrEqual(Version.V12_0_0)) {
-        ranWithSuccessOrFailures(success, result);
-      } else {
-        assertTrue(parameters.asDexRuntime().getVersion().isNewerThanOrEqual(Version.V13_0_0));
-        if (parameters.getApiLevel() == AndroidApiLevel.B) {
-          ranWithSuccessOrFailures(success, result);
-        } else {
-          // No desugaring and JDK11 based runtime implementation.
-          assertTrue(
-              "Failure in " + success + "\n" + result,
-              result.getStdOut().contains(StringUtils.lines(success + ": SUCCESS")));
-        }
-      }
+      assertTrue(
+          "Failure in " + success + "\n" + result,
+          result.getStdOut().contains(StringUtils.lines(success + ": SUCCESS")));
     }
   }
 

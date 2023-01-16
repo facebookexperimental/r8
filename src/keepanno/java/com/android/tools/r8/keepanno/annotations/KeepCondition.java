@@ -11,20 +11,14 @@ import java.lang.annotation.Target;
 /**
  * A condition for a keep edge.
  *
- * <p>The condition denotes a keep item:
- *
- * <ul>
- *   <li>a class, or pattern on classes;
- *   <li>a method, or pattern on methods; or
- *   <li>a field, or pattern on fields.
- * </ul>
- *
- * <p>The structure of a condition item is the same as for a target item but without a notion of
- * "keep options".
+ * <p>See KeepTarget for documentation on specifying an item pattern.
  */
 @Target(ElementType.ANNOTATION_TYPE)
 @Retention(RetentionPolicy.CLASS)
 public @interface KeepCondition {
+
+  String classFromBinding() default "";
+
   String className() default "";
 
   Class<?> classConstant() default Object.class;
@@ -32,6 +26,8 @@ public @interface KeepCondition {
   String extendsClassName() default "";
 
   Class<?> extendsClassConstant() default Object.class;
+
+  String memberFromBinding() default "";
 
   String methodName() default "";
 

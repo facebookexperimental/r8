@@ -33,7 +33,7 @@ public class KeepEdgeAstTest extends TestBase {
 
   public static String extract(KeepEdge edge) {
     StringBuilder builder = new StringBuilder();
-    KeepRuleExtractor extractor = new KeepRuleExtractor(rule -> builder.append(rule).append('\n'));
+    KeepRuleExtractor extractor = new KeepRuleExtractor(builder::append);
     extractor.extract(edge);
     return builder.toString();
   }
@@ -44,10 +44,11 @@ public class KeepEdgeAstTest extends TestBase {
         KeepEdge.builder()
             .setConsequences(
                 KeepConsequences.builder()
-                    .addTarget(KeepTarget.builder().setItem(KeepItemPattern.any()).build())
+                    .addTarget(KeepTarget.builder().setItemPattern(KeepItemPattern.any()).build())
                     .build())
             .build();
-    assertEquals(StringUtils.unixLines("-keep class * { *; }"), extract(edge));
+    assertEquals(
+        StringUtils.unixLines("-keep class *", "-keepclassmembers class * { *; }"), extract(edge));
   }
 
   @Test
@@ -58,7 +59,7 @@ public class KeepEdgeAstTest extends TestBase {
                 KeepConsequences.builder()
                     .addTarget(
                         KeepTarget.builder()
-                            .setItem(KeepItemPattern.any())
+                            .setItemPattern(KeepItemPattern.any())
                             .setOptions(KeepOptions.disallow(KeepOption.OPTIMIZING))
                             .build())
                     .build())
@@ -67,7 +68,13 @@ public class KeepEdgeAstTest extends TestBase {
     List<String> options =
         ImmutableList.of("shrinking", "obfuscation", "accessmodification", "annotationremoval");
     String allows = String.join(",allow", options);
-    assertEquals(StringUtils.unixLines("-keep,allow" + allows + " class * { *; }"), extract(edge));
+    // The "any" item will be split in two rules, one for the targeted types and one for the
+    // targeted members.
+    assertEquals(
+        StringUtils.unixLines(
+            "-keep,allow" + allows + " class *",
+            "-keepclassmembers,allow" + allows + " class * { *; }"),
+        extract(edge));
   }
 
   @Test
@@ -78,7 +85,7 @@ public class KeepEdgeAstTest extends TestBase {
                 KeepConsequences.builder()
                     .addTarget(
                         KeepTarget.builder()
-                            .setItem(KeepItemPattern.any())
+                            .setItemPattern(KeepItemPattern.any())
                             .setOptions(
                                 KeepOptions.allow(KeepOption.OBFUSCATING, KeepOption.SHRINKING))
                             .build())
@@ -86,7 +93,9 @@ public class KeepEdgeAstTest extends TestBase {
             .build();
     // Allow is just the ordered list of options.
     assertEquals(
-        StringUtils.unixLines("-keep,allowshrinking,allowobfuscation class * { *; }"),
+        StringUtils.unixLines(
+            "-keep,allowshrinking,allowobfuscation class *",
+            "-keepclassmembers,allowshrinking,allowobfuscation class * { *; }"),
         extract(edge));
   }
 
@@ -104,7 +113,7 @@ public class KeepEdgeAstTest extends TestBase {
         KeepEdge.builder()
             .setPreconditions(
                 KeepPreconditions.builder()
-                    .addCondition(KeepCondition.builder().setItem(classItem(CLASS)).build())
+                    .addCondition(KeepCondition.builder().setItemPattern(classItem(CLASS)).build())
                     .build())
             .setConsequences(
                 KeepConsequences.builder()
@@ -126,7 +135,7 @@ public class KeepEdgeAstTest extends TestBase {
         KeepEdge.builder()
             .setPreconditions(
                 KeepPreconditions.builder()
-                    .addCondition(KeepCondition.builder().setItem(classItem(CLASS)).build())
+                    .addCondition(KeepCondition.builder().setItemPattern(classItem(CLASS)).build())
                     .build())
             .setConsequences(KeepConsequences.builder().addTarget(target(classItem(CLASS))).build())
             .build();
@@ -140,7 +149,7 @@ public class KeepEdgeAstTest extends TestBase {
         KeepEdge.builder()
             .setPreconditions(
                 KeepPreconditions.builder()
-                    .addCondition(KeepCondition.builder().setItem(classItem(CLASS)).build())
+                    .addCondition(KeepCondition.builder().setItemPattern(classItem(CLASS)).build())
                     .build())
             .setConsequences(
                 KeepConsequences.builder()
@@ -160,7 +169,7 @@ public class KeepEdgeAstTest extends TestBase {
   }
 
   private KeepTarget target(KeepItemPattern item) {
-    return KeepTarget.builder().setItem(item).build();
+    return KeepTarget.builder().setItemPattern(item).build();
   }
 
   private KeepItemPattern classItem(String typeName) {
