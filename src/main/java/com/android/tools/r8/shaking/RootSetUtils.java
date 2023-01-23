@@ -1965,6 +1965,9 @@ public class RootSetUtils {
       if (graphLens.isIdentityLens()) {
         return this;
       }
+      // TODO(b/164019179): If rules can now reference dead items. These should be pruned or
+      //  rewritten
+      ifRules.forEach(ProguardIfRule::canReferenceDeadTypes);
       return new RootSet(
           getDependentMinimumKeepInfo().rewrittenWithLens(graphLens),
           reasonAsked,
@@ -2083,12 +2086,14 @@ public class RootSetUtils {
               (reference, minimumKeepInfo) -> {
                 if (reference.isDexType()) {
                   DexType type = reference.asDexType();
-                  assert !appInfo.hasLiveness() || appInfo.withLiveness().isPinned(type)
+                  assert !appInfo.hasLiveness()
+                          || appInfo.withLiveness().isPinnedWithDefinitionLookup(type)
                       : "Expected reference `" + type.toSourceString() + "` to be pinned";
                   requiredMembersPerType.computeIfAbsent(type, key -> Sets.newIdentityHashSet());
                 } else {
                   DexMember<?, ?> member = reference.asDexMember();
-                  assert !appInfo.hasLiveness() || appInfo.withLiveness().isPinned(member)
+                  assert !appInfo.hasLiveness()
+                          || appInfo.withLiveness().isPinnedWithDefinitionLookup(member)
                       : "Expected reference `" + member.toSourceString() + "` to be pinned";
                   requiredMembersPerType
                       .computeIfAbsent(member.holder, key -> Sets.newIdentityHashSet())
