@@ -6,7 +6,6 @@ package com.android.tools.r8.profile.art;
 
 import static com.android.tools.r8.utils.codeinspector.Matchers.isPresentAndRenamed;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.junit.Assert.assertEquals;
 
 import com.android.tools.r8.NeverInline;
 import com.android.tools.r8.TestBase;
@@ -15,12 +14,11 @@ import com.android.tools.r8.TestParametersCollection;
 import com.android.tools.r8.profile.art.model.ExternalArtProfile;
 import com.android.tools.r8.profile.art.model.ExternalArtProfileClassRule;
 import com.android.tools.r8.profile.art.model.ExternalArtProfileMethodRule;
-import com.android.tools.r8.profile.art.utils.ArtProfileTestingUtils;
+import com.android.tools.r8.profile.art.utils.ArtProfileInspector;
 import com.android.tools.r8.references.ClassReference;
 import com.android.tools.r8.references.MethodReference;
 import com.android.tools.r8.references.Reference;
 import com.android.tools.r8.utils.AndroidApiLevel;
-import com.android.tools.r8.utils.Box;
 import com.android.tools.r8.utils.MethodReferenceUtils;
 import com.android.tools.r8.utils.codeinspector.ClassSubject;
 import com.android.tools.r8.utils.codeinspector.CodeInspector;
@@ -53,18 +51,14 @@ public class ArtProfileRewritingTest extends TestBase {
 
   @Test
   public void test() throws Exception {
-    Box<ExternalArtProfile> residualArtProfile = new Box<>();
     testForR8(Backend.DEX)
         .addInnerClasses(getClass())
         .addKeepMainRule(Main.class)
-        .apply(
-            testBuilder ->
-                ArtProfileTestingUtils.addArtProfileForRewriting(
-                    getArtProfile(), residualArtProfile::set, testBuilder))
+        .addArtProfileForRewriting(getArtProfile())
         .enableInliningAnnotations()
         .setMinApi(AndroidApiLevel.LATEST)
         .compile()
-        .inspect(inspector -> inspect(inspector, residualArtProfile.get()));
+        .inspectResidualArtProfile(this::inspect);
   }
 
   private ExternalArtProfile getArtProfile() {
@@ -84,33 +78,22 @@ public class ArtProfileRewritingTest extends TestBase {
         .build();
   }
 
-  private ExternalArtProfile getExpectedResidualArtProfile(CodeInspector inspector) {
+  private void inspect(ArtProfileInspector profileInspector, CodeInspector inspector) {
     ClassSubject greeterClassSubject = inspector.clazz(Greeter.class);
     assertThat(greeterClassSubject, isPresentAndRenamed());
 
     MethodSubject greetMethodSubject = greeterClassSubject.uniqueMethodWithOriginalName("greet");
     assertThat(greetMethodSubject, isPresentAndRenamed());
 
-    return ExternalArtProfile.builder()
-        .addRules(
-            ExternalArtProfileClassRule.builder().setClassReference(mainClassReference).build(),
-            ExternalArtProfileMethodRule.builder()
-                .setMethodReference(mainMethodReference)
-                .setMethodRuleInfo(ArtProfileMethodRuleInfoImpl.builder().setIsStartup().build())
-                .build(),
-            ExternalArtProfileClassRule.builder()
-                .setClassReference(greeterClassSubject.getFinalReference())
-                .build(),
-            ExternalArtProfileMethodRule.builder()
-                .setMethodReference(greetMethodSubject.getFinalReference())
-                .setMethodRuleInfo(
-                    ArtProfileMethodRuleInfoImpl.builder().setIsHot().setIsPostStartup().build())
-                .build())
-        .build();
-  }
-
-  private void inspect(CodeInspector inspector, ExternalArtProfile residualArtProfile) {
-    assertEquals(getExpectedResidualArtProfile(inspector), residualArtProfile);
+    profileInspector
+        .assertContainsClassRules(mainClassReference, greeterClassSubject.getFinalReference())
+        .inspectMethodRule(
+            mainMethodReference,
+            ruleInspector -> ruleInspector.assertIsStartup().assertNotHot().assertNotPostStartup())
+        .inspectMethodRule(
+            greetMethodSubject.getFinalReference(),
+            ruleInspector -> ruleInspector.assertIsHot().assertIsPostStartup().assertNotStartup())
+        .assertContainsNoOtherRules();
   }
 
   static class Main {

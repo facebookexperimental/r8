@@ -6,6 +6,7 @@ package com.android.tools.r8.profile.art.model;
 
 import com.android.tools.r8.references.ClassReference;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 /**
  * Represents a class rule from an ART baseline profile, backed by {@link ClassReference}. Class
@@ -36,6 +37,13 @@ public class ExternalArtProfileClassRule extends ExternalArtProfileRule {
   }
 
   @Override
+  public boolean test(
+      Predicate<ExternalArtProfileClassRule> classRuleConsumer,
+      Predicate<ExternalArtProfileMethodRule> methodRuleConsumer) {
+    return classRuleConsumer.test(this);
+  }
+
+  @Override
   public boolean equals(Object obj) {
     if (this == obj) {
       return true;
@@ -50,6 +58,11 @@ public class ExternalArtProfileClassRule extends ExternalArtProfileRule {
   @Override
   public int hashCode() {
     return classReference.hashCode();
+  }
+
+  @Override
+  public String toString() {
+    return classReference.getDescriptor();
   }
 
   public static class Builder {

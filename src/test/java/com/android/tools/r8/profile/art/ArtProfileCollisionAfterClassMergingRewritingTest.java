@@ -6,7 +6,6 @@ package com.android.tools.r8.profile.art;
 
 import static com.android.tools.r8.utils.codeinspector.Matchers.isPresentAndRenamed;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.junit.Assert.assertEquals;
 
 import com.android.tools.r8.NeverInline;
 import com.android.tools.r8.TestBase;
@@ -15,12 +14,11 @@ import com.android.tools.r8.TestParametersCollection;
 import com.android.tools.r8.profile.art.model.ExternalArtProfile;
 import com.android.tools.r8.profile.art.model.ExternalArtProfileClassRule;
 import com.android.tools.r8.profile.art.model.ExternalArtProfileMethodRule;
-import com.android.tools.r8.profile.art.utils.ArtProfileTestingUtils;
+import com.android.tools.r8.profile.art.utils.ArtProfileInspector;
 import com.android.tools.r8.references.ClassReference;
 import com.android.tools.r8.references.MethodReference;
 import com.android.tools.r8.references.Reference;
 import com.android.tools.r8.utils.AndroidApiLevel;
-import com.android.tools.r8.utils.Box;
 import com.android.tools.r8.utils.MethodReferenceUtils;
 import com.android.tools.r8.utils.codeinspector.ClassSubject;
 import com.android.tools.r8.utils.codeinspector.CodeInspector;
@@ -56,21 +54,17 @@ public class ArtProfileCollisionAfterClassMergingRewritingTest extends TestBase 
 
   @Test
   public void test() throws Exception {
-    Box<ExternalArtProfile> residualArtProfile = new Box<>();
     testForR8(Backend.DEX)
         .addInnerClasses(getClass())
         .addKeepMainRule(Main.class)
         .addHorizontallyMergedClassesInspector(
             inspector ->
                 inspector.assertMergedInto(Foo.class, Bar.class).assertNoOtherClassesMerged())
-        .apply(
-            testBuilder ->
-                ArtProfileTestingUtils.addArtProfileForRewriting(
-                    getArtProfile(), residualArtProfile::set, testBuilder))
+        .addArtProfileForRewriting(getArtProfile())
         .enableInliningAnnotations()
         .setMinApi(AndroidApiLevel.LATEST)
         .compile()
-        .inspect(inspector -> inspect(inspector, residualArtProfile.get()));
+        .inspectResidualArtProfile(this::inspect);
   }
 
   public ExternalArtProfile getArtProfile() {
@@ -85,7 +79,7 @@ public class ArtProfileCollisionAfterClassMergingRewritingTest extends TestBase 
         .build();
   }
 
-  public ExternalArtProfile getExpectedResidualArtProfile(CodeInspector inspector) {
+  private void inspect(ArtProfileInspector profileInspector, CodeInspector inspector) {
     ClassSubject barClassSubject = inspector.clazz(Bar.class);
     assertThat(barClassSubject, isPresentAndRenamed());
 
@@ -95,24 +89,13 @@ public class ArtProfileCollisionAfterClassMergingRewritingTest extends TestBase 
     MethodSubject worldMethodSubject = barClassSubject.uniqueMethodWithOriginalName("world");
     assertThat(worldMethodSubject, isPresentAndRenamed());
 
-    return ExternalArtProfile.builder()
-        .addRules(
-            ExternalArtProfileClassRule.builder().setClassReference(mainClassReference).build(),
-            ExternalArtProfileMethodRule.builder().setMethodReference(mainMethodReference).build(),
-            ExternalArtProfileClassRule.builder()
-                .setClassReference(barClassSubject.getFinalReference())
-                .build(),
-            ExternalArtProfileMethodRule.builder()
-                .setMethodReference(helloMethodSubject.getFinalReference())
-                .build(),
-            ExternalArtProfileMethodRule.builder()
-                .setMethodReference(worldMethodSubject.getFinalReference())
-                .build())
-        .build();
-  }
-
-  private void inspect(CodeInspector inspector, ExternalArtProfile residualArtProfile) {
-    assertEquals(getExpectedResidualArtProfile(inspector), residualArtProfile);
+    profileInspector
+        .assertContainsClassRules(mainClassReference, barClassSubject.getFinalReference())
+        .assertContainsMethodRules(
+            mainMethodReference,
+            helloMethodSubject.getFinalReference(),
+            worldMethodSubject.getFinalReference())
+        .assertContainsNoOtherRules();
   }
 
   static class Main {

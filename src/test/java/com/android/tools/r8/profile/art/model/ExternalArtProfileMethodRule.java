@@ -7,7 +7,9 @@ package com.android.tools.r8.profile.art.model;
 import com.android.tools.r8.profile.art.ArtProfileMethodRuleInfo;
 import com.android.tools.r8.profile.art.ArtProfileMethodRuleInfoImpl;
 import com.android.tools.r8.references.MethodReference;
+import com.android.tools.r8.utils.MethodReferenceUtils;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 /** Represents a method rule from an ART baseline profile, backed by {@link MethodReference}. */
 public class ExternalArtProfileMethodRule extends ExternalArtProfileRule {
@@ -43,6 +45,13 @@ public class ExternalArtProfileMethodRule extends ExternalArtProfileRule {
   }
 
   @Override
+  public boolean test(
+      Predicate<ExternalArtProfileClassRule> classRuleConsumer,
+      Predicate<ExternalArtProfileMethodRule> methodRuleConsumer) {
+    return methodRuleConsumer.test(this);
+  }
+
+  @Override
   public boolean equals(Object obj) {
     if (this == obj) {
       return true;
@@ -58,6 +67,11 @@ public class ExternalArtProfileMethodRule extends ExternalArtProfileRule {
   @Override
   public int hashCode() {
     return methodReference.hashCode();
+  }
+
+  @Override
+  public String toString() {
+    return methodRuleInfo.toString() + MethodReferenceUtils.toSmaliString(methodReference);
   }
 
   public static class Builder {

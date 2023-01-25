@@ -18,10 +18,9 @@ import com.android.tools.r8.desugar.desugaredlibrary.test.CompilationSpecificati
 import com.android.tools.r8.desugar.desugaredlibrary.test.LibraryDesugaringSpecification;
 import com.android.tools.r8.profile.art.model.ExternalArtProfile;
 import com.android.tools.r8.profile.art.model.ExternalArtProfileMethodRule;
-import com.android.tools.r8.profile.art.utils.ArtProfileTestingUtils;
+import com.android.tools.r8.profile.art.utils.ArtProfileInspector;
 import com.android.tools.r8.references.MethodReference;
 import com.android.tools.r8.references.Reference;
-import com.android.tools.r8.utils.Box;
 import com.android.tools.r8.utils.codeinspector.ClassSubject;
 import com.android.tools.r8.utils.codeinspector.CodeInspector;
 import com.android.tools.r8.utils.codeinspector.MethodSubject;
@@ -59,16 +58,12 @@ public class DesugaredLibraryArtProfileRewritingTest extends DesugaredLibraryTes
   @Test
   public void test() throws Throwable {
     Assume.assumeTrue(libraryDesugaringSpecification.hasEmulatedInterfaceDesugaring(parameters));
-    Box<ExternalArtProfile> residualArtProfile = new Box<>();
     testForDesugaredLibrary(parameters, libraryDesugaringSpecification, compilationSpecification)
         .addInnerClasses(getClass())
         .addKeepMainRule(Main.class)
-        .apply(
-            testBuilder ->
-                ArtProfileTestingUtils.addArtProfileForRewriting(
-                    getArtProfile(), residualArtProfile::set, testBuilder))
+        .addL8ArtProfileForRewriting(getArtProfile())
         .compile()
-        .inspectL8(inspector -> inspect(inspector, residualArtProfile.get()))
+        .inspectL8ResidualArtProfile(this::inspect)
         .run(parameters.getRuntime(), Main.class)
         .assertSuccessWithOutputLines("0");
   }
@@ -91,16 +86,7 @@ public class DesugaredLibraryArtProfileRewritingTest extends DesugaredLibraryTes
         .build();
   }
 
-  private ExternalArtProfile getExpectedResidualArtProfile(MethodSubject forEachMethodSubject) {
-    return ExternalArtProfile.builder()
-        .addRule(
-            ExternalArtProfileMethodRule.builder()
-                .setMethodReference(forEachMethodSubject.getFinalReference())
-                .build())
-        .build();
-  }
-
-  private void inspect(CodeInspector inspector, ExternalArtProfile residualArtProfile) {
+  private void inspect(ArtProfileInspector profileInspector, CodeInspector inspector) {
     ClassSubject consumerClassSubject =
         inspector.clazz(
             libraryDesugaringSpecification.functionPrefix(parameters) + ".util.function.Consumer");
@@ -117,7 +103,7 @@ public class DesugaredLibraryArtProfileRewritingTest extends DesugaredLibraryTes
                 && libraryDesugaringSpecification == LibraryDesugaringSpecification.JDK8));
     assertEquals(consumerClassSubject.asTypeSubject(), forEachMethodSubject.getParameter(0));
 
-    assertEquals(getExpectedResidualArtProfile(forEachMethodSubject), residualArtProfile);
+    profileInspector.assertContainsMethodRule(forEachMethodSubject).assertContainsNoOtherRules();
   }
 
   static class Main {
