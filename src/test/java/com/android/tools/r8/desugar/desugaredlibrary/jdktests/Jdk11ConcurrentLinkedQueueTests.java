@@ -88,15 +88,16 @@ public class Jdk11ConcurrentLinkedQueueTests extends DesugaredLibraryTestBase {
   @BeforeClass
   public static void compileConcurrentLinkedQueueClasses() throws Exception {
     // Build test constants.
-    Path jdk11MathTestsDir = getStaticTemp().newFolder("ConcurrentLinkedQueue").toPath();
+    Path jdk11ConcurrentLinkedQueueTestsDir =
+        getStaticTemp().newFolder("ConcurrentLinkedQueue").toPath();
     javac(TestRuntime.getCheckedInJdk11(), getStaticTemp())
         .addClasspathFiles(
             Collections.singletonList(Paths.get(JDK_TESTS_BUILD_DIR + "testng-6.10.jar")))
         .addSourceFiles(JDK_11_CONCURRENT_LINKED_QUEUE_JAVA_FILES)
-        .setOutputPath(jdk11MathTestsDir)
+        .setOutputPath(jdk11ConcurrentLinkedQueueTestsDir)
         .compile();
     JDK_11_CONCURRENT_LINKED_QUEUE_TEST_CLASS_FILES =
-        new Path[] {jdk11MathTestsDir.resolve(WHITEBOX + CLASS_EXTENSION)};
+        new Path[] {jdk11ConcurrentLinkedQueueTestsDir.resolve(WHITEBOX + CLASS_EXTENSION)};
   }
 
   private void inspect(CodeInspector inspector) {

@@ -4,11 +4,9 @@
 
 package com.android.tools.r8.kotlin;
 
-import static com.android.tools.r8.kotlin.KotlinMetadataUtils.getCompatibleKotlinInfo;
 import static com.android.tools.r8.kotlin.KotlinMetadataUtils.toJvmFieldSignature;
 import static com.android.tools.r8.kotlin.KotlinMetadataUtils.toJvmMethodSignature;
 import static com.android.tools.r8.utils.FunctionUtils.forEachApply;
-import static kotlinx.metadata.jvm.KotlinClassMetadata.Companion;
 
 import com.android.tools.r8.graph.AppView;
 import com.android.tools.r8.graph.DexClass;
@@ -19,7 +17,6 @@ import com.android.tools.r8.graph.DexItemFactory;
 import com.android.tools.r8.graph.DexString;
 import com.android.tools.r8.utils.Box;
 import com.android.tools.r8.utils.DescriptorUtils;
-import com.android.tools.r8.utils.ListUtils;
 import com.android.tools.r8.utils.Pair;
 import com.android.tools.r8.utils.Reporter;
 import com.google.common.collect.ImmutableList;
@@ -29,13 +26,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
-import kotlin.Metadata;
 import kotlinx.metadata.KmClass;
 import kotlinx.metadata.KmConstructor;
 import kotlinx.metadata.KmType;
 import kotlinx.metadata.jvm.JvmClassExtensionVisitor;
 import kotlinx.metadata.jvm.JvmExtensionsKt;
 import kotlinx.metadata.jvm.JvmMethodSignature;
+import kotlinx.metadata.jvm.KotlinClassHeader;
 import kotlinx.metadata.jvm.KotlinClassMetadata;
 
 public class KotlinClassInfo implements KotlinClassLevelInfo {
@@ -60,8 +57,6 @@ public class KotlinClassInfo implements KotlinClassLevelInfo {
   private final KotlinTypeInfo inlineClassUnderlyingType;
   private final int jvmFlags;
   private final String companionObjectName;
-  // Collection of context receiver types
-  private final List<KotlinTypeInfo> contextReceiverTypes;
 
   // List of tracked assignments of kotlin metadata.
   private final KotlinMetadataMembersTracker originalMembersWithKotlinInfo;
@@ -87,8 +82,7 @@ public class KotlinClassInfo implements KotlinClassLevelInfo {
       KotlinTypeInfo inlineClassUnderlyingType,
       KotlinMetadataMembersTracker originalMembersWithKotlinInfo,
       int jvmFlags,
-      String companionObjectName,
-      List<KotlinTypeInfo> contextReceiverTypes) {
+      String companionObjectName) {
     this.flags = flags;
     this.name = name;
     this.nameCanBeSynthesizedFromClassOrAnonymousObjectOrigin =
@@ -111,7 +105,6 @@ public class KotlinClassInfo implements KotlinClassLevelInfo {
     this.originalMembersWithKotlinInfo = originalMembersWithKotlinInfo;
     this.jvmFlags = jvmFlags;
     this.companionObjectName = companionObjectName;
-    this.contextReceiverTypes = contextReceiverTypes;
   }
 
   public static KotlinClassInfo create(
@@ -195,10 +188,7 @@ public class KotlinClassInfo implements KotlinClassLevelInfo {
         KotlinTypeInfo.create(kmClass.getInlineClassUnderlyingType(), factory, reporter),
         originalMembersWithKotlinInfo,
         JvmExtensionsKt.getJvmFlags(kmClass),
-        setCompanionObject(kmClass, hostClass, reporter),
-        ListUtils.map(
-            kmClass.getContextReceiverTypes(),
-            contextRecieverType -> KotlinTypeInfo.create(contextRecieverType, factory, reporter)));
+        setCompanionObject(kmClass, hostClass, reporter));
   }
 
   private static KotlinTypeReference getAnonymousObjectOrigin(
@@ -289,7 +279,7 @@ public class KotlinClassInfo implements KotlinClassLevelInfo {
   }
 
   @Override
-  public Pair<Metadata, Boolean> rewrite(DexClass clazz, AppView<?> appView) {
+  public Pair<KotlinClassHeader, Boolean> rewrite(DexClass clazz, AppView<?> appView) {
     KmClass kmClass = new KmClass();
     // TODO(b/154348683): Set flags.
     kmClass.setFlags(flags);
@@ -424,9 +414,6 @@ public class KotlinClassInfo implements KotlinClassLevelInfo {
       rewritten |=
           inlineClassUnderlyingType.rewrite(kmClass::visitInlineClassUnderlyingType, appView);
     }
-    for (KotlinTypeInfo contextReceiverType : contextReceiverTypes) {
-      rewritten |= contextReceiverType.rewrite(kmClass::visitContextReceiverType, appView);
-    }
     JvmClassExtensionVisitor extensionVisitor =
         (JvmClassExtensionVisitor) kmClass.visitExtensions(JvmClassExtensionVisitor.TYPE);
     extensionVisitor.visitJvmFlags(jvmFlags);
@@ -445,8 +432,10 @@ public class KotlinClassInfo implements KotlinClassLevelInfo {
     rewritten |=
         localDelegatedProperties.rewrite(extensionVisitor::visitLocalDelegatedProperty, appView);
     extensionVisitor.visitEnd();
+    KotlinClassMetadata.Class.Writer writer = new KotlinClassMetadata.Class.Writer();
+    kmClass.accept(writer);
     return Pair.create(
-        Companion.writeClass(kmClass, getCompatibleKotlinInfo(), 0).getAnnotationData(),
+        writer.write().getHeader(),
         rewritten || !originalMembersWithKotlinInfo.isEqual(rewrittenReferences, appView));
   }
 
@@ -468,7 +457,6 @@ public class KotlinClassInfo implements KotlinClassLevelInfo {
     forEachApply(superTypes, type -> type::trace, definitionSupplier);
     forEachApply(sealedSubClasses, sealedClass -> sealedClass::trace, definitionSupplier);
     forEachApply(nestedClasses, nested -> nested::trace, definitionSupplier);
-    forEachApply(contextReceiverTypes, nested -> nested::trace, definitionSupplier);
     localDelegatedProperties.trace(definitionSupplier);
     // TODO(b/154347404): trace enum entries.
     if (anonymousObjectOrigin != null) {
