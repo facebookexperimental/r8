@@ -60,20 +60,25 @@ public class MovedStaticInterfaceMethodProfileRewritingTest extends TestBase {
       ClassSubject iClassSubject = inspector.clazz(I.class);
       assertThat(iClassSubject, isPresent());
 
-      MethodSubject mMethodSubject = iClassSubject.uniqueMethodWithOriginalName("m");
-      assertThat(mMethodSubject, isPresent());
+      MethodSubject staticInterfaceMethodSubject = iClassSubject.uniqueMethodWithOriginalName("m");
+      assertThat(staticInterfaceMethodSubject, isPresent());
 
-      profileInspector.assertContainsMethodRule(mMethodSubject).assertContainsNoOtherRules();
+      profileInspector
+          .assertContainsMethodRule(staticInterfaceMethodSubject)
+          .assertContainsNoOtherRules();
     } else {
       ClassSubject companionClassSubject =
           inspector.clazz(SyntheticItemsTestUtils.syntheticCompanionClass(I.class));
       assertThat(companionClassSubject, isPresent());
 
-      MethodSubject mMethodSubject = companionClassSubject.uniqueMethodWithOriginalName("m");
-      assertThat(mMethodSubject, isPresent());
+      MethodSubject staticInterfaceMethodSubject =
+          companionClassSubject.uniqueMethodWithOriginalName("m");
+      assertThat(staticInterfaceMethodSubject, isPresent());
 
-      // TODO(b/265729283): Should contain the companion method.
-      profileInspector.assertEmpty();
+      profileInspector
+          .assertContainsClassRule(companionClassSubject)
+          .assertContainsMethodRule(staticInterfaceMethodSubject)
+          .assertContainsNoOtherRules();
     }
   }
 

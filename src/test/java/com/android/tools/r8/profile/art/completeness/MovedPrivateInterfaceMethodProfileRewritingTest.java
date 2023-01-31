@@ -6,8 +6,10 @@ package com.android.tools.r8.profile.art.completeness;
 
 import static com.android.tools.r8.utils.codeinspector.Matchers.isPresent;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assume.assumeTrue;
 
-import com.android.tools.r8.NoHorizontalClassMerging;
+import com.android.tools.r8.NoVerticalClassMerging;
 import com.android.tools.r8.TestBase;
 import com.android.tools.r8.TestParameters;
 import com.android.tools.r8.TestParametersCollection;
@@ -24,9 +26,10 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameter;
 import org.junit.runners.Parameterized.Parameters;
+import org.objectweb.asm.Opcodes;
 
 @RunWith(Parameterized.class)
-public class DefaultInterfaceMethodProfileRewritingTest extends TestBase {
+public class MovedPrivateInterfaceMethodProfileRewritingTest extends TestBase {
 
   @Parameter(0)
   public TestParameters parameters;
@@ -37,18 +40,41 @@ public class DefaultInterfaceMethodProfileRewritingTest extends TestBase {
   }
 
   @Test
+  public void testJvm() throws Exception {
+    assumeTrue(parameters.isCfRuntime());
+    testForJvm()
+        .addProgramClasses(Main.class, A.class)
+        .addProgramClassFileData(getTransformedInterface())
+        .run(parameters.getRuntime(), Main.class)
+        .assertSuccessWithOutputLines("Hello, world!");
+  }
+
+  @Test
   public void testR8() throws Exception {
     testForR8(parameters.getBackend())
-        .addInnerClasses(getClass())
+        .addProgramClasses(Main.class, A.class)
+        .addProgramClassFileData(getTransformedInterface())
         .addKeepMainRule(Main.class)
         .addArtProfileForRewriting(getArtProfile())
         .addOptionsModification(InlinerOptions::disableInlining)
-        .enableNoHorizontalClassMergingAnnotations()
+        .enableNoVerticalClassMergingAnnotations()
         .setMinApi(parameters.getApiLevel())
         .compile()
         .inspectResidualArtProfile(this::inspect)
         .run(parameters.getRuntime(), Main.class)
         .assertSuccessWithOutputLines("Hello, world!");
+  }
+
+  private byte[] getTransformedInterface() throws Exception {
+    return transformer(I.class)
+        .setPrivate(I.class.getDeclaredMethod("m"))
+        .transformMethodInsnInMethod(
+            "bridge",
+            (opcode, owner, name, descriptor, isInterface, visitor) -> {
+              assertEquals(Opcodes.INVOKEINTERFACE, opcode);
+              visitor.visitMethodInsn(Opcodes.INVOKESPECIAL, owner, name, descriptor, isInterface);
+            })
+        .transform();
   }
 
   private ExternalArtProfile getArtProfile() throws Exception {
@@ -57,73 +83,55 @@ public class DefaultInterfaceMethodProfileRewritingTest extends TestBase {
         .build();
   }
 
-  private void inspect(ArtProfileInspector profileInspector, CodeInspector inspector) {
+  private void inspect(ArtProfileInspector profileInspector, CodeInspector inspector)
+      throws Exception {
     if (parameters.canUseDefaultAndStaticInterfaceMethods()) {
       ClassSubject iClassSubject = inspector.clazz(I.class);
       assertThat(iClassSubject, isPresent());
 
-      MethodSubject interfaceMethodSubject = iClassSubject.uniqueMethodWithOriginalName("m");
-      assertThat(interfaceMethodSubject, isPresent());
+      MethodSubject privateInterfaceMethodSubject = iClassSubject.uniqueMethodWithOriginalName("m");
+      assertThat(privateInterfaceMethodSubject, isPresent());
 
-      profileInspector.assertContainsMethodRule(interfaceMethodSubject);
+      profileInspector
+          .assertContainsMethodRule(privateInterfaceMethodSubject)
+          .assertContainsNoOtherRules();
     } else {
-      ClassSubject iClassSubject = inspector.clazz(I.class);
-      assertThat(iClassSubject, isPresent());
-
-      ClassSubject aClassSubject = inspector.clazz(A.class);
-      assertThat(aClassSubject, isPresent());
-
-      ClassSubject bClassSubject = inspector.clazz(B.class);
-      assertThat(bClassSubject, isPresent());
-
       ClassSubject companionClassSubject =
           inspector.clazz(SyntheticItemsTestUtils.syntheticCompanionClass(I.class));
       assertThat(companionClassSubject, isPresent());
 
-      MethodSubject interfaceMethodSubject = iClassSubject.uniqueMethodWithOriginalName("m");
-      assertThat(interfaceMethodSubject, isPresent());
-
-      MethodSubject aForwardingMethodSubject =
-          aClassSubject.method(interfaceMethodSubject.getFinalReference());
-      assertThat(aForwardingMethodSubject, isPresent());
-
-      MethodSubject bForwardingMethodSubject =
-          bClassSubject.method(interfaceMethodSubject.getFinalReference());
-      assertThat(bForwardingMethodSubject, isPresent());
-
-      MethodSubject movedMethodSubject = companionClassSubject.uniqueMethod();
-      assertThat(movedMethodSubject, isPresent());
+      MethodSubject privateInterfaceMethodSubject =
+          companionClassSubject.uniqueMethodWithOriginalName(
+              SyntheticItemsTestUtils.syntheticPrivateInterfaceMethodAsCompanionMethod(
+                      I.class.getDeclaredMethod("m"))
+                  .getMethodName());
+      assertThat(privateInterfaceMethodSubject, isPresent());
 
       profileInspector
           .assertContainsClassRule(companionClassSubject)
-          .assertContainsMethodRules(
-              interfaceMethodSubject,
-              aForwardingMethodSubject,
-              bForwardingMethodSubject,
-              movedMethodSubject);
+          .assertContainsMethodRule(privateInterfaceMethodSubject)
+          .assertContainsNoOtherRules();
     }
-
-    profileInspector.assertContainsNoOtherRules();
   }
 
   static class Main {
 
     public static void main(String[] args) {
-      I i = System.currentTimeMillis() > 0 ? new A() : new B();
-      i.m();
+      new A().bridge();
     }
   }
 
+  @NoVerticalClassMerging
   interface I {
 
-    default void m() {
+    default void bridge() {
+      m(); // invoke-special
+    }
+
+    /*private*/ default void m() {
       System.out.println("Hello, world!");
     }
   }
 
-  @NoHorizontalClassMerging
   static class A implements I {}
-
-  @NoHorizontalClassMerging
-  static class B implements I {}
 }

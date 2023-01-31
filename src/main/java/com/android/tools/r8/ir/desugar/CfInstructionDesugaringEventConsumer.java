@@ -6,6 +6,7 @@ package com.android.tools.r8.ir.desugar;
 
 import com.android.tools.r8.graph.AppInfoWithClassHierarchy;
 import com.android.tools.r8.graph.AppView;
+import com.android.tools.r8.graph.DexClassAndMethod;
 import com.android.tools.r8.graph.DexClasspathClass;
 import com.android.tools.r8.graph.DexProgramClass;
 import com.android.tools.r8.graph.DexReference;
@@ -125,7 +126,19 @@ public abstract class CfInstructionDesugaringEventConsumer
     }
 
     @Override
-    public void acceptCompanionMethod(ProgramMethod method, ProgramMethod companionMethod) {
+    public void acceptDefaultAsCompanionMethod(
+        ProgramMethod method, ProgramMethod companionMethod) {
+      // Intentionally empty. Methods are moved when processing the interface definition.
+    }
+
+    @Override
+    public void acceptPrivateAsCompanionMethod(
+        ProgramMethod method, ProgramMethod companionMethod) {
+      // Intentionally empty. Methods are moved when processing the interface definition.
+    }
+
+    @Override
+    public void acceptStaticAsCompanionMethod(ProgramMethod method, ProgramMethod companionMethod) {
       // Intentionally empty. Methods are moved when processing the interface definition.
     }
 
@@ -202,18 +215,30 @@ public abstract class CfInstructionDesugaringEventConsumer
     }
 
     @Override
-    public void acceptNestFieldGetBridge(ProgramField target, ProgramMethod bridge) {
-      assert false;
+    public void acceptNestConstructorBridge(
+        ProgramMethod target,
+        ProgramMethod bridge,
+        DexProgramClass argumentClass,
+        DexClassAndMethod context) {
+      // Intentionally empty.
     }
 
     @Override
-    public void acceptNestFieldPutBridge(ProgramField target, ProgramMethod bridge) {
-      assert false;
+    public void acceptNestFieldGetBridge(
+        ProgramField target, ProgramMethod bridge, DexClassAndMethod context) {
+      // Intentionally empty.
     }
 
     @Override
-    public void acceptNestMethodBridge(ProgramMethod target, ProgramMethod bridge) {
-      assert false;
+    public void acceptNestFieldPutBridge(
+        ProgramField target, ProgramMethod bridge, DexClassAndMethod context) {
+      // Intentionally empty.
+    }
+
+    @Override
+    public void acceptNestMethodBridge(
+        ProgramMethod target, ProgramMethod bridge, DexClassAndMethod context) {
+      // Intentionally empty.
     }
 
     @Override
@@ -363,7 +388,19 @@ public abstract class CfInstructionDesugaringEventConsumer
     }
 
     @Override
-    public void acceptCompanionMethod(ProgramMethod method, ProgramMethod companionMethod) {
+    public void acceptDefaultAsCompanionMethod(
+        ProgramMethod method, ProgramMethod companionMethod) {
+      onCompanionMethodCallback.accept(method, companionMethod);
+    }
+
+    @Override
+    public void acceptPrivateAsCompanionMethod(
+        ProgramMethod method, ProgramMethod companionMethod) {
+      onCompanionMethodCallback.accept(method, companionMethod);
+    }
+
+    @Override
+    public void acceptStaticAsCompanionMethod(ProgramMethod method, ProgramMethod companionMethod) {
       onCompanionMethodCallback.accept(method, companionMethod);
     }
 
@@ -478,18 +515,30 @@ public abstract class CfInstructionDesugaringEventConsumer
     }
 
     @Override
-    public void acceptNestFieldGetBridge(ProgramField target, ProgramMethod bridge) {
-      assert false;
+    public void acceptNestConstructorBridge(
+        ProgramMethod target,
+        ProgramMethod bridge,
+        DexProgramClass argumentClass,
+        DexClassAndMethod context) {
+      // Intentionally empty.
     }
 
     @Override
-    public void acceptNestFieldPutBridge(ProgramField target, ProgramMethod bridge) {
-      assert false;
+    public void acceptNestFieldGetBridge(
+        ProgramField target, ProgramMethod bridge, DexClassAndMethod context) {
+      // Intentionally empty.
     }
 
     @Override
-    public void acceptNestMethodBridge(ProgramMethod target, ProgramMethod bridge) {
-      assert false;
+    public void acceptNestFieldPutBridge(
+        ProgramField target, ProgramMethod bridge, DexClassAndMethod context) {
+      // Intentionally empty.
+    }
+
+    @Override
+    public void acceptNestMethodBridge(
+        ProgramMethod target, ProgramMethod bridge, DexClassAndMethod context) {
+      // Intentionally empty.
     }
 
     @Override
