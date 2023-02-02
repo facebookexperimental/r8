@@ -96,7 +96,8 @@ public class D8TestBuilder
         getMinApiLevel(),
         getOutputMode(),
         libraryDesugaringTestConfiguration,
-        getMapContent());
+        getMapContent(),
+        residualArtProfiles);
   }
 
   private String getMapContent() {
@@ -165,5 +166,10 @@ public class D8TestBuilder
       Collection<StartupProfileProvider> startupProfileProviders) {
     builder.addStartupProfileProviders(startupProfileProviders);
     return self();
+  }
+
+  public D8TestBuilder noHorizontalClassMergingOfSynthetics() {
+    return addOptionsModification(
+        options -> options.horizontalClassMergerOptions().disableSyntheticMerging());
   }
 }

@@ -252,6 +252,11 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     protoShrinking.enableEnumLiteProtoShrinking = true;
   }
 
+  public InternalOptions withModifications(Consumer<InternalOptions> consumer) {
+    consumer.accept(this);
+    return this;
+  }
+
   void disableAllOptimizations() {
     disableGlobalOptimizations();
     enableNameReflectionOptimization = false;
@@ -432,6 +437,8 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
   // Contain the contents of the build properties file from the compiler command.
   public DumpOptions dumpOptions;
 
+  public Tool tool = null;
+
   // Hidden marker for classes.dex
   private boolean hasMarker = false;
   private Marker marker;
@@ -441,7 +448,8 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     this.marker = marker;
   }
 
-  public Marker getMarker(Tool tool) {
+  public Marker getMarker() {
+    assert tool != null;
     if (hasMarker) {
       return marker;
     }
@@ -1957,6 +1965,7 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     public boolean neverReuseCfLocalRegisters = false;
     public boolean roundtripThroughLIR = false;
     public boolean checkReceiverAlwaysNullInCallSiteOptimization = true;
+    public boolean forceInlineAPIConversions = false;
     private boolean hasReadCheckDeterminism = false;
     private DeterminismChecker determinismChecker = null;
     public boolean usePcEncodingInCfForTesting = false;
@@ -2078,6 +2087,7 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
     public boolean enableInvokeSuperToInvokeVirtualRewriting = true;
     public boolean enableMultiANewArrayDesugaringForClassFiles = false;
     public boolean enableRetargetingConstructorBridgeCalls = false;
+    public boolean enableSyntheticSharing = true;
     public boolean enableSwitchToIfRewriting = true;
     public boolean enableEnumUnboxingDebugLogs =
         System.getProperty("com.android.tools.r8.enableEnumUnboxingDebugLogs") != null;
@@ -2376,7 +2386,7 @@ public class InternalOptions implements GlobalKeepInfoConfiguration {
   }
 
   public boolean enableBackportedMethodRewriting() {
-    return desugarState.isOn();
+    return desugarState.isOn() && minApiLevel.isLessThan(AndroidApiLevel.ANDROID_PLATFORM);
   }
 
   public boolean enableTryWithResourcesDesugaring() {

@@ -5,6 +5,11 @@
 package com.android.tools.r8.profile.art.rewriting;
 
 import com.android.tools.r8.graph.AppView;
+import com.android.tools.r8.graph.DexMethod;
+import com.android.tools.r8.profile.art.ArtProfileCollection;
+import com.android.tools.r8.profile.art.rewriting.ArtProfileAdditions.ArtProfileAdditionsBuilder;
+import java.util.function.Consumer;
+import java.util.function.Function;
 
 public class NopArtProfileCollectionAdditions extends ArtProfileCollectionAdditions {
 
@@ -18,12 +23,32 @@ public class NopArtProfileCollectionAdditions extends ArtProfileCollectionAdditi
   }
 
   @Override
+  public void applyIfContextIsInProfile(
+      DexMethod context, Consumer<ArtProfileAdditionsBuilder> builderConsumer) {
+    // Intentionally empty.
+  }
+
+  @Override
   public void commit(AppView<?> appView) {
     // Intentionally empty.
   }
 
   @Override
-  boolean isNop() {
+  public boolean isNop() {
     return true;
+  }
+
+  @Override
+  public NopArtProfileCollectionAdditions rewriteMethodReferences(
+      Function<DexMethod, DexMethod> methodFn) {
+    // Intentionally empty.
+    return this;
+  }
+
+  @Override
+  public NopArtProfileCollectionAdditions setArtProfileCollection(
+      ArtProfileCollection artProfileCollection) {
+    // Intentionally empty.
+    return this;
   }
 }

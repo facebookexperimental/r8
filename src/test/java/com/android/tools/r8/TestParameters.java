@@ -4,7 +4,9 @@
 package com.android.tools.r8;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assume.assumeTrue;
 
 import com.android.tools.r8.TestBase.Backend;
 import com.android.tools.r8.TestRuntime.CfRuntime;
@@ -20,15 +22,22 @@ public class TestParameters {
 
   private final TestRuntime runtime;
   private final AndroidApiLevel apiLevel;
+  private final boolean representativeApiLevelForRuntime;
 
   public TestParameters(TestRuntime runtime) {
     this(runtime, null);
   }
 
   public TestParameters(TestRuntime runtime, AndroidApiLevel apiLevel) {
+    this(runtime, apiLevel, true);
+  }
+
+  public TestParameters(
+      TestRuntime runtime, AndroidApiLevel apiLevel, boolean representativeApiLevelForRuntime) {
     assert runtime != null;
     this.runtime = runtime;
     this.apiLevel = apiLevel;
+    this.representativeApiLevelForRuntime = representativeApiLevelForRuntime;
   }
 
   public static TestParametersBuilder builder() {
@@ -77,6 +86,12 @@ public class TestParameters {
   public boolean canUseNestBasedAccesses() {
     assert isCfRuntime() || isDexRuntime();
     return isCfRuntime() && getRuntime().asCf().isNewerThanOrEqual(CfVm.JDK11);
+  }
+
+  public boolean canUseNestBasedAccessesWhenDesugaring() {
+    assert isCfRuntime() || isDexRuntime();
+    assert apiLevel != null;
+    return false;
   }
 
   // Convenience predicates.
@@ -155,6 +170,25 @@ public class TestParameters {
 
   public void assertNoneRuntime() {
     assertEquals(NoneRuntime.getInstance(), runtime);
+  }
+
+  public TestParameters assumeCfRuntime() {
+    assumeTrue(isCfRuntime());
+    return this;
+  }
+
+  public TestParameters assumeDexRuntime() {
+    assumeTrue(isDexRuntime());
+    return this;
+  }
+
+  public TestParameters assumeR8TestParameters() {
+    assertFalse(
+        "No need to use assumeR8TestParameters() when not using api levels for CF",
+        isCfRuntime() && apiLevel == null);
+    assertTrue(apiLevel != null || representativeApiLevelForRuntime);
+    assumeTrue(isDexRuntime() || representativeApiLevelForRuntime);
+    return this;
   }
 
   public DexVm.Version getDexRuntimeVersion() {
