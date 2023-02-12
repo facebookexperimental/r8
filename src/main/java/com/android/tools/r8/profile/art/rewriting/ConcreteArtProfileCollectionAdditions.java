@@ -5,8 +5,10 @@
 package com.android.tools.r8.profile.art.rewriting;
 
 import com.android.tools.r8.graph.AppView;
+import com.android.tools.r8.graph.DexClass;
 import com.android.tools.r8.graph.DexClassAndMethod;
 import com.android.tools.r8.graph.DexMethod;
+import com.android.tools.r8.graph.DexType;
 import com.android.tools.r8.profile.art.ArtProfile;
 import com.android.tools.r8.profile.art.ArtProfileCollection;
 import com.android.tools.r8.profile.art.NonEmptyArtProfileCollection;
@@ -35,6 +37,17 @@ public class ConcreteArtProfileCollectionAdditions extends ArtProfileCollectionA
   }
 
   void applyIfContextIsInProfile(
+      DexClass context, Consumer<ArtProfileAdditions> additionsConsumer) {
+    applyIfContextIsInProfile(context.getType(), additionsConsumer);
+  }
+
+  void applyIfContextIsInProfile(DexType type, Consumer<ArtProfileAdditions> additionsConsumer) {
+    for (ArtProfileAdditions artProfileAdditions : additionsCollection) {
+      artProfileAdditions.applyIfContextIsInProfile(type, additionsConsumer);
+    }
+  }
+
+  public void applyIfContextIsInProfile(
       DexClassAndMethod context, Consumer<ArtProfileAdditionsBuilder> builderConsumer) {
     applyIfContextIsInProfile(context.getReference(), builderConsumer);
   }
@@ -48,7 +61,7 @@ public class ConcreteArtProfileCollectionAdditions extends ArtProfileCollectionA
   }
 
   @Override
-  ConcreteArtProfileCollectionAdditions asConcrete() {
+  public ConcreteArtProfileCollectionAdditions asConcrete() {
     return this;
   }
 

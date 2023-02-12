@@ -3,6 +3,7 @@
 // BSD-style license that can be found in the LICENSE file.
 package com.android.tools.r8;
 
+import static com.android.tools.r8.profile.art.ArtProfileCompletenessChecker.CompletenessExceptions.ALLOW_MISSING_ENUM_UNBOXING_UTILITY_METHODS;
 import static com.android.tools.r8.utils.AssertionUtils.forTesting;
 import static com.android.tools.r8.utils.ExceptionUtils.unwrapExecutionException;
 
@@ -18,7 +19,6 @@ import com.android.tools.r8.graph.AppServices;
 import com.android.tools.r8.graph.AppView;
 import com.android.tools.r8.graph.AppliedGraphLens;
 import com.android.tools.r8.graph.Code;
-import com.android.tools.r8.graph.DexApplication;
 import com.android.tools.r8.graph.DexClass;
 import com.android.tools.r8.graph.DexEncodedMethod;
 import com.android.tools.r8.graph.DexMethod;
@@ -39,6 +39,7 @@ import com.android.tools.r8.graph.classmerging.VerticallyMergedClasses;
 import com.android.tools.r8.horizontalclassmerging.HorizontalClassMerger;
 import com.android.tools.r8.inspector.internal.InspectorImpl;
 import com.android.tools.r8.ir.conversion.IRConverter;
+import com.android.tools.r8.ir.conversion.PrimaryR8IRConverter;
 import com.android.tools.r8.ir.desugar.BackportedMethodRewriter;
 import com.android.tools.r8.ir.desugar.CfClassSynthesizerDesugaringCollection;
 import com.android.tools.r8.ir.desugar.CfClassSynthesizerDesugaringEventConsumer;
@@ -71,6 +72,8 @@ import com.android.tools.r8.optimize.bridgehoisting.BridgeHoisting;
 import com.android.tools.r8.optimize.interfaces.analysis.CfOpenClosedInterfacesAnalysis;
 import com.android.tools.r8.optimize.proto.ProtoNormalizer;
 import com.android.tools.r8.origin.CommandLineOrigin;
+import com.android.tools.r8.profile.art.ArtProfileCompletenessChecker;
+import com.android.tools.r8.profile.art.rewriting.ArtProfileCollectionAdditions;
 import com.android.tools.r8.repackaging.Repackaging;
 import com.android.tools.r8.repackaging.RepackagingLens;
 import com.android.tools.r8.shaking.AbstractMethodRemover;
@@ -100,7 +103,6 @@ import com.android.tools.r8.shaking.WhyAreYouKeepingConsumer;
 import com.android.tools.r8.synthesis.SyntheticFinalization;
 import com.android.tools.r8.synthesis.SyntheticItems;
 import com.android.tools.r8.utils.AndroidApp;
-import com.android.tools.r8.utils.CfgPrinter;
 import com.android.tools.r8.utils.ExceptionUtils;
 import com.android.tools.r8.utils.InternalOptions;
 import com.android.tools.r8.utils.SelfRetraceTest;
@@ -111,11 +113,8 @@ import com.android.tools.r8.utils.Timing;
 import com.google.common.collect.Iterables;
 import com.google.common.io.ByteStreams;
 import java.io.ByteArrayOutputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStreamWriter;
 import java.io.PrintStream;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -278,6 +277,8 @@ public class R8 {
         SyntheticItems.collectSyntheticInputs(appView);
       }
 
+      assert ArtProfileCompletenessChecker.verify(appView);
+
       // Check for potentially having pass-through of Cf-code for kotlin libraries.
       options.enableCfByteCodePassThrough =
           options.isGeneratingClassFiles() && KotlinMetadataUtils.mayProcessKotlinMetadata(appView);
@@ -302,10 +303,13 @@ public class R8 {
           appView.dexItemFactory());
 
       // Upfront desugaring generation: Generates new program classes to be added in the app.
+      ArtProfileCollectionAdditions artProfileCollectionAdditions =
+          ArtProfileCollectionAdditions.create(appView);
       CfClassSynthesizerDesugaringEventConsumer classSynthesizerEventConsumer =
-          new CfClassSynthesizerDesugaringEventConsumer();
+          CfClassSynthesizerDesugaringEventConsumer.create(artProfileCollectionAdditions);
       CfClassSynthesizerDesugaringCollection.create(appView)
           .synthesizeClasses(executorService, classSynthesizerEventConsumer);
+      artProfileCollectionAdditions.commit(appView);
       if (appView.getSyntheticItems().hasPendingSyntheticClasses()) {
         appView.setAppInfo(
             appView
@@ -370,6 +374,7 @@ public class R8 {
         assert appView.rootSet().verifyKeptMethodsAreTargetedAndLive(appViewWithLiveness);
         assert appView.rootSet().verifyKeptTypesAreLive(appViewWithLiveness);
         assert appView.rootSet().verifyKeptItemsAreKept(appView);
+        assert ArtProfileCompletenessChecker.verify(appView);
         appView.rootSet().checkAllRulesAreUsed(options);
 
         if (options.apiModelingOptions().reportUnknownApiReferences) {
@@ -478,6 +483,8 @@ public class R8 {
           classMergingEnqueuerExtensionBuilder.build(appView.graphLens());
       classMergingEnqueuerExtensionBuilder = null;
 
+      assert ArtProfileCompletenessChecker.verify(appView);
+
       if (!isKotlinLibraryCompilationWithInlinePassThrough
           && options.getProguardConfiguration().isOptimizing()) {
         if (options.enableVerticalClassMerging) {
@@ -497,6 +504,8 @@ public class R8 {
           appView.setVerticallyMergedClasses(VerticallyMergedClasses.empty());
         }
         assert appView.verticallyMergedClasses() != null;
+
+        assert ArtProfileCompletenessChecker.verify(appView);
 
         HorizontalClassMerger.createForInitialClassMerging(appViewWithLiveness)
             .runIfNecessary(executorService, timing, runtimeTypeCheckInfo);
@@ -520,16 +529,13 @@ public class R8 {
       // TODO: we should avoid removing liveness.
       Set<DexType> prunedTypes = appView.withLiveness().appInfo().getPrunedTypes();
 
-      timing.begin("Create IR");
-      CfgPrinter printer = options.printCfg ? new CfgPrinter() : null;
-      try {
-        IRConverter converter = new IRConverter(appView, timing, printer);
-        DexApplication application =
-            converter.optimize(appViewWithLiveness, executorService).asDirect();
-        appView.setAppInfo(appView.appInfo().rebuildWithClassHierarchy(previous -> application));
-      } finally {
-        timing.end();
-      }
+      assert ArtProfileCompletenessChecker.verify(appView);
+
+      new PrimaryR8IRConverter(appViewWithLiveness, timing)
+          .optimize(appViewWithLiveness, executorService);
+
+      assert ArtProfileCompletenessChecker.verify(
+          appView, ALLOW_MISSING_ENUM_UNBOXING_UTILITY_METHODS);
 
       // Clear the reference type lattice element cache to reduce memory pressure.
       appView.dexItemFactory().clearTypeElementsCache();
@@ -540,18 +546,6 @@ public class R8 {
       timing.begin("AppliedGraphLens construction");
       appView.setGraphLens(new AppliedGraphLens(appView));
       timing.end();
-
-      if (options.printCfg) {
-        if (options.printCfgFile == null || options.printCfgFile.isEmpty()) {
-          System.out.print(printer.toString());
-        } else {
-          try (OutputStreamWriter writer = new OutputStreamWriter(
-              new FileOutputStream(options.printCfgFile),
-              StandardCharsets.UTF_8)) {
-            writer.write(printer.toString());
-          }
-        }
-      }
 
       if (options.shouldRerunEnqueuer()) {
         timing.begin("Post optimization code stripping");

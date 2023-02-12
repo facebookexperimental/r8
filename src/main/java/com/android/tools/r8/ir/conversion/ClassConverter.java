@@ -34,18 +34,16 @@ import java.util.concurrent.ExecutorService;
 public abstract class ClassConverter {
 
   protected final AppView<?> appView;
-  private final ArtProfileCollectionAdditions artProfileCollectionAdditions;
-  private final IRConverter converter;
+  private final PrimaryD8L8IRConverter converter;
   private final D8MethodProcessor methodProcessor;
   private final InterfaceProcessor interfaceProcessor;
 
   ClassConverter(
       AppView<?> appView,
-      IRConverter converter,
+      PrimaryD8L8IRConverter converter,
       D8MethodProcessor methodProcessor,
       InterfaceProcessor interfaceProcessor) {
     this.appView = appView;
-    this.artProfileCollectionAdditions = ArtProfileCollectionAdditions.create(appView);
     this.converter = converter;
     this.methodProcessor = methodProcessor;
     this.interfaceProcessor = interfaceProcessor;
@@ -53,7 +51,7 @@ public abstract class ClassConverter {
 
   public static ClassConverter create(
       AppView<?> appView,
-      IRConverter converter,
+      PrimaryD8L8IRConverter converter,
       D8MethodProcessor methodProcessor,
       InterfaceProcessor interfaceProcessor) {
     return appView.options().desugarSpecificOptions().allowAllDesugaredInput
@@ -66,7 +64,6 @@ public abstract class ClassConverter {
       throws ExecutionException {
     ClassConverterResult.Builder resultBuilder = ClassConverterResult.builder();
     internalConvertClasses(resultBuilder, executorService);
-    artProfileCollectionAdditions.commit(appView);
     notifyAllClassesConverted();
     return resultBuilder.build();
   }
@@ -117,9 +114,10 @@ public abstract class ClassConverter {
       ClassConverterResult.Builder resultBuilder, ExecutorService executorService)
       throws ExecutionException {
     Collection<DexProgramClass> classes = appView.appInfo().classes();
-
+    ArtProfileCollectionAdditions artProfileCollectionAdditions =
+        methodProcessor.getArtProfileCollectionAdditions();
     CfClassSynthesizerDesugaringEventConsumer classSynthesizerEventConsumer =
-        new CfClassSynthesizerDesugaringEventConsumer();
+        CfClassSynthesizerDesugaringEventConsumer.create(artProfileCollectionAdditions);
     converter.classSynthesisDesugaring(executorService, classSynthesizerEventConsumer);
     if (!classSynthesizerEventConsumer.getSynthesizedClasses().isEmpty()) {
       classes =
@@ -132,8 +130,7 @@ public abstract class ClassConverter {
     CfInstructionDesugaringEventConsumer instructionDesugaringEventConsumerForPrepareStep =
         CfInstructionDesugaringEventConsumer.createForD8(
             appView, artProfileCollectionAdditions, resultBuilder, methodProcessor);
-    converter.prepareDesugaringForD8(
-        instructionDesugaringEventConsumerForPrepareStep, executorService);
+    converter.prepareDesugaring(instructionDesugaringEventConsumerForPrepareStep, executorService);
     assert instructionDesugaringEventConsumerForPrepareStep.verifyNothingToFinalize();
 
     // When adding nest members to the wave we must do so deterministically.
@@ -236,7 +233,7 @@ public abstract class ClassConverter {
 
     DefaultClassConverter(
         AppView<?> appView,
-        IRConverter converter,
+        PrimaryD8L8IRConverter converter,
         D8MethodProcessor methodProcessor,
         InterfaceProcessor interfaceProcessor) {
       super(appView, converter, methodProcessor, interfaceProcessor);
@@ -260,7 +257,7 @@ public abstract class ClassConverter {
 
     LibraryDesugaredClassConverter(
         AppView<?> appView,
-        IRConverter converter,
+        PrimaryD8L8IRConverter converter,
         D8MethodProcessor methodProcessor,
         InterfaceProcessor interfaceProcessor) {
       super(appView, converter, methodProcessor, interfaceProcessor);

@@ -360,6 +360,7 @@ def cloudDependencies = [
                 "android_jar/lib-v31",
                 "android_jar/lib-v32",
                 "android_jar/lib-v33",
+                "android_jar/lib-v34",
                 "android_jar/lib-master",
                 "api_database/api_database",
                 "api-outlining/simple-app-dump",
@@ -2296,6 +2297,12 @@ test { task ->
     if (project.hasProperty('runtimes')) {
         println "NOTE: Running with runtimes: " + project.property('runtimes')
         systemProperty 'runtimes', project.property('runtimes')
+    }
+
+    if (project.hasProperty('art_profile_rewriting_completeness_check')) {
+        String key = 'com.android.tools.r8.artprofilerewritingcompletenesscheck'
+        String value = project.property('art_profile_rewriting_completeness_check')
+        systemProperty key, value
     }
 
     if (project.hasProperty('slow_tests')) {

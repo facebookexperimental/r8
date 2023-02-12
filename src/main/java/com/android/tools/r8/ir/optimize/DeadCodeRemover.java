@@ -19,11 +19,12 @@ import com.android.tools.r8.ir.code.Instruction;
 import com.android.tools.r8.ir.code.InstructionListIterator;
 import com.android.tools.r8.ir.code.Phi;
 import com.android.tools.r8.ir.code.Value;
+import com.android.tools.r8.ir.code.ValueIsDeadAnalysis;
 import com.android.tools.r8.shaking.AppInfoWithLiveness;
 import com.android.tools.r8.utils.Box;
+import com.android.tools.r8.utils.IterableUtils;
 import com.android.tools.r8.utils.Timing;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Iterators;
 import java.util.ArrayDeque;
 import java.util.Collection;
 import java.util.Deque;
@@ -54,11 +55,12 @@ public class DeadCodeRemover {
     // more dead instructions.
     Deque<BasicBlock> worklist = new ArrayDeque<>();
     do {
+      ValueIsDeadAnalysis valueIsDeadAnalysis = new ValueIsDeadAnalysis(appView, code);
       worklist.addAll(code.topologicallySortedBlocks());
       while (!worklist.isEmpty()) {
         BasicBlock block = worklist.removeLast();
-        removeDeadInstructions(worklist, code, block);
-        removeDeadPhis(worklist, code, block);
+        removeDeadInstructions(worklist, code, block, valueIsDeadAnalysis);
+        removeDeadPhis(worklist, block, valueIsDeadAnalysis);
       }
     } while (codeRewriter.simplifyIf(code).anySimplifications()
         || removeUnneededCatchHandlers(code));
@@ -70,8 +72,9 @@ public class DeadCodeRemover {
   public boolean verifyNoDeadCode(IRCode code) {
     assert !codeRewriter.rewriteMoveResult(code);
     assert !removeUnneededCatchHandlers(code);
+    ValueIsDeadAnalysis valueIsDeadAnalysis = new ValueIsDeadAnalysis(appView, code);
     for (BasicBlock block : code.blocks) {
-      assert !block.hasDeadPhi(appView, code);
+      assert !valueIsDeadAnalysis.hasDeadPhi(block);
       for (Instruction instruction : block.getInstructions()) {
         // No unused move-result instructions.
         assert !instruction.isInvoke()
@@ -79,7 +82,7 @@ public class DeadCodeRemover {
             || instruction.outValue().hasAnyUsers();
         // No dead instructions.
         assert !instruction.canBeDeadCode(appView, code).isDeadIfOutValueIsDead()
-            || (instruction.hasOutValue() && !instruction.outValue().isDead(appView, code));
+            || (instruction.hasOutValue() && !valueIsDeadAnalysis.isDead(instruction.outValue()));
       }
     }
     return true;
@@ -108,11 +111,12 @@ public class DeadCodeRemover {
     }
   }
 
-  private void removeDeadPhis(Queue<BasicBlock> worklist, IRCode code, BasicBlock block) {
+  private void removeDeadPhis(
+      Queue<BasicBlock> worklist, BasicBlock block, ValueIsDeadAnalysis valueIsDeadAnalysis) {
     Iterator<Phi> phiIt = block.getPhis().iterator();
     while (phiIt.hasNext()) {
       Phi phi = phiIt.next();
-      if (phi.isDead(appView, code)) {
+      if (valueIsDeadAnalysis.isDead(phi)) {
         phiIt.remove();
         for (Value operand : phi.getOperands()) {
           operand.removePhiUser(phi);
@@ -122,7 +126,11 @@ public class DeadCodeRemover {
     }
   }
 
-  private void removeDeadInstructions(Queue<BasicBlock> worklist, IRCode code, BasicBlock block) {
+  private void removeDeadInstructions(
+      Queue<BasicBlock> worklist,
+      IRCode code,
+      BasicBlock block,
+      ValueIsDeadAnalysis valueIsDeadAnalysis) {
     InstructionListIterator iterator = block.listIterator(code, block.getInstructions().size());
     while (iterator.hasPrevious()) {
       Instruction current = iterator.previous();
@@ -165,7 +173,7 @@ public class DeadCodeRemover {
       if (deadInstructionResult.isMaybeDead()) {
         boolean satisfied = true;
         for (Value valueRequiredToBeDead : deadInstructionResult.getValuesRequiredToBeDead()) {
-          if (!valueRequiredToBeDead.isDead(appView, code)) {
+          if (!valueIsDeadAnalysis.isDead(valueRequiredToBeDead)) {
             satisfied = false;
             break;
           }
@@ -175,7 +183,7 @@ public class DeadCodeRemover {
         }
       }
       Value outValue = current.outValue();
-      if (outValue != null && !outValue.isDead(appView, code)) {
+      if (outValue != null && !valueIsDeadAnalysis.isDead(outValue)) {
         continue;
       }
       updateWorklist(worklist, current);
@@ -291,19 +299,10 @@ public class DeadCodeRemover {
         }
 
         @Override
-        public boolean isDeadIfInValueIsDead() {
-          return true;
-        }
-
-        @Override
         public Iterable<Value> getValuesRequiredToBeDead() {
-          return () -> Iterators.singletonIterator(inValueRequiredToBeDead);
+          return IterableUtils.singleton(inValueRequiredToBeDead);
         }
       };
-    }
-
-    public boolean isDeadIfInValueIsDead() {
-      return false;
     }
 
     public boolean isDeadIfOutValueIsDead() {
