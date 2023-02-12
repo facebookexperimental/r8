@@ -13,7 +13,7 @@ public final class Version {
 
   // This field is accessed from release scripts using simple pattern matching.
   // Therefore, changing this field could break our release scripts.
-  public static final String LABEL = "8.1.18-dev";
+  public static final String LABEL = "8.1.19-dev";
 
   // The prefix of the active dev version line being worked on from this branch. This is used in the
   // few cases where the compiler makes decisions based in the compiler version and where version
