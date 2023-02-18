@@ -46,7 +46,9 @@ import it.unimi.dsi.fastutil.ints.Int2ReferenceMap;
 import it.unimi.dsi.fastutil.ints.Int2ReferenceOpenHashMap;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -2689,5 +2691,30 @@ public class DexItemFactory {
   @Deprecated
   synchronized public void forAllTypes(Consumer<DexType> f) {
     new ArrayList<>(types.values()).forEach(f);
+  }
+
+  // Facebook addition: compute the resources referenced by this dex file.
+  // Does not apply to any merging, just the input class.
+  public Collection<String> computeReferencedResources() {
+    Set<String> resourceNames = new HashSet<>();
+    for (DexField item: fields.values()) {
+      DexType clazz = item.holder;
+      if (clazz.toDescriptorString().contains("/R$")) {
+        resourceNames.add(clazz.getPackageDescriptor().replaceAll("/", ".") + "." + item.name.toString());
+      }
+    }
+    return resourceNames;
+  }
+
+  // Facebook addition: compute the types referenced by this dex file.
+  // Does not apply to any merging, just the input class.
+  public Collection<String> computeSynthesizedTypes() {
+    Set<String> typeNames = new HashSet<>();
+    for (DexType item: types.values()) {
+      if (item.toDescriptorString().contains("$-CC") || item.toDescriptorString().contains("$-EL") || item.toDescriptorString().contains("Synthetic")) {
+       typeNames.add(item.toDescriptorString());
+      }
+    }
+    return typeNames;
   }
 }

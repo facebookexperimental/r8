@@ -53,6 +53,7 @@ import java.util.function.Consumer;
  */
 @Keep
 public final class D8Command extends BaseCompilerCommand {
+  private Consumer<InternalOptions> internalOptionsModifier;
 
   private static class DefaultD8DiagnosticsHandler implements DiagnosticsHandler {
 
@@ -82,6 +83,7 @@ public final class D8Command extends BaseCompilerCommand {
     private boolean intermediate = false;
     private DesugarGraphConsumer desugarGraphConsumer = null;
     private StringConsumer desugaredLibraryKeepRuleConsumer = null;
+    private Consumer<InternalOptions> internalOptionsModifier;
     private String synthesizedClassPrefix = "";
     private boolean enableMainDexListCheck = true;
     private boolean minimalMainDex = false;
@@ -136,6 +138,11 @@ public final class D8Command extends BaseCompilerCommand {
     /** Set input proguard map used for distribution of classes in multi-dex. */
     public Builder setProguardInputMapFile(Path proguardInputMap) {
       getAppBuilder().setProguardMapInputData(proguardInputMap);
+      return self();
+    }
+
+    public Builder setInternalOptionsModifier(Consumer<InternalOptions> f) {
+      this.internalOptionsModifier = f;
       return self();
     }
 
@@ -316,7 +323,8 @@ public final class D8Command extends BaseCompilerCommand {
           mainDexKeepRules,
           getThreadCount(),
           getDumpInputFlags(),
-          factory);
+          factory,
+          internalOptionsModifier);
     }
   }
 
@@ -332,6 +340,10 @@ public final class D8Command extends BaseCompilerCommand {
   private final boolean minimalMainDex;
   private final ImmutableList<ProguardConfigurationRule> mainDexKeepRules;
   private final DexItemFactory factory;
+
+  public DexItemFactory getDexItemFactory() {
+    return factory;
+  }
 
   public static Builder builder() {
     return new Builder();
@@ -397,7 +409,8 @@ public final class D8Command extends BaseCompilerCommand {
       ImmutableList<ProguardConfigurationRule> mainDexKeepRules,
       int threadCount,
       DumpInputFlags dumpInputFlags,
-      DexItemFactory factory) {
+      DexItemFactory factory,
+      Consumer<InternalOptions> internalOptionsModifier) {
     super(
         inputApp,
         mode,
@@ -423,6 +436,7 @@ public final class D8Command extends BaseCompilerCommand {
     this.minimalMainDex = minimalMainDex;
     this.mainDexKeepRules = mainDexKeepRules;
     this.factory = factory;
+    this.internalOptionsModifier = internalOptionsModifier;
   }
 
   private D8Command(boolean printHelp, boolean printVersion) {
@@ -458,7 +472,7 @@ public final class D8Command extends BaseCompilerCommand {
     internal.enableMainDexListCheck = enableMainDexListCheck;
     internal.minApiLevel = getMinApiLevel();
     internal.intermediate = intermediate;
-    internal.readCompileTimeAnnotations = intermediate;
+    internal.readCompileTimeAnnotations = true;
     internal.desugarGraphConsumer = desugarGraphConsumer;
     internal.mainDexKeepRules = mainDexKeepRules;
     internal.lineNumberOptimization = LineNumberOptimization.OFF;
@@ -505,6 +519,10 @@ public final class D8Command extends BaseCompilerCommand {
 
     internal.setDumpInputFlags(getDumpInputFlags(), skipDump);
     internal.dumpOptions = dumpOptions();
+
+    if (internalOptionsModifier != null) {
+      internalOptionsModifier.accept(internal);
+    }
 
     return internal;
   }
