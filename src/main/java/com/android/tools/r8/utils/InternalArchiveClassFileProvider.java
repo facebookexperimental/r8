@@ -41,6 +41,7 @@ class InternalArchiveClassFileProvider implements ClassFileResourceProvider, Aut
   private final Path path;
   private final Origin origin;
   private final Set<String> descriptors = new HashSet<>();
+  private boolean used = false;
 
   private ZipFile openedZipFile = null;
 
@@ -87,11 +88,13 @@ class InternalArchiveClassFileProvider implements ClassFileResourceProvider, Aut
     try {
       ZipEntry zipEntry = getZipEntryFromDescriptor(descriptor);
       try (InputStream inputStream = getOpenZipFile().getInputStream(zipEntry)) {
-        return ProgramResource.fromBytes(
+        ProgramResource result = ProgramResource.fromBytes(
             new ArchiveEntryOrigin(zipEntry.getName(), origin),
             Kind.CF,
             ByteStreams.toByteArray(inputStream),
             Collections.singleton(descriptor));
+        used = true;
+        return result;
       }
     } catch (IOException e) {
       throw new CompilationError("Failed to read '" + descriptor, origin);
@@ -111,6 +114,16 @@ class InternalArchiveClassFileProvider implements ClassFileResourceProvider, Aut
       }
     }
     return openedZipFile;
+  }
+
+  @Override
+  public boolean wasUsed() {
+    return used;
+  }
+
+  @Override
+  public Path getPath() {
+    return path;
   }
 
   @Override

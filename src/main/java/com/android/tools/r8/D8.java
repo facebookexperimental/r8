@@ -51,6 +51,7 @@ import com.android.tools.r8.utils.StringUtils;
 import com.android.tools.r8.utils.ThreadUtils;
 import com.android.tools.r8.utils.Timing;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -90,20 +91,23 @@ public final class D8 {
    * Main API entry for the D8 dexer.
    *
    * @param command D8 command.
+   * @return a list of the classpath Paths that program resources were actually read from.
    */
-  public static void run(D8Command command) throws CompilationFailedException {
+  public static List<Path> run(D8Command command) throws CompilationFailedException {
     AndroidApp app = command.getInputApp();
     InternalOptions options = command.getInternalOptions();
     ExecutorService executor = ThreadUtils.getExecutorService(options);
+    List<Path> usedClasspathFiles = new ArrayList<>();
     ExceptionUtils.withD8CompilationHandler(
         command.getReporter(),
         () -> {
           try {
-            run(app, options, executor);
+            run(app, options, executor, usedClasspathFiles);
           } finally {
             executor.shutdown();
           }
         });
+    return usedClasspathFiles;
   }
 
   /**
@@ -119,7 +123,7 @@ public final class D8 {
     ExceptionUtils.withD8CompilationHandler(
         command.getReporter(),
         () -> {
-          run(app, options, executor);
+          run(app, options, executor, new ArrayList<>());
         });
   }
 
@@ -159,7 +163,7 @@ public final class D8 {
         options.reporter,
         () -> {
           try {
-            run(inputApp, options, executor);
+            run(inputApp, options, executor, new ArrayList<>());
           } finally {
             executor.shutdown();
           }
@@ -190,7 +194,11 @@ public final class D8 {
     return timing.time("Create app-view", () -> AppView.createForD8(appInfo, typeRewriter, timing));
   }
 
-  private static void run(AndroidApp inputApp, InternalOptions options, ExecutorService executor)
+  private static void run(
+      AndroidApp inputApp,
+      InternalOptions options,
+      ExecutorService executor,
+      List<Path> usedClasspathFiles)
       throws IOException {
     if (options.printMemory) {
       // Run GC twice to remove objects with finalizers.
@@ -329,6 +337,7 @@ public final class D8 {
       } else {
         ApplicationWriter.create(appView, marker).write(executor, inputApp);
       }
+      inputApp.collectUsedClasspathFiles(usedClasspathFiles);
       options.printWarnings();
     } catch (ExecutionException e) {
       throw unwrapExecutionException(e);

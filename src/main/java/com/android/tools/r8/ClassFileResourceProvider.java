@@ -4,6 +4,7 @@
 package com.android.tools.r8;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.Set;
 
 /**
@@ -34,6 +35,25 @@ public interface ClassFileResourceProvider {
    * calls from different threads.
    */
   ProgramResource getProgramResource(String descriptor);
+
+  /**
+   * Returns true iff any program resource has been successfully retrieved from this provider.
+   *
+   * <p>Only called after all inputs were processed successfully, and when a given
+   * compilation unit is done using the resource provider.
+   */
+  default boolean wasUsed() {
+    // By default, assume the provider was used, unless it implements more detailed tracking.
+    return true;
+  }
+
+  /**
+   * If this provider has an associated Path, returns that Path. Otherwise, returns null.
+   */
+  default Path getPath() {
+    // By default, no Path is associated with this provider.
+    return null;
+  }
 
   /**
    * Callback signifying that a given compilation unit is done using the resource provider.

@@ -812,6 +812,15 @@ public class AndroidApp {
     }
   }
 
+  public void collectUsedClasspathFiles(List<Path> usedClasspathFiles) {
+    for (ClassFileResourceProvider provider : classpathResourceProviders) {
+      Path path = provider.getPath();
+      if (path != null && provider.wasUsed()) {
+        usedClasspathFiles.add(path);
+      }
+    }
+  }
+
   public void signalFinishedToProviders(Reporter reporter) throws IOException {
     for (ProgramResourceProvider provider : programResourceProviders) {
       provider.finished(reporter);
